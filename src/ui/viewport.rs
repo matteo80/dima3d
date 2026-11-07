@@ -452,7 +452,7 @@ fn draw_empty_state(ui: &egui::Ui, rect: egui::Rect, background: [f32; 3], dragg
         egui::FontId::proportional(56.0),
         color,
     );
-    let title = if dragging_file { "Rilascia per aprire il file" } else { "Trascina qui un file WRL" };
+    let title = if dragging_file { "Rilascia per aprire il file" } else { "Trascina qui un file WRL o JT" };
     painter.text(
         center + egui::vec2(0.0, 18.0),
         egui::Align2::CENTER_CENTER,

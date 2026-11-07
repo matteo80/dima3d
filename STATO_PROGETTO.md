@@ -2,7 +2,7 @@
 
 > Applicazione desktop nativa Rust per la visualizzazione, analisi e manipolazione interattiva  
 > di file VRML V2.0 (`.wrl`) di grandi dimensioni (fino a 600+ MB).  
-> **Aggiornato:** 2026-11-07 · **Fatti:** visualizzazione, albero, colori, export, rendering veloce, rotazione OpenInventor (confermata dall'utente), Step 1 completo (exe provato dall'utente su un altro PC), lettura VRML 1.0, interfaccia dello Step 2, normali originali (`normalIndex`), antialiasing 4x, illuminazione solidale alla camera, selezione con contorno, viste standard in coordinate veicolo, più matematiche nella stessa scena con conversione delle unità · cubo di orientamento, proprietà e misure, piano di sezione, export in background, rifiniture (blocco 6) · **Prossimo:** piano completato; nuove richieste dall'utente (sezione 8)
+> **Aggiornato:** 2026-11-07 · **Fatti:** visualizzazione, albero, colori, export, rendering veloce, rotazione OpenInventor (confermata dall'utente), Step 1 completo (exe provato dall'utente su un altro PC), lettura VRML 1.0, interfaccia dello Step 2, normali originali (`normalIndex`), antialiasing 4x, illuminazione solidale alla camera, selezione con contorno, viste standard in coordinate veicolo, più matematiche nella stessa scena con conversione delle unità, apertura dei file JT · cubo di orientamento, proprietà e misure, piano di sezione, export in background, rifiniture (blocco 6) · **Prossimo:** piano completato; nuove richieste dall'utente (sezione 8)
 
 ---
 
@@ -470,6 +470,29 @@ cargo flamegraph --bin gestore-wrl -- path\to\file.wrl
     uguali nei due file, GPU (file aggiunto disegnato senza riscrivere i buffer), unità (mm→m, m→mm, nessuna proposta
     con unità uguali), interfaccia (albero, finestra delle unità, click su "Converti"). I test GPU ora non girano mai
     in parallelo (un crash del driver Vulkan su ~20 esecuzioni con due istanze insieme).
+- **Import JT (2026-11-07):** convertitore separato `tools\jt2wrl.exe` (`tools-src/jt2wrl`, C# .NET 8 NativeAOT,
+  11 MB, senza .NET installato) basato su JTReader (MIT, commit 9845868, sorgenti compilati insieme, non nel
+  repository: si scaricano con `git clone`) e SharpCompress (MIT). Il Gestore lo avvia senza finestra
+  (`parser/jt.rs`): avanzamento da stdout nella prima metà della barra, poi il WRL prodotto (in
+  `%TEMP%\gestore-wrl-jt`, ripulita all'avvio) si legge con `load_blocking` mostrando il `.jt` come file
+  (nome, recenti, "Ricarica" riconverte). Errori chiari: convertitore mancante, big-endian, solo B-rep.
+  - Convertitore: albero JT con gruppi/parti/istanze, LOD (il più dettagliato), Switch (scelta attiva), partizioni
+    esterne (assiemi in più file `.jt`), trasformazioni accumulate e coordinate in world-space, colore diffuso del
+    materiale e trasparenza, normali con `normalIndex` (spigoli vivi), nomi da `JT_PROP_NAME`. Istanze ripetute
+    riscritte per ogni posizione.
+  - Corretto un problema di JTReader senza modificarlo: nei JT 10 i segmenti di proprietà letti prima del grafo
+    riusano gli identificativi dei nodi e l'albero puntava a una proprietà di testo (0 pezzi). Ora gli elementi del
+    segmento del grafo hanno la precedenza (`JtFix.ReadGraph`). `jt2wrl --diag file.jt` stampa l'albero per i casi
+    nuovi.
+  - Prove con i file pubblici di PyOpenJt: 10/10 convertiti (blocco JT 8.1/9.5/10.3 = 12 triangoli in tutti e tre,
+    piastre JT 8.0/9.5, CoffeeMaker 64 pezzi, fishing_reel 17 pezzi da 12 file esterni montati correttamente,
+    Warehouse 1084, SampleJT_Server 850, san2 850 pezzi e 1,5 M triangoli in 5–10 s). WRL della versione NativeAOT
+    identici al byte a quelli della versione JIT. Nel Gestore vero: fishing_reel.jt aperto in 2,2 s.
+  - Non ancora provato su JT reali da Robcad/Process Simulate. Non coperti: export in JT, geometria esatta B-rep/XT,
+    file big-endian, mesh compresse non topologiche di JT 10 (`TopoMeshCompressedLODData.GetIndices` non
+    implementato in JTReader: il pezzo viene saltato con avviso).
+  - Test: righe di avanzamento ed errori, percorso completo con un convertitore finto (`.cmd`): avanzamento, avvisi,
+    nome del `.jt` nella scena, conversione fallita con messaggio.
 - **Rifiniture (2026-11-07, blocco 6 del piano):**
   - Sfondo sfumato: casella "Sfumato" nel menu Vista (chiave `sfondo_sfumato`). In alto il colore scelto schiarito
     del 30% verso il bianco, in basso scurito al 55% (`gradient_colors`); triangolo a tutto schermo disegnato per

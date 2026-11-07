@@ -1,0 +1,37 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Convertitore JT -> VRML 2.0 per il Gestore WRL.
+       Compila direttamente i sorgenti di JTReader (MIT, ../JTReader) per .NET 8: così non serve
+       modificarne il progetto, che punta anche a .NET 9/10. Pubblicato con NativeAOT in un unico
+       exe che non richiede .NET installato. -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <AssemblyName>jt2wrl</AssemblyName>
+    <RootNamespace>Jt2Wrl</RootNamespace>
+    <Nullable>disable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <NoWarn>$(NoWarn);CS0162;CS0168;CS0169;CS0219;CS0414;CS0649;CS8981;IL2026;IL2067;IL2072;IL2075;IL3050</NoWarn>
+
+    <PublishAot>true</PublishAot>
+    <SelfContained>true</SelfContained>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <OptimizationPreference>Speed</OptimizationPreference>
+    <DebugType>none</DebugType>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="..\JTReader\JTReader\**\*.cs" Exclude="..\JTReader\JTReader\Properties\**;..\JTReader\JTReader\obj\**;..\JTReader\JTReader\bin\**" />
+    <PackageReference Include="SharpCompress" Version="0.49.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- JTReader crea gli elementi del file con Activator.CreateInstance a partire dal loro tipo:
+         il trimming di NativeAOT non deve togliere i costruttori. -->
+    <TrimmerRootAssembly Include="jt2wrl" />
+  </ItemGroup>
+
+</Project>

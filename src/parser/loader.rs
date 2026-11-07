@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::mpsc::Sender;
 use std::sync::Arc;
 use crate::scene_graph::{SceneGraph, SourceData};
@@ -20,114 +20,94 @@ pub fn load_wrl_async(path: PathBuf, sender: Sender<LoadEvent>) {
 
 /// Come `load_wrl_async`, con i parametri del raggruppamento automatico scelti dall'utente.
 pub fn load_wrl_async_with(path: PathBuf, cluster: crate::clusterer::ClusterConfig, sender: Sender<LoadEvent>) {
-    std::thread::spawn(move || {
-        let path_str = path.to_string_lossy().to_string();
-
-        let file = match std::fs::File::open(&path) {
-            Ok(f) => f,
-            Err(e) => {
-                let _ = sender.send(LoadEvent::Error(format!(
-                    "Impossibile aprire il file '{}': {e}",
-                    path.display()
-                )));
-                return;
-            }
-        };
-
-        let file_size = match file.metadata() {
-            Ok(m) => m.len(),
-            Err(e) => {
-                let _ = sender.send(LoadEvent::Error(format!(
-                    "Impossibile leggere le dimensioni di '{}': {e}",
-                    path.display()
-                )));
-                return;
-            }
-        };
-
-        if file_size == 0 {
-            let _ = sender.send(LoadEvent::Error(
-                "Il file selezionato è vuoto (0 byte)".to_string(),
-            ));
-            return;
-        }
-
-        let _ = sender.send(LoadEvent::Started {
-            path: path_str,
-            file_size_bytes: file_size,
-        });
-
-        let _ = sender.send(LoadEvent::Progress {
-            percent: 0.05,
-            message: format!(
-                "Memory mapping con memmap2 ({:.2} MB)...",
-                file_size as f64 / (1024.0 * 1024.0)
-            ),
-        });
-
-        // Tentativo di memory-mapping con memmap2
-        let mmap_res = unsafe { memmap2::MmapOptions::new().map(&file) };
-
-        match mmap_res {
-            Ok(mmap) => {
-                tracing::info!(
-                    "File mappato con successo in memoria: {} bytes",
-                    mmap.len()
-                );
-                let sender_clone = sender.clone();
-                let mut scene = super::shape_extractor::parse_wrl_with_config(&mmap, cluster, move |p, msg| {
-                    let _ = sender_clone.send(LoadEvent::Progress {
-                        percent: 0.10 + p * 0.85,
-                        message: msg,
-                    });
-                });
-
-                if scene.source_data.is_empty() {
-                    scene.source_data = SourceData::Mmap(Arc::new(mmap));
-                }
-                scene.into_file(file_label(&path), Some(path.clone()));
-                let _ = sender.send(LoadEvent::Finished(scene));
-            }
-            Err(mmap_err) => {
-                tracing::warn!(
-                    "memmap2 non riuscito ({mmap_err}); fallback a lettura su buffer heap"
-                );
-                let _ = sender.send(LoadEvent::Progress {
-                    percent: 0.10,
-                    message: "Fallback: lettura del file in buffer RAM...".to_string(),
-                });
-
-                match std::fs::read(&path) {
-                    Ok(buffer) => {
-                        let sender_clone = sender.clone();
-                        let mut scene = super::shape_extractor::parse_wrl_with_config(
-                            &buffer,
-                            cluster,
-                            move |p, msg| {
-                                let _ = sender_clone.send(LoadEvent::Progress {
-                                    percent: 0.10 + p * 0.85,
-                                    message: msg,
-                                });
-                            },
-                        );
-
-                        if scene.source_data.is_empty() {
-                            scene.source_data = SourceData::Memory(buffer);
-                        }
-                        scene.into_file(file_label(&path), Some(path.clone()));
-                        let _ = sender.send(LoadEvent::Finished(scene));
-                    }
-                    Err(read_err) => {
-                        let _ = sender.send(LoadEvent::Error(format!(
-                            "Errore durante la lettura del file: {read_err}"
-                        )));
-                    }
-                }
-            }
-        }
-    });
+    std::thread::spawn(move || load_blocking(&path, &path, cluster, &sender, 0.0, Vec::new()));
 }
 
+/// Legge `path` e invia gli eventi di caricamento. Il file compare nella scena come `shown_as`
+/// (diverso da `path` per un JT convertito: si mostra e si riapre il `.jt` originale).
+/// L'avanzamento parte da `start` (dopo una conversione) e arriva a 1. `warnings` si aggiungono
+/// agli avvisi della scena.
+pub fn load_blocking(
+    path: &Path,
+    shown_as: &Path,
+    cluster: crate::clusterer::ClusterConfig,
+    sender: &Sender<LoadEvent>,
+    start: f32,
+    warnings: Vec<String>,
+) {
+    let scaled = move |p: f32| start + p * (1.0 - start);
+    let file = match std::fs::File::open(path) {
+        Ok(f) => f,
+        Err(e) => {
+            let _ = sender.send(LoadEvent::Error(format!("Impossibile aprire il file '{}': {e}", path.display())));
+            return;
+        }
+    };
+    let file_size = match file.metadata() {
+        Ok(m) => m.len(),
+        Err(e) => {
+            let _ = sender.send(LoadEvent::Error(format!(
+                "Impossibile leggere le dimensioni di '{}': {e}",
+                path.display()
+            )));
+            return;
+        }
+    };
+    if file_size == 0 {
+        let _ = sender.send(LoadEvent::Error("Il file selezionato è vuoto (0 byte)".to_string()));
+        return;
+    }
+    if start == 0.0 {
+        let _ = sender.send(LoadEvent::Started { path: shown_as.to_string_lossy().to_string(), file_size_bytes: file_size });
+    }
+    let _ = sender.send(LoadEvent::Progress {
+        percent: scaled(0.05),
+        message: format!("Memory mapping con memmap2 ({:.2} MB)...", file_size as f64 / (1024.0 * 1024.0)),
+    });
+
+    let progress = {
+        let sender = sender.clone();
+        move |p: f32, msg: String| {
+            let _ = sender.send(LoadEvent::Progress { percent: scaled(0.10 + p * 0.85), message: msg });
+        }
+    };
+    let finish = |mut scene: SceneGraph| {
+        scene.into_file(file_label(shown_as), Some(shown_as.to_path_buf()));
+        scene.load_warnings.extend(warnings);
+        let _ = sender.send(LoadEvent::Finished(scene));
+    };
+
+    // Tentativo di memory-mapping con memmap2
+    match unsafe { memmap2::MmapOptions::new().map(&file) } {
+        Ok(mmap) => {
+            tracing::info!("File mappato con successo in memoria: {} bytes", mmap.len());
+            let mut scene = super::shape_extractor::parse_wrl_with_config(&mmap, cluster, progress);
+            if scene.source_data.is_empty() {
+                scene.source_data = SourceData::Mmap(Arc::new(mmap));
+            }
+            finish(scene);
+        }
+        Err(mmap_err) => {
+            tracing::warn!("memmap2 non riuscito ({mmap_err}); fallback a lettura su buffer heap");
+            let _ = sender.send(LoadEvent::Progress {
+                percent: scaled(0.10),
+                message: "Fallback: lettura del file in buffer RAM...".to_string(),
+            });
+            match std::fs::read(path) {
+                Ok(buffer) => {
+                    let mut scene = super::shape_extractor::parse_wrl_with_config(&buffer, cluster, progress);
+                    if scene.source_data.is_empty() {
+                        scene.source_data = SourceData::Memory(buffer);
+                    }
+                    finish(scene);
+                }
+                Err(read_err) => {
+                    let _ = sender.send(LoadEvent::Error(format!("Errore durante la lettura del file: {read_err}")));
+                }
+            }
+        }
+    }
+}
 /// Nome del nodo radice di un file: il nome del file con estensione.
 pub fn file_label(path: &std::path::Path) -> String {
     path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| "File".to_string())

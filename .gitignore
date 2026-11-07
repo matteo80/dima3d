@@ -1,5 +1,10 @@
 # Compilazione
 /target/
+/tools/
+tools-src/jt2wrl/bin/
+tools-src/jt2wrl/obj/
+# JTReader (MIT) si scarica a parte: vedi tools-src/jt2wrl/README.md
+tools-src/JTReader/
 
 # Note locali (nomi di file reali, percorsi del PC, passaggi tra sessioni)
 NOTE_PRIVATE.md

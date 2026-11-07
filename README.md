@@ -7,6 +7,8 @@ automobilistici.
 ## Funzioni
 
 - Lettura veloce di VRML 2.0 e VRML 1.0 (file mappati in memoria, analisi in parallelo)
+- Apertura dei file JT 8, 9 e 10 (geometria tassellata, assiemi in più file) con il convertitore
+  `tools\jt2wrl.exe`: vedi [`tools-src/jt2wrl`](tools-src/jt2wrl/README.md)
 - Vista 3D con wgpu: antialiasing, illuminazione che segue la vista, spigoli vivi dalle normali del file,
   sfondo uniforme o sfumato
 - Navigazione in stile OpenInventor, viste standard in coordinate veicolo, cubo di orientamento cliccabile
@@ -25,6 +27,8 @@ cargo build --release
 ```
 
 L'eseguibile è `target\release\gestore-wrl.exe` e non richiede installazione: il runtime C è incluso.
+Per aprire i file JT serve anche `tools\jt2wrl.exe` accanto all'eseguibile (compilazione in
+[`tools-src/jt2wrl`](tools-src/jt2wrl/README.md)).
 
 ```
 cargo test --release
@@ -34,4 +38,5 @@ Lo stato dettagliato del progetto e la roadmap sono in [`STATO_PROGETTO.md`](STA
 
 ## Licenza
 
-Distribuito con licenza MIT: vedi [`LICENSE`](LICENSE).
+Distribuito con licenza MIT: vedi [`LICENSE`](LICENSE). Il convertitore JT include JTReader e
+SharpCompress, anch'essi MIT: licenze in [`licenses`](licenses).

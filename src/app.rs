@@ -98,6 +98,7 @@ impl GestoreApp {
     pub fn new(cc: &eframe::CreationContext) -> Self {
         let wgpu_render_state = cc.wgpu_render_state.clone();
         let settings = crate::settings::Settings::load();
+        parser::jt::cleanup_old_conversions();
         ui::theme::install_fonts(&cc.egui_ctx);
         ui::theme::apply(&cc.egui_ctx, settings.theme);
         let renderer = wgpu_render_state.as_ref().map(|rs| {
@@ -165,7 +166,11 @@ impl GestoreApp {
         self.ui_state.status_message = format!("Apertura: {}", path.display());
         self.load_rx = Some(rx);
 
-        parser::load_wrl_async_with(path, self.settings.cluster, tx);
+        if parser::jt::is_jt(&path) {
+            parser::jt::convert_and_load(path, self.settings.cluster, tx);
+        } else {
+            parser::load_wrl_async_with(path, self.settings.cluster, tx);
+        }
     }
 
     /// Esegue un'azione utente.
