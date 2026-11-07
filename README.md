@@ -31,3 +31,7 @@ cargo test --release
 ```
 
 Lo stato dettagliato del progetto e la roadmap sono in [`STATO_PROGETTO.md`](STATO_PROGETTO.md).
+
+## Licenza
+
+Distribuito con licenza MIT: vedi [`LICENSE`](LICENSE).
