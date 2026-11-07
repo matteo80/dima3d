@@ -1,0 +1,5 @@
+# L'exe deve avviarsi anche su altri PC:
+# - niente target-cpu=native (userebbe istruzioni presenti solo su questa CPU);
+# - runtime C incluso nell'exe (niente dipendenza da VCRUNTIME140.dll).
+[target.x86_64-pc-windows-msvc]
+rustflags = ["-C", "target-feature=+crt-static"]

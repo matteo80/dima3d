@@ -1,0 +1,66 @@
+#VRML V2.0 utf8
+# File di prova per Gestore WRL: colori originali, DEF/USE di materiali, trasparenza.
+
+DEF Assieme Group { children [
+
+  DEF Cubo_Rosso Transform { translation 0 0 0 children [
+    DEF CuboBase Shape {
+      appearance Appearance { material DEF Rosso Material { diffuseColor 0.85 0.15 0.1 } }
+      geometry IndexedFaceSet {
+        coord DEF CuboPunti Coordinate { point [ -1 -1 -1, 1 -1 -1, 1 1 -1, -1 1 -1, -1 -1 1, 1 -1 1, 1 1 1, -1 1 1 ] }
+        coordIndex [ 0 3 2 1 -1, 4 5 6 7 -1, 0 1 5 4 -1, 2 3 7 6 -1, 1 2 6 5 -1, 0 4 7 3 -1 ]
+      }
+    }
+  ] }
+
+  DEF Cubo_Blu Transform { translation 3 0 0 children [
+    Shape {
+      appearance DEF AspettoBlu Appearance { material Material { diffuseColor 0.1 0.35 0.85 specularColor 0.5 0.5 0.5 } }
+      geometry IndexedFaceSet {
+        coord USE CuboPunti
+        coordIndex [ 0 3 2 1 -1, 4 5 6 7 -1, 0 1 5 4 -1, 2 3 7 6 -1, 1 2 6 5 -1, 0 4 7 3 -1 ]
+      }
+    }
+  ] }
+
+  DEF Cubo_Blu_Riusato Transform { translation 6 0 0 children [
+    Shape {
+      appearance USE AspettoBlu
+      geometry IndexedFaceSet {
+        coord USE CuboPunti
+        coordIndex [ 0 3 2 1 -1, 4 5 6 7 -1, 0 1 5 4 -1, 2 3 7 6 -1, 1 2 6 5 -1, 0 4 7 3 -1 ]
+      }
+    }
+  ] }
+
+  DEF Istanza_Rossa Transform { translation 0 3 0 children [ USE CuboBase ] }
+
+  DEF Vetro_Verde Transform { translation 3 3 0 scale 1.5 1.5 0.2 children [
+    Shape {
+      appearance Appearance { material Material { diffuseColor 0.2 0.8 0.3 transparency 0.6 } }
+      geometry IndexedFaceSet {
+        coord USE CuboPunti
+        coordIndex [ 0 3 2 1 -1, 4 5 6 7 -1, 0 1 5 4 -1, 2 3 7 6 -1, 1 2 6 5 -1, 0 4 7 3 -1 ]
+      }
+    }
+  ] }
+
+  DEF Senza_Materiale Transform { translation 6 3 0 children [
+    Shape {
+      geometry IndexedFaceSet {
+        coord USE CuboPunti
+        coordIndex [ 0 3 2 1 -1, 4 5 6 7 -1, 0 1 5 4 -1, 2 3 7 6 -1, 1 2 6 5 -1, 0 4 7 3 -1 ]
+      }
+    }
+  ] }
+
+  DEF Giallo_Emissivo Transform { translation 3 -3 0 children [
+    Shape {
+      appearance Appearance { material Material { diffuseColor 0 0 0 emissiveColor 0.95 0.8 0.1 } }
+      geometry IndexedFaceSet {
+        coord USE CuboPunti
+        coordIndex [ 0 3 2 1 -1, 4 5 6 7 -1, 0 1 5 4 -1, 2 3 7 6 -1, 1 2 6 5 -1, 0 4 7 3 -1 ]
+      }
+    }
+  ] }
+] }

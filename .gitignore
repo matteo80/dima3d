@@ -1,0 +1,17 @@
+# Compilazione
+/target/
+
+# Note locali (nomi di file reali, percorsi del PC, passaggi tra sessioni)
+NOTE_PRIVATE.md
+HANDOFF.md
+
+# File di modelli reali: mai nel repository
+*.wrl
+*.WRL
+*.vrml
+*.jt
+!esempi/*.wrl
+
+# Varie
+*.raw
+Thumbs.db
