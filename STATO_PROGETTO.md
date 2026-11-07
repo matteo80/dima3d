@@ -620,6 +620,22 @@ cargo flamegraph --bin gestore-wrl -- path\to\file.wrl
     con clic su "Calcola anteprima"); immagini della scocca prima/dopo dal test di rendering con `GESTORE_RENDER_DUMP`.
     Non provato a mano sull'exe (in questa sessione non c'era il controllo del desktop).
 
+- **STL (2026-11-08, Step 5):**
+  - Apertura (`parser/stl.rs`): riconosciuto dal contenuto (binario dalla lunghezza 84 + 50·n, perché molti binari
+    iniziano anch'essi con "solid"; ASCII da `solid` + `facet`), convertito in VRML 2.0 come i VRML 1.0
+    (`parse_wrl_with_config`): una Shape per `solid` col suo nome, vertici uguali uniti, normali ricalcolate a
+    spigolo vivo (`reduce::crease_normals`, 0,5 rad) perché quelle del file sono di faccia e spesso nulle. Coordinate
+    col passo di un milionesimo dell'ingombro. File rotto: avviso con il numero di riga. Filtri delle finestre
+    Apri/Aggiungi con `.stl`.
+  - Export (`exporter/stl.rs`): parti visibili in world-space, binario o ASCII (opzione "In formato testo" nel menu
+    accanto a Esporta, chiave `export_stl_testo`), con triangoli girati per le matrici speculari (normali verso
+    l'esterno). Colori e albero non esistono nel formato. Il pannello "Riduci" mostra anche la dimensione dell'STL
+    binario.
+  - Scocca_B: STL binario 186 MB scritto in 0,2 s, ASCII 750 MB in 7 s; riaperti con tutti i triangoli tranne 2.868
+    degeneri (area nulla, scartati apposta), l'ASCII con i 1533 pezzi. Riapertura del binario ~10 s (lettura 0,07 s,
+    saldatura 1 s, normali 1,6 s, testo intermedio 3 s, parsing 4,4 s): possibile miglioramento costruendo la scena
+    senza passare dal testo.
+
 ---
 
 ## 8. Roadmap (aggiornata 2026-11-07)
@@ -672,9 +688,8 @@ Scelta sui convertitori: restano **programmi separati** in `tools\` (come `jt2wr
 Un file rotto o un errore della libreria chiude solo il convertitore, non il Gestore con il lavoro aperto; avanzamento ed
 errori passano già da stdout/stderr (`parser/jt.rs`), e ogni convertitore si aggiorna senza ricompilare il Gestore.
 
-- [ ] **STL, import ed export** (in Rust, nel Gestore): binario e ASCII; in import un pezzo per file (o per `solid`
-      negli ASCII con più solidi), unità chiesta come per i WRL (di solito mm); in export il pezzo/file selezionato o
-      tutto il visibile, un solo STL o uno per pezzo. Lo STL non ha colori né gerarchia: si perdono.
+- [x] **STL, import ed export** (2026-11-08, vedi note): binario e ASCII in apertura (un pezzo per `solid`); export
+      binario (predefinito) o ASCII con un `solid` per pezzo, scegliendo `.stl` nella finestra Salva
 - [ ] **STEP, import** (convertitore separato `step2wrl.exe` con OpenCASCADE, LGPL): tassellazione della geometria
       esatta con tolleranza regolabile, nomi e colori dell'assieme (XCAF), trasformazioni. Da valutare peso e tempi su
       una matematica reale.

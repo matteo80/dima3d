@@ -248,7 +248,7 @@ impl GestoreApp {
 
     /// Finestra di scelta di uno o più file da aggiungere alla scena.
     pub fn add_dialog(&mut self) {
-        let mut dialog = rfd::FileDialog::new().add_filter("Modelli 3D (WRL, JT)", &["wrl", "WRL", "vrml", "jt", "JT"]);
+        let mut dialog = rfd::FileDialog::new().add_filter("Modelli 3D (WRL, JT, STL)", &["wrl", "WRL", "vrml", "jt", "JT", "stl", "STL"]);
         if let Some(dir) = self.settings.recent.first().and_then(|p| p.parent()) {
             dialog = dialog.set_directory(dir);
         }
@@ -264,6 +264,7 @@ impl GestoreApp {
         let stem = name.strip_suffix(".wrl").or(name.strip_suffix(".WRL")).unwrap_or(&name);
         let mut dialog = rfd::FileDialog::new()
             .add_filter("VRML World", &["wrl"])
+            .add_filter("STL", &["stl"])
             .set_file_name(format!("{}_export.wrl", crate::exporter::sanitize_identifier(stem)));
         let file_dir = scene
             .sources
@@ -285,11 +286,17 @@ impl GestoreApp {
             return false;
         }
         let options = self.settings.export_options();
+        let stl_ascii = self.settings.export_stl_ascii;
+        let is_stl = path.extension().is_some_and(|e| e.eq_ignore_ascii_case("stl"));
         let Some(scene) = self.scene_graph.take() else { return false };
         let (tx, rx) = std::sync::mpsc::channel();
         let out = path.clone();
         std::thread::spawn(move || {
-            let result = crate::exporter::export_with(&scene, node, &out, options);
+            let result = if is_stl {
+                crate::exporter::stl::export_stl(&scene, node, &out, stl_ascii)
+            } else {
+                crate::exporter::export_with(&scene, node, &out, options)
+            };
             let _ = tx.send((scene, result));
         });
         self.ui_state.status_message = format!("Esportazione in corso: {}", path.display());
@@ -322,7 +329,7 @@ impl GestoreApp {
 
     /// Apre la finestra di scelta file.
     pub fn open_dialog(&mut self) {
-        let mut dialog = rfd::FileDialog::new().add_filter("Modelli 3D (WRL, JT)", &["wrl", "WRL", "vrml", "jt", "JT"]);
+        let mut dialog = rfd::FileDialog::new().add_filter("Modelli 3D (WRL, JT, STL)", &["wrl", "WRL", "vrml", "jt", "JT", "stl", "STL"]);
         if let Some(dir) = self.settings.recent.first().and_then(|p| p.parent()) {
             dialog = dialog.set_directory(dir);
         }
@@ -361,6 +368,7 @@ impl GestoreApp {
             .unwrap_or_else(|| "export.wrl".to_string());
         let mut dialog = rfd::FileDialog::new()
             .add_filter("VRML World", &["wrl"])
+            .add_filter("STL", &["stl"])
             .set_file_name(suggested);
         if let Some(dir) = self.project.current_path.as_ref().and_then(|p| p.parent()) {
             dialog = dialog.set_directory(dir);

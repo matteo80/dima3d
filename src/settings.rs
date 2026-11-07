@@ -50,6 +50,8 @@ pub struct Settings {
     pub export_compact: bool,
     /// Normali scritte nel WRL esportato
     pub export_normals: bool,
+    /// STL esportato in formato testo invece che binario
+    pub export_stl_ascii: bool,
 }
 
 impl Default for Settings {
@@ -66,6 +68,7 @@ impl Default for Settings {
             recent: Vec::new(),
             export_compact: true,
             export_normals: true,
+            export_stl_ascii: false,
         }
     }
 }
@@ -153,6 +156,7 @@ impl Settings {
                 }
                 "export_compatto" => s.export_compact = value != "0",
                 "export_normali" => s.export_normals = value != "0",
+                "export_stl_testo" => s.export_stl_ascii = value == "1",
                 "recente" => {
                     if !value.is_empty() && s.recent.len() < MAX_RECENT {
                         s.recent.push(PathBuf::from(value));
@@ -168,7 +172,7 @@ impl Settings {
         let [r, g, b] = self.background;
         let [dr, dg, db, da] = self.default_color;
         let mut out = format!(
-            "tema = {}\nsfondo = {r} {g} {b}\ncolore_predefinito = {dr} {dg} {db} {da}\nsfondo_sfumato = {}\nraggruppamento_tolleranza = {}\nraggruppamento_vertici = {}\nassi = {}\nrotazione = {}\nsensibilita_rotazione = {}\nexport_compatto = {}\nexport_normali = {}\n",
+            "tema = {}\nsfondo = {r} {g} {b}\ncolore_predefinito = {dr} {dg} {db} {da}\nsfondo_sfumato = {}\nraggruppamento_tolleranza = {}\nraggruppamento_vertici = {}\nassi = {}\nrotazione = {}\nsensibilita_rotazione = {}\nexport_compatto = {}\nexport_normali = {}\nexport_stl_testo = {}\n",
             match self.theme {
                 ThemeMode::Dark => "scuro",
                 ThemeMode::Light => "chiaro",
@@ -188,6 +192,7 @@ impl Settings {
             self.rotation_sensitivity,
             u8::from(self.export_compact),
             u8::from(self.export_normals),
+            u8::from(self.export_stl_ascii),
         );
         for p in &self.recent {
             out.push_str(&format!("recente = {}\n", p.display()));
@@ -231,6 +236,7 @@ mod tests {
             recent: Vec::new(),
             export_compact: false,
             export_normals: false,
+            export_stl_ascii: true,
         };
         s.add_recent(Path::new(r"C:\a b\uno.wrl"));
         s.add_recent(Path::new(r"C:\due.wrl"));

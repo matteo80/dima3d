@@ -194,15 +194,18 @@ pub fn draw(ctx: &egui::Context, app: &mut GestoreApp) {
                     ui.label("Errore massimo");
                     ui.label(error_text(s.max_error, to_mm));
                     ui.end_row();
-                    ui.label("WRL previsto");
+                    ui.label("File previsto");
                     ui.label(
                         egui::RichText::new(format!(
-                            "{} senza normali  ·  {} con normali",
+                            "WRL {} senza normali  ·  {} con normali",
                             megabytes(s.size_without_normals),
                             megabytes(s.size_with_normals)
                         ))
                         .strong(),
                     );
+                    ui.end_row();
+                    ui.label("");
+                    ui.label(format!("STL binario {}", megabytes(s.size_stl)));
                     ui.end_row();
                 });
                 if s.revision != revision || s.compact != settings.export_compact {
@@ -225,8 +228,8 @@ pub fn draw(ctx: &egui::Context, app: &mut GestoreApp) {
             );
             ui.add_space(4.0);
             if ui
-                .add_enabled(can_export, egui::Button::new(icon_text(ui, icon::EXPORT, "Esporta WRL…")))
-                .on_hover_text("Salva le parti visibili, con le facce ridotte, in un nuovo file")
+                .add_enabled(can_export, egui::Button::new(icon_text(ui, icon::EXPORT, "Esporta…")))
+                .on_hover_text("Salva le parti visibili, con le facce ridotte, in un nuovo file WRL o STL")
                 .clicked()
             {
                 export = true;
@@ -287,7 +290,7 @@ mod tests {
         for _ in 0..3 {
             texts = frame(&ctx, &mut app, vec![]);
         }
-        for t in ["Riduci facce", "Calcola anteprima", "Numero di facce", "Scrivi le normali nel file", "Esporta WRL…"] {
+        for t in ["Riduci facce", "Calcola anteprima", "Numero di facce", "Scrivi le normali nel file", "Esporta…"] {
             assert!(texts.iter().any(|(s, _)| s.contains(t)), "manca «{t}»: {texts:?}");
         }
         assert_eq!(app.project.reduction.panel.triangles, suggested_triangles(current));
@@ -308,7 +311,8 @@ mod tests {
         for _ in 0..2 {
             texts = frame(&ctx, &mut app, vec![]);
         }
-        assert!(texts.iter().any(|(s, _)| s.contains("WRL previsto")), "{texts:?}");
+        assert!(texts.iter().any(|(s, _)| s.contains("File previsto")), "{texts:?}");
+        assert!(texts.iter().any(|(s, _)| s.contains("STL binario")), "{texts:?}");
         assert!(texts.iter().any(|(s, _)| s.contains("senza normali")), "{texts:?}");
     }
 

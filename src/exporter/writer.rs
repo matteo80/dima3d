@@ -155,7 +155,7 @@ fn coordinate_decimals(scene: &SceneGraph) -> u32 {
 const NORMAL_DECIMALS: u32 = 3;
 
 /// Numero con al più `decimals` cifre decimali, senza zeri finali (`1.5`, `-0.003`, `12`).
-pub(super) fn push_fixed(out: &mut Vec<u8>, value: f32, decimals: u32) {
+pub(crate) fn push_fixed(out: &mut Vec<u8>, value: f32, decimals: u32) {
     let scale = 10u64.pow(decimals);
     let scaled = (value as f64 * scale as f64).round();
     if !scaled.is_finite() || scaled.abs() >= 9.0e15 {
@@ -190,7 +190,7 @@ pub(super) fn push_fixed(out: &mut Vec<u8>, value: f32, decimals: u32) {
     }
 }
 
-pub(super) fn push_uint(out: &mut Vec<u8>, mut v: u64) {
+pub(crate) fn push_uint(out: &mut Vec<u8>, mut v: u64) {
     let mut tmp = [0u8; 20];
     let mut i = tmp.len();
     loop {
@@ -205,7 +205,7 @@ pub(super) fn push_uint(out: &mut Vec<u8>, mut v: u64) {
 }
 
 /// Per ogni nodo: true se il suo sotto-albero contiene almeno una Shape visibile.
-fn compute_has_visible(scene: &SceneGraph) -> Vec<bool> {
+pub(super) fn compute_has_visible(scene: &SceneGraph) -> Vec<bool> {
     let mut flags: Vec<bool> = scene
         .nodes
         .iter()

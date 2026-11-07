@@ -246,7 +246,6 @@ fn transferred_corner_normals(
 /// Normali con spigoli vivi: ogni angolo di triangolo media le facce attorno al suo vertice che
 /// formano con la propria faccia un angolo minore di `crease_angle`. Un vertice con normali
 /// diverse sulle sue facce viene sdoppiato per la resa ([`SplitNormals`]).
-#[cfg(test)]
 pub fn crease_normals(positions: &[[f32; 3]], indices: &[u32], crease_angle: f32) -> (Vec<[f32; 3]>, Option<Box<SplitNormals>>) {
     split_by_normal(positions.len(), indices, &corner_crease_normals(positions, indices, crease_angle))
 }

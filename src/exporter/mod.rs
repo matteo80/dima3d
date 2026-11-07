@@ -1,4 +1,5 @@
 mod ifs;
+pub mod stl;
 pub mod writer;
 
 pub use writer::{estimate_size, export_with, sanitize_identifier, ExportOptions};

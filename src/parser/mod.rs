@@ -4,6 +4,7 @@ pub mod lexer;
 pub mod loader;
 pub mod material;
 pub mod shape_extractor;
+pub mod stl;
 pub mod transform;
 mod vrml1;
 

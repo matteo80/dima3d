@@ -207,11 +207,15 @@ pub fn parse_wrl_with_config<F>(data: &[u8], cluster_cfg: crate::clusterer::Clus
 where
     F: FnMut(f32, String),
 {
-    if !crate::parser::vrml1::is_vrml1(data) {
+    let converted = if crate::parser::vrml1::is_vrml1(data) {
+        progress_fn(0.0, "Conversione da VRML 1.0...".to_string());
+        crate::parser::vrml1::convert(data)
+    } else if crate::parser::stl::is_stl(data) {
+        progress_fn(0.0, "Conversione da STL...".to_string());
+        crate::parser::stl::convert(data)
+    } else {
         return parse_vrml2(data, cluster_cfg, progress_fn);
-    }
-    progress_fn(0.0, "Conversione da VRML 1.0...".to_string());
-    let converted = crate::parser::vrml1::convert(data);
+    };
     let mut scene = parse_vrml2(&converted.text, cluster_cfg, progress_fn);
     scene.load_warnings.extend(converted.warnings);
     scene.source_data = converted.text.into();

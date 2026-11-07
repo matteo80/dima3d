@@ -59,6 +59,8 @@ pub struct Summary {
     /// Dimensione del WRL esportato con e senza normali, con le opzioni di export correnti
     pub size_with_normals: u64,
     pub size_without_normals: u64,
+    /// Dimensione dell'STL binario
+    pub size_stl: u64,
     /// Formato compatto usato per la stima
     pub compact: bool,
     pub seconds: f32,
@@ -213,6 +215,7 @@ impl GestoreApp {
                 max_error: outcome.max_error,
                 size_with_normals: size(true),
                 size_without_normals: size(false),
+                size_stl: crate::exporter::stl::estimate_binary_size(&scene, None),
                 compact,
                 seconds: started.elapsed().as_secs_f32(),
                 revision: scene.revision,

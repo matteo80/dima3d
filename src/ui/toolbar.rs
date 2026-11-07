@@ -65,17 +65,25 @@ pub fn draw_toolbar(ui: &mut egui::Ui, app: &mut crate::app::GestoreApp) {
     if tool(ui, has_scene && !loading, compact, icon::FILE_PLUS, "Aggiungi", "Aggiunge uno o più file WRL alla scena aperta (anche trascinandoli sulla finestra)") {
         app.add_dialog();
     }
-    if tool(ui, has_scene, compact, icon::EXPORT, "Esporta", "Salva solo le parti visibili in un nuovo file WRL  [Ctrl+S]") {
+    if tool(ui, has_scene, compact, icon::EXPORT, "Esporta", "Salva solo le parti visibili in un nuovo file WRL o STL  [Ctrl+S]") {
         app.export_dialog(None);
     }
     let mut export_settings = app.settings.clone();
     ui.menu_button(icon_text(ui, icon::CARET_DOWN, ""), |ui| {
         ui.label(egui::RichText::new("Formato dell'export").strong());
         ui.checkbox(&mut export_settings.export_compact, "Formato compatto").on_hover_text(
-            "Niente rientri e numeri con la precisione che serve (un milionesimo dell'ingombro): il file è meno              della metà. Senza, si copia il testo del file originale.",
+            "Niente rientri e numeri con la precisione che serve (un milionesimo dell'ingombro): il file è meno \
+             della metà. Senza, si copia il testo del file originale.",
         );
         ui.checkbox(&mut export_settings.export_normals, "Scrivi le normali").on_hover_text(
-            "Con le normali gli spigoli vivi restano quelli del file. Senza, il visualizzatore le ricalcola              (creaseAngle 0,5) e il file è circa la metà.",
+            "Con le normali gli spigoli vivi restano quelli del file. Senza, il visualizzatore le ricalcola \
+             (creaseAngle 0,5) e il file è circa la metà.",
+        );
+        ui.separator();
+        ui.label(egui::RichText::new("STL (scegli .stl nella finestra Salva)").strong());
+        ui.checkbox(&mut export_settings.export_stl_ascii, "In formato testo (ASCII)").on_hover_text(
+            "Il testo tiene un nome per pezzo ma è circa 5 volte più grande. Il binario è letto da tutti i programmi. \
+             In entrambi i casi colori e albero non esistono nel formato STL.",
         );
     })
     .response
