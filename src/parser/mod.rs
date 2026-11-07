@@ -53,6 +53,9 @@ pub struct ShapeInfo {
     /// Viene costruita bottom-up durante la discesa ricorsiva ed è usata per
     /// ricostruire la gerarchia nel SceneGraph.
     pub path: Vec<PathSeg>,
+    /// Geometria ricalcolata dal Gestore (es. riduzione delle facce): l'export la scrive dai dati
+    /// e non copia il testo originale del file
+    pub rewritten: bool,
 }
 
 /// Vertici aggiunti per la sola resa. Un vertice su uno spigolo vivo ha una normale per ogni

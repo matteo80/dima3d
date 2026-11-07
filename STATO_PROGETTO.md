@@ -587,6 +587,39 @@ cargo flamegraph --bin gestore-wrl -- path\to\file.wrl
   ruotare oltre i poli) con un trackball a quaternione: trascinamento sinistro = rotazione libera attorno agli
   assi dello schermo (l'oggetto segue il mouse), Shift + trascinamento sinistro = rollio.
 
+- **WRL leggeri e riduzione delle facce (2026-11-08, Step 6):**
+  - Export: opzioni "Formato compatto" e "Scrivi le normali" (menu accanto a Esporta, salvate nelle impostazioni come
+    `export_compatto` / `export_normali`, predefinite sì/sì). Compatto = scrittura dai dati letti (`write_geometry` in
+    `exporter/writer.rs`): niente rientri né virgole, triangoli, coordinate con passo di un milionesimo dell'ingombro
+    (`coordinate_decimals`: 6 decimali per una scocca in metri, 3 in millimetri), normali a 3 decimali (~0,05°),
+    `normalIndex` dai vertici di resa. Senza normali: `creaseAngle 0.5`. Senza compatto: copia fedele come prima.
+    I pezzi con `ShapeInfo::rewritten` (ridotti) si scrivono comunque dai dati. `estimate_size` conta i byte dello
+    stesso codice di scrittura senza scrivere il file (stima = dimensione vera, verificato nei test).
+  - Scocca_B (529 MB, 1533 pezzi, 3,7 M triangoli, in metri): copia fedele 536 MB, compatto 238 MB, compatto senza
+    normali 121 MB.
+  - Riduzione (`reduce.rs`): saldatura dei vertici uguali, poi meshoptimizer 1.3 (crate `meshopt` 0.7, MIT) con errore
+    assoluto unico per tutta la scena, così i piani perdono molte facce e i raccordi poche (come l'ordinamento globale
+    di MeshLab). Per un numero di facce si cerca l'errore per secanti in scala log con correzione "Illinois" (3–5
+    passate, entro il 2%). Le normali del file pesano nella semplificazione (`NORMAL_WEIGHT` = 0,03 × ingombro):
+    senza, sul cofano lucido i riflessi si spezzavano in macchie triangolari. Peso scelto confrontando le immagini
+    con l'originale (pixel diversi: 2985 senza peso, 1019 con 0,01, 799 con 0,03, 1801 con 0,1). I vertici tenuti
+    ricevono le normali che avevano nel file (scelte per faccia, così gli spigoli vivi restano distinti).
+  - Scocca_B ridotta a 1 milione di facce: 3,3 s, errore 0,43 mm; WRL 62 MB con normali, 30 MB senza (l'utente
+    otteneva 60–70 MB con MeshLab). Riaperto: 1533 pezzi, stessi triangoli. A 500.000 facce: 31 / 15 MB. Con
+    "Blocca i bordi aperti" la scocca non scende sotto ~550.000 facce (i bordi di 1533 pezzi restano tutti).
+  - `reduction.rs`: la scena va nel thread di calcolo (come l'export) con un riquadro di avanzamento; i pezzi ridotti
+    prendono il posto degli originali in `shapes_data` (vista, selezione, misure ed export usano il risultato) e gli
+    originali restano da parte (`stash`); ogni calcolo riparte dagli originali; "Originale" li rimette. La conversione
+    delle unità scala anche gli originali. Aprire o chiudere file azzera tutto.
+  - jt2wrl: scrittura compatta (7 cifre significative per le coordinate, 3 decimali per le normali, niente rientri):
+    WRL al 40–62% di prima sui 10 JT di esempio (SampleJT_Server 182 → 74 MB, san2 292 → 126 MB). Confronto con
+    l'uscita precedente (`confronto_due_file`): stessi pezzi e triangoli, vertici entro 5·10⁻⁷ relativo, normali entro
+    0,05°.
+  - Licenza di meshoptimizer in `licenses/meshoptimizer-MIT.txt`.
+  - Verifica: test automatici (riduzione, ricerca dell'obiettivo, normali trasferite, export compatto e stima, pannello
+    con clic su "Calcola anteprima"); immagini della scocca prima/dopo dal test di rendering con `GESTORE_RENDER_DUMP`.
+    Non provato a mano sull'exe (in questa sessione non c'era il controllo del desktop).
+
 ---
 
 ## 8. Roadmap (aggiornata 2026-11-07)
@@ -631,7 +664,63 @@ nell'aspetto definitivo.
 - [x] Profiling su file da 800-900 MB: tempi di apertura e memoria (2026-11-07, vedi note)
 - [x] Memoria di Annulla: misurata, 3 MB e 1,4 ms a passo sul file con più nodi (Paraurti_D): nessuno storico a comandi necessario
 - [x] Trasparenze: misurate, caso peggiore (18.051 pezzi tutti semitrasparenti) 247 fps: nessuna modifica necessaria
-- [ ] Exe finale
+- [ ] Exe finale: cartella pronta da copiare (`gestore-wrl.exe`, `tools\` con i convertitori, `licenses\`), zip
+
+### Step 5 — Formati e movimentazione (richieste dell'utente 2026-11-07)
+
+Scelta sui convertitori: restano **programmi separati** in `tools\` (come `jt2wrl.exe`), non DLL caricate nel Gestore.
+Un file rotto o un errore della libreria chiude solo il convertitore, non il Gestore con il lavoro aperto; avanzamento ed
+errori passano già da stdout/stderr (`parser/jt.rs`), e ogni convertitore si aggiorna senza ricompilare il Gestore.
+
+- [ ] **STL, import ed export** (in Rust, nel Gestore): binario e ASCII; in import un pezzo per file (o per `solid`
+      negli ASCII con più solidi), unità chiesta come per i WRL (di solito mm); in export il pezzo/file selezionato o
+      tutto il visibile, un solo STL o uno per pezzo. Lo STL non ha colori né gerarchia: si perdono.
+- [ ] **STEP, import** (convertitore separato `step2wrl.exe` con OpenCASCADE, LGPL): tassellazione della geometria
+      esatta con tolleranza regolabile, nomi e colori dell'assieme (XCAF), trasformazioni. Da valutare peso e tempi su
+      una matematica reale.
+- [ ] **STEP, export**: dalla mesh si può scrivere solo geometria a facce piane (B-rep "sfaccettato" o tassellato
+      AP242), non superfici CAD vere; utile per scambio/visualizzazione, non per riprogettare. Da confermare se serve
+      così.
+- [ ] **Rotazione di un pezzo attorno a un asse** (es. baule sulle due cerniere): selezione dei pezzi da muovere, asse
+      definito da due punti cliccati con aggancio ai vertici (come le Misure) — o centro di un foro/perno da tre punti
+      sul bordo — oppure un punto + asse X/Y/Z; angolo con cursore e valore numerico, anteprima dal vivo, Annulla.
+      In seguito anche la traslazione. Nell'export il pezzo esce nella posizione ruotata (`Transform` attorno ai suoi
+      figli). Da decidere con l'utente: punti sulle cerniere o centro del perno; salvare più posizioni (aperto/chiuso).
+
+### Step 6 — WRL più leggeri (richiesta dell'utente 2026-11-07: JT da 70 MB → WRL da 600 MB)
+
+Misura sui WRL prodotti da jt2wrl (Warehouse, san2, CoffeeMaker): coordinate 19–47%, normali 31–33%, `coordIndex` e
+`normalIndex` 10–24% ciascuno, spazi di rientro 20–45% del file. Dimensione finale rispetto a oggi:
+
+| Tecnica | Risultato | Perdita |
+|---|---|---|
+| Niente rientri, niente virgole, numeri a 3 decimali in mm (0,001 mm) | 39–61% | nessuna visibile |
+| + normali omesse (ricalcolate con `creaseAngle`) | 19–41% | spigoli calcolati invece che quelli del CAD |
+
+gzip escluso: i programmi dell'utente non leggono i WRL compressi (risposta dell'utente 2026-11-07).
+
+- [x] Scrittura compatta, sia in jt2wrl sia nell'export del Gestore (2026-11-08, vedi note)
+- [x] **Riduzione delle facce nel Gestore** (2026-11-08; prima l'utente usava MeshLab, "Quadric Edge Collapse
+      Decimation", provando più percentuali): pulsante "Riduci", obiettivo in facce o errore massimo, tutti i pezzi
+      visibili o la selezione, anteprima nella vista, dimensione prevista con e senza normali, "Originale" per tornare
+      indietro, "Esporta WRL…" (vedi note)
+- [x] Normali dopo la riduzione: quelle del file originale nei vertici tenuti; opzione "normali sì/no" nell'export
+- [ ] Pezzi ripetuti (viti, clip) scritti una volta con `DEF` e richiamati con `USE` dentro un `Transform`
+- [ ] Unione dei vertici doppi dentro ogni pezzo
+- [ ] Per i JT: usare anche un LOD più leggero già presente nel file
+
+### Step 7 — Export Open Inventor e HSF (valutazione 2026-11-07)
+
+- [ ] **IV ASCII** (`#Inventor V2.1 ascii`): fattibile, basso rischio. Il VRML 1.0, che il Gestore legge già, deriva da
+      Inventor: `Separator`, `Material`, `Coordinate3`, `Normal`/`NormalBinding`, `IndexedFaceSet`, `Transform`.
+- [ ] **IV binario** (`#Inventor V2.1 binary`): fattibile, rischio medio. Formato non documentato in una specifica
+      pubblica: riferimento al codice di Coin3D (BSD-3, github.com/coin3d/coin), che sa anche rileggerlo per la verifica.
+      Più compatto del testo e più veloce da aprire.
+- [ ] **HSF** (HOOPS Stream File, Tech Soft 3D): fattibilità incerta. Formato proprietario senza specifica pubblica,
+      con il toolkit commerciale. Unica strada senza licenza HOOPS: il toolkit HOOPS Stream incluso nel DWF Toolkit 7.7
+      di Autodesk (`w3dtk`, copia su GitHub), in un convertitore separato. Da verificare: la licenza Autodesk, se il file
+      è un `.hsf` puro e se il visualizzatore di destinazione lo apre. Prima di investirci, l'utente deve dire dove
+      serve l'HSF e procurare un file `.hsf` di esempio.
 
 ### Piano di lavoro in autonomia (proposto 2026-11-07, in attesa di approvazione)
 

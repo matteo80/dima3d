@@ -46,6 +46,10 @@ pub struct Settings {
     pub rotation_sensitivity: f32,
     /// File aperti di recente (il più recente per primo)
     pub recent: Vec<PathBuf>,
+    /// Export in formato compatto (vedi `ExportOptions::compact`)
+    pub export_compact: bool,
+    /// Normali scritte nel WRL esportato
+    pub export_normals: bool,
 }
 
 impl Default for Settings {
@@ -60,6 +64,8 @@ impl Default for Settings {
             rotation: RotationMode::default(),
             rotation_sensitivity: 1.0,
             recent: Vec::new(),
+            export_compact: true,
+            export_normals: true,
         }
     }
 }
@@ -89,6 +95,11 @@ fn parse_floats<const N: usize>(s: &str) -> Option<[f32; N]> {
 }
 
 impl Settings {
+    /// Opzioni dell'export scelte dall'utente.
+    pub fn export_options(&self) -> crate::exporter::ExportOptions {
+        crate::exporter::ExportOptions { compact: self.export_compact, normals: self.export_normals }
+    }
+
     /// Aggiunge un file in cima ai recenti (senza duplicati).
     pub fn add_recent(&mut self, path: &Path) {
         self.recent.retain(|p| p != path);
@@ -140,6 +151,8 @@ impl Settings {
                         s.rotation_sensitivity = v.clamp(*SENSITIVITY_RANGE.start(), *SENSITIVITY_RANGE.end());
                     }
                 }
+                "export_compatto" => s.export_compact = value != "0",
+                "export_normali" => s.export_normals = value != "0",
                 "recente" => {
                     if !value.is_empty() && s.recent.len() < MAX_RECENT {
                         s.recent.push(PathBuf::from(value));
@@ -155,7 +168,7 @@ impl Settings {
         let [r, g, b] = self.background;
         let [dr, dg, db, da] = self.default_color;
         let mut out = format!(
-            "tema = {}\nsfondo = {r} {g} {b}\ncolore_predefinito = {dr} {dg} {db} {da}\nsfondo_sfumato = {}\nraggruppamento_tolleranza = {}\nraggruppamento_vertici = {}\nassi = {}\nrotazione = {}\nsensibilita_rotazione = {}\n",
+            "tema = {}\nsfondo = {r} {g} {b}\ncolore_predefinito = {dr} {dg} {db} {da}\nsfondo_sfumato = {}\nraggruppamento_tolleranza = {}\nraggruppamento_vertici = {}\nassi = {}\nrotazione = {}\nsensibilita_rotazione = {}\nexport_compatto = {}\nexport_normali = {}\n",
             match self.theme {
                 ThemeMode::Dark => "scuro",
                 ThemeMode::Light => "chiaro",
@@ -173,6 +186,8 @@ impl Settings {
                 RotationMode::FixedAxis => "asse_fisso",
             },
             self.rotation_sensitivity,
+            u8::from(self.export_compact),
+            u8::from(self.export_normals),
         );
         for p in &self.recent {
             out.push_str(&format!("recente = {}\n", p.display()));
@@ -214,6 +229,8 @@ mod tests {
             rotation: RotationMode::FixedAxis,
             rotation_sensitivity: 1.5,
             recent: Vec::new(),
+            export_compact: false,
+            export_normals: false,
         };
         s.add_recent(Path::new(r"C:\a b\uno.wrl"));
         s.add_recent(Path::new(r"C:\due.wrl"));

@@ -817,6 +817,7 @@ fn extract_shapes_recursive(
                             name: t.name.clone(),
                             color: t.color,
                             path,
+                            rewritten: false,
                         });
                     }
                 } else {
@@ -1517,6 +1518,7 @@ fn extract_indexed_face_set(
         name: None,
         color: None,
         path: Vec::new(),
+        rewritten: false,
     };
 
     let local_shape = LocalShape {

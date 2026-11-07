@@ -68,6 +68,28 @@ pub fn draw_toolbar(ui: &mut egui::Ui, app: &mut crate::app::GestoreApp) {
     if tool(ui, has_scene, compact, icon::EXPORT, "Esporta", "Salva solo le parti visibili in un nuovo file WRL  [Ctrl+S]") {
         app.export_dialog(None);
     }
+    let mut export_settings = app.settings.clone();
+    ui.menu_button(icon_text(ui, icon::CARET_DOWN, ""), |ui| {
+        ui.label(egui::RichText::new("Formato dell'export").strong());
+        ui.checkbox(&mut export_settings.export_compact, "Formato compatto").on_hover_text(
+            "Niente rientri e numeri con la precisione che serve (un milionesimo dell'ingombro): il file è meno              della metà. Senza, si copia il testo del file originale.",
+        );
+        ui.checkbox(&mut export_settings.export_normals, "Scrivi le normali").on_hover_text(
+            "Con le normali gli spigoli vivi restano quelli del file. Senza, il visualizzatore le ricalcola              (creaseAngle 0,5) e il file è circa la metà.",
+        );
+    })
+    .response
+    .on_hover_text("Opzioni dell'export");
+    app.apply_settings(export_settings);
+    let reduce_open = app.project.reduction.panel.open;
+    let reduce_text = icon_text(ui, icon::TRIANGLE_DASHED, if compact { "" } else { "Riduci" });
+    let reduce = ui
+        .add_enabled(has_scene && !loading, egui::Button::new(reduce_text).selected(reduce_open))
+        .on_hover_text("Riduci facce
+Toglie triangoli dove non servono (come MeshLab), con anteprima e dimensione prevista del file");
+    if reduce.clicked() {
+        app.project.reduction.panel.open = !reduce_open;
+    }
     if tool(ui, has_scene && !loading, compact, icon::X, "Chiudi", "Chiude tutti i file aperti (chiede conferma se ci sono modifiche non esportate). Per chiuderne uno solo: tasto destro sul file nell'albero") {
         app.request_close();
     }

@@ -290,43 +290,45 @@ namespace Jt2Wrl {
                 return;
             }
 
-            var ind = new string(' ', depth * 2);
-            var sb = new StringBuilder(64 + vertexCount * 30 + keep.Count * 40);
+            // Scrittura compatta: niente rientri né virgole, 7 cifre significative per le
+            // coordinate (0,001 mm su 4 m) e 3 decimali per le normali. Il file è meno della metà.
+            var ind = "";
+            var sb = new StringBuilder(64 + vertexCount * 30 + keep.Count * 24);
             sb.Append(ind).Append("DEF ").Append(Unique(name ?? "Pezzo")).Append(" Shape {\n");
             float r = 0.75f, g = 0.78f, b = 0.84f, a = 1f;
             if (color != null) { r = color.r; g = color.g; b = color.b; a = color.a; }
             float transparency = Math.Clamp(1f - a, 0f, 1f);
-            sb.Append(ind).Append("  appearance Appearance { material Material { diffuseColor ")
+            sb.Append(ind).Append("appearance Appearance { material Material { diffuseColor ")
               .Append(F(r)).Append(' ').Append(F(g)).Append(' ').Append(F(b));
             if (transparency > 0.0005f) sb.Append(" transparency ").Append(F(transparency));
             sb.Append(" } }\n");
-            sb.Append(ind).Append("  geometry IndexedFaceSet {\n");
-            sb.Append(ind).Append("    solid FALSE\n");
-            sb.Append(ind).Append("    coord Coordinate { point [\n");
+            sb.Append(ind).Append("geometry IndexedFaceSet {\n");
+            sb.Append(ind).Append("solid FALSE\n");
+            sb.Append(ind).Append("coord Coordinate { point [\n");
             for (int v = 0; v < vertexCount; v++) {
                 xf.Point(vertices[v * 3], vertices[v * 3 + 1], vertices[v * 3 + 2], out var x, out var y, out var z);
-                sb.Append(ind).Append("      ").Append(F((float)x)).Append(' ').Append(F((float)y)).Append(' ').Append(F((float)z)).Append(",\n");
+                sb.Append(F((float)x)).Append(' ').Append(F((float)y)).Append(' ').Append(F((float)z)).Append('\n');
             }
-            sb.Append(ind).Append("    ] }\n");
-            sb.Append(ind).Append("    coordIndex [\n");
+            sb.Append(ind).Append("] }\n");
+            sb.Append(ind).Append("coordIndex [\n");
             foreach (int t in keep)
-                sb.Append(ind).Append("      ").Append(tri[t]).Append(' ').Append(tri[t + 1]).Append(' ').Append(tri[t + 2]).Append(" -1,\n");
-            sb.Append(ind).Append("    ]\n");
+                sb.Append(tri[t]).Append(' ').Append(tri[t + 1]).Append(' ').Append(tri[t + 2]).Append(" -1\n");
+            sb.Append(ind).Append("]\n");
             if (useNormals) {
-                sb.Append(ind).Append("    normal Normal { vector [\n");
+                sb.Append(ind).Append("normal Normal { vector [\n");
                 for (int n = 0; n < normalCount; n++) {
                     xf.Direction(normals[n * 3], normals[n * 3 + 1], normals[n * 3 + 2], out var x, out var y, out var z);
-                    sb.Append(ind).Append("      ").Append(F((float)x)).Append(' ').Append(F((float)y)).Append(' ').Append(F((float)z)).Append(",\n");
+                    sb.Append(N((float)x)).Append(' ').Append(N((float)y)).Append(' ').Append(N((float)z)).Append('\n');
                 }
-                sb.Append(ind).Append("    ] }\n");
-                sb.Append(ind).Append("    normalIndex [\n");
+                sb.Append(ind).Append("] }\n");
+                sb.Append(ind).Append("normalIndex [\n");
                 foreach (int t in keep)
-                    sb.Append(ind).Append("      ").Append(ni[t]).Append(' ').Append(ni[t + 1]).Append(' ').Append(ni[t + 2]).Append(" -1,\n");
-                sb.Append(ind).Append("    ]\n");
+                    sb.Append(ni[t]).Append(' ').Append(ni[t + 1]).Append(' ').Append(ni[t + 2]).Append(" -1\n");
+                sb.Append(ind).Append("]\n");
             } else {
-                sb.Append(ind).Append("    creaseAngle 0.5\n");
+                sb.Append(ind).Append("creaseAngle 0.5\n");
             }
-            sb.Append(ind).Append("  }\n");
+            sb.Append(ind).Append("}\n");
             sb.Append(ind).Append("}\n");
             w.Write(sb.ToString());
             Shapes++;
@@ -334,15 +336,21 @@ namespace Jt2Wrl {
         }
 
         void OpenGroup(string name, int depth) {
-            var ind = new string(' ', depth * 2);
-            w.Write(ind + "DEF " + Unique(name) + " Group { children [\n");
+            w.Write("DEF " + Unique(name) + " Group { children [\n");
         }
 
         void CloseGroup(int depth) {
-            w.Write(new string(' ', depth * 2) + "] }\n");
+            w.Write("] }\n");
         }
 
-        static string F(float v) => v.ToString("R", Inv);
+        /// Coordinata con 7 cifre significative, senza zeri inutili.
+        static string F(float v) => v == 0 ? "0" : v.ToString("G7", Inv);
+
+        /// Componente di una normale con 3 decimali (errore massimo di circa 0,05°).
+        static string N(float v) {
+            var s = v.ToString("0.###", Inv);
+            return s == "-0" ? "0" : s;
+        }
 
         /// Identificatore VRML valido e unico nel file (come `sanitize_identifier` del Gestore).
         string Unique(string label) {

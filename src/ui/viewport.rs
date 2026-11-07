@@ -328,7 +328,7 @@ pub fn draw_viewport(ui: &mut egui::Ui, app: &mut crate::app::GestoreApp) {
             egui::StrokeKind::Inside,
         );
     }
-    if app.scene_graph.is_none() && !app.ui_state.is_loading && app.project.export_job.is_none() {
+    if app.scene_graph.is_none() && !app.ui_state.is_loading && !app.project.busy() {
         draw_empty_state(ui, rect, app.settings.background, dragging_file);
     }
     if app.scene_graph.is_some() {

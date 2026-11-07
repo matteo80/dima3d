@@ -6,6 +6,8 @@ mod clusterer;
 mod exporter;
 mod parser;
 mod project;
+mod reduce;
+mod reduction;
 mod renderer;
 mod scene_graph;
 mod settings;

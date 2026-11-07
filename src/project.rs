@@ -58,6 +58,8 @@ pub struct ProjectState {
     pub pending: Option<Pending>,
     /// Uscita confermata: non intercettare più la chiusura della finestra
     pub allow_exit: bool,
+    /// Riduzione delle facce: pannello, calcolo in corso, originali dei pezzi ridotti
+    pub reduction: crate::reduction::Reduction,
     /// Ultimo titolo impostato sulla finestra
     last_title: String,
 }
@@ -70,6 +72,12 @@ impl ProjectState {
         self.undo.clear();
         self.redo.clear();
         self.last_coalesce = None;
+        self.reduction.forget_geometry();
+    }
+
+    /// Un lavoro in background (export o riduzione) ha in mano la scena.
+    pub fn busy(&self) -> bool {
+        self.export_job.is_some() || self.reduction.job.is_some()
     }
 
     fn reset(&mut self) {
@@ -178,7 +186,7 @@ impl GestoreApp {
 
     /// Apre un file, chiedendo conferma se ci sono modifiche non esportate.
     pub fn request_open(&mut self, path: PathBuf) {
-        if self.ui_state.is_loading || self.project.export_job.is_some() {
+        if self.ui_state.is_loading || self.project.busy() {
             return;
         }
         if self.is_dirty() {
@@ -191,7 +199,7 @@ impl GestoreApp {
     /// Aggiunge file alla scena aperta (senza scena: il primo si apre, gli altri si aggiungono).
     /// Si caricano uno alla volta; quelli in più attendono in coda.
     pub fn request_add(&mut self, paths: Vec<PathBuf>) {
-        if self.project.export_job.is_some() {
+        if self.project.busy() {
             return;
         }
         let mut paths = paths.into_iter();
@@ -221,7 +229,7 @@ impl GestoreApp {
     pub fn request_reload(&mut self) {
         let Some(scene) = &self.scene_graph else { return };
         let paths: Vec<PathBuf> = scene.open_files().filter_map(|s| s.path.clone()).collect();
-        if paths.is_empty() || self.ui_state.is_loading || self.project.export_job.is_some() {
+        if paths.is_empty() || self.ui_state.is_loading || self.project.busy() {
             return;
         }
         if self.is_dirty() {
@@ -273,17 +281,15 @@ impl GestoreApp {
 
     /// Avvia l'export in un thread: `node` = solo quel sotto-albero, altrimenti tutto il visibile.
     pub fn start_export(&mut self, path: PathBuf, node: Option<u32>, then: Option<Pending>) -> bool {
-        if self.project.export_job.is_some() {
+        if self.project.busy() {
             return false;
         }
+        let options = self.settings.export_options();
         let Some(scene) = self.scene_graph.take() else { return false };
         let (tx, rx) = std::sync::mpsc::channel();
         let out = path.clone();
         std::thread::spawn(move || {
-            let result = match node {
-                Some(n) => crate::exporter::export_subtree_wrl(&scene, n, &out),
-                None => crate::exporter::export_visible_wrl(&scene, &out),
-            };
+            let result = crate::exporter::export_with(&scene, node, &out, options);
             let _ = tx.send((scene, result));
         });
         self.ui_state.status_message = format!("Esportazione in corso: {}", path.display());

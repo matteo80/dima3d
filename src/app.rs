@@ -382,7 +382,7 @@ impl GestoreApp {
 
     /// Scorciatoie da tastiera (attive solo se nessun campo di testo ha il focus).
     fn handle_shortcuts(&mut self, ctx: &egui::Context) {
-        if ctx.wants_keyboard_input() || self.project.pending.is_some() || self.project.export_job.is_some() {
+        if ctx.wants_keyboard_input() || self.project.pending.is_some() || self.project.busy() {
             return;
         }
         let (open, save) = ctx.input(|inp| {
@@ -570,6 +570,10 @@ impl GestoreApp {
         let Some(scene) = &mut self.scene_graph else { return };
         let Some(source) = scene.sources.iter().position(|s| s.node == node) else { return };
         scene.scale_file(source, factor);
+        let meshes = scene.sources[source].meshes.clone();
+        self.project.reduction.scale(meshes.start as usize..meshes.end as usize, factor);
+        // La stima della dimensione non vale più
+        self.project.reduction.summary = None;
         let file = &scene.sources[source];
         self.ui_state.status_message = format!(
             "{}: {} (scala complessiva {})",
@@ -702,14 +706,17 @@ impl eframe::App for GestoreApp {
             }
         }
 
-        // Export in corso: a fine lavoro la scena torna al suo posto
+        // Export o riduzione in corso: a fine lavoro la scena torna al suo posto
         if self.project.export_job.is_some() {
             self.poll_export(ctx);
-            // La finestra non si chiude a metà export (il file resterebbe troncato)
-            if ctx.input(|i| i.viewport().close_requested()) && self.project.export_job.is_some() {
-                ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
-                self.ui_state.status_message = "Attendi la fine dell'esportazione prima di uscire.".to_string();
-            }
+        }
+        if self.project.reduction.job.is_some() && !self.poll_reduction() {
+            ctx.request_repaint_after(std::time::Duration::from_millis(50));
+        }
+        // La finestra non si chiude a metà lavoro (il file resterebbe troncato, la scena persa)
+        if ctx.input(|i| i.viewport().close_requested()) && self.project.busy() {
+            ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
+            self.ui_state.status_message = "Attendi la fine del lavoro in corso prima di uscire.".to_string();
         }
 
         // Chiusura della finestra con modifiche non esportate → chiedi conferma
@@ -731,6 +738,7 @@ impl eframe::App for GestoreApp {
         crate::project::draw_confirm_dialog(ctx, self);
         crate::project::draw_unit_suggestion(ctx, self);
         crate::project::draw_export_progress(ctx, self);
+        crate::ui::reduce_panel::draw(ctx, self);
         self.update_window_title(ctx);
     }
 }

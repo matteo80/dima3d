@@ -2,6 +2,7 @@ pub mod color_menu;
 pub mod measure;
 pub mod progress;
 pub mod properties;
+pub mod reduce_panel;
 pub mod scene_tree;
 pub mod theme;
 pub mod toolbar;

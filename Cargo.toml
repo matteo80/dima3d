@@ -21,6 +21,7 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 bytemuck = { version = "1.19", features = ["derive"] }
 egui-phosphor = "0.9"
+meshopt = "0.7"
 
 [dev-dependencies]
 pollster = "0.4"
