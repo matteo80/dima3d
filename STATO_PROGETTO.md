@@ -488,6 +488,13 @@ cargo flamegraph --bin gestore-wrl -- path\to\file.wrl
     piastre JT 8.0/9.5, CoffeeMaker 64 pezzi, fishing_reel 17 pezzi da 12 file esterni montati correttamente,
     Warehouse 1084, SampleJT_Server 850, san2 850 pezzi e 1,5 M triangoli in 5–10 s). WRL della versione NativeAOT
     identici al byte a quelli della versione JIT. Nel Gestore vero: fishing_reel.jt aperto in 2,2 s.
+  - Colori dei JT 9 corretti (2026-11-07): con il materiale in versione 2 JTReader leggeva ogni colore come un solo
+    grigio invece che RGBA, i valori slittavano e il diffuso finiva quasi sempre a 0.2 (pezzi neri). Il convertitore
+    registra un suo lettore (`JtMaterial`) al posto di `MaterialAttributeData` per i JT 9 (bit "colore comune" dei
+    Data Flags come nei JT 8, riflettività in versione 2); JT 8 e 10 restano a JTReader. Verifica: blocco e piastra
+    JT 9.5 ora hanno gli stessi colori delle versioni JT 8/10, SampleJT_Server uguale a san2, stessi pezzi e triangoli
+    di prima; `--diag` stampa i valori dei materiali e segnala byte non letti. Provato anche su due JT reali
+    dell'utente (JT 9.5, prima neri, ora colorati).
   - Non ancora provato su JT reali da Robcad/Process Simulate. Non coperti: export in JT, geometria esatta B-rep/XT,
     file big-endian, mesh compresse non topologiche di JT 10 (`TopoMeshCompressedLODData.GetIndices` non
     implementato in JTReader: il pezzo viene saltato con avviso).

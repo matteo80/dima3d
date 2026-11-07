@@ -64,6 +64,48 @@ namespace Jt2Wrl {
         }
     }
 
+    /// Materiale letto al posto di `MaterialAttributeData` di JTReader. Nei JT 9 con materiale in
+    /// versione 2 JTReader legge ogni colore come un solo grigio (un F32), mentre i colori sono
+    /// RGBA completi salvo i bit "colore comune" dei Data Flags (come nei JT 8): i valori
+    /// slittavano e il diffuso finiva quasi sempre a 0.2, cioè pezzi neri. JT 8 e 10 restano a
+    /// JTReader.
+    sealed class JtMaterial {
+        public ushort dataFlags;
+        public short version;
+        public RGBA ambientColor, diffuseColor, specularColor, emissionColor;
+        public float shininess, reflectivity;
+        /// Byte non letti alla fine dell'elemento (0 se il formato è stato letto per intero).
+        public long leftover;
+
+        public JtMaterial(Element ele) {
+            if (ele.majorVersion != 9) {
+                var m = new MaterialAttributeData(ele);
+                dataFlags = m.dataFlags;
+                ambientColor = m.ambientColor; diffuseColor = m.diffuseColor;
+                specularColor = m.specularColor; emissionColor = m.emissionColor;
+                shininess = m.shiniess; reflectivity = m.reflectivity;
+                return;
+            }
+            var data = ele.dataStream;
+            new BaseAttributeData(ele);
+            version = data.ReadI16();
+            dataFlags = data.ReadU16();
+            ambientColor = (dataFlags & 0x2) != 0 ? new RGBA(data.ReadF32()) : new RGBA(data);
+            diffuseColor = new RGBA(data);
+            specularColor = (dataFlags & 0x8) != 0 ? new RGBA(data.ReadF32()) : new RGBA(data);
+            emissionColor = (dataFlags & 0x4) != 0 ? new RGBA(data.ReadF32()) : new RGBA(data);
+            shininess = data.ReadF32();
+            if (version >= 2) reflectivity = data.ReadF32();
+            leftover = data.Length - data.Position;
+        }
+
+        static readonly GUID TypeId = new GUID("10DD1030-2AC8-11D1-9B-6B-00-80-C7-BB-59-97");
+
+        /// Da chiamare prima di aprire qualsiasi file: JTReader crea gli elementi dal tipo
+        /// registrato per il loro GUID.
+        public static void Register() => ObjectTypeIdentifiers.types[TypeId] = typeof(JtMaterial);
+    }
+
     static class JtFix {
         /// JTReader mette in un solo dizionario gli elementi di tutti i segmenti, tenendo il primo per
         /// ogni identificativo; nei JT 10 i segmenti di proprietà letti prima del grafo riusano gli
@@ -129,7 +171,7 @@ namespace Jt2Wrl {
                 try { data = attr?.elementData; } catch { continue; }
                 if (data is GeometricTransformAttributeData g && g.matrix != null)
                     xf = xf.Then(Affine.FromJt(g.matrix));
-                else if (data is MaterialAttributeData m && m.diffuseColor != null)
+                else if (data is JtMaterial m && m.diffuseColor != null)
                     color = m.diffuseColor;
             }
 
@@ -330,7 +372,16 @@ namespace Jt2Wrl {
                 var full = lsg.nodes.TryGetValue(n.id, out var f) ? f : n;
                 var ind = new string(' ', d * 2);
                 Console.WriteLine(ind + full.id + " " + (full.elementData?.GetType().Name ?? "null") + " attr=" + full.attributes.Count + " figli=" + full.child.Count);
-                foreach (var a in full.attributes) Console.WriteLine(ind + "  @ " + (a?.elementData?.GetType().Name ?? "null"));
+                foreach (var a in full.attributes) {
+                    var ad = a?.elementData;
+                    var extra = "";
+                    if (ad is JtMaterial m) {
+                        string C(RGBA c) => c == null ? "-" : string.Format(CultureInfo.InvariantCulture, "{0:0.###} {1:0.###} {2:0.###} {3:0.###}", c.r, c.g, c.b, c.a);
+                        extra = " JT" + a.majorVersion + " v" + m.version + " flags=0x" + m.dataFlags.ToString("X") + " amb=" + C(m.ambientColor) + " dif=" + C(m.diffuseColor)
+                                + " spe=" + C(m.specularColor) + " emi=" + C(m.emissionColor) + " shin=" + m.shininess.ToString(CultureInfo.InvariantCulture) + (m.leftover != 0 ? " AVANZO=" + m.leftover : "");
+                    }
+                    Console.WriteLine(ind + "  @ " + (ad?.GetType().Name ?? "null") + extra);
+                }
                 foreach (var p in full.property) {
                     var v = p.Value;
                     string desc = v is DataSegment s
@@ -355,6 +406,7 @@ namespace Jt2Wrl {
         }
 
         static int Main(string[] args) {
+            JtMaterial.Register();
             if (args.Length == 2 && args[0] == "--diag") {
                 Diagnose(args[1]);
                 return 0;
