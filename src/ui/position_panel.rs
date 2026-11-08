@@ -16,7 +16,7 @@ use glam::{Mat4, Vec3};
 
 use super::theme::{icon, icon_text};
 use crate::app::{Action, GestoreApp};
-use crate::scene_graph::placement::{parse_const_base, parse_offset, Pose};
+use crate::scene_graph::placement::{about_axis, circle_through, parse_const_base, parse_offset, Pose};
 
 /// Cosa si sposta.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -68,6 +68,8 @@ pub struct PositionPanel {
     pub result: Option<Pose>,
     /// Ultimo messaggio di errore del calcolo
     pub error: Option<String>,
+    /// Rotazione su cerniera
+    pub hinge: Hinge,
 }
 
 impl Default for PositionPanel {
@@ -91,6 +93,7 @@ impl Default for PositionPanel {
             base_b: String::new(),
             result: None,
             error: None,
+            hinge: Hinge::default(),
         }
     }
 }
@@ -105,6 +108,151 @@ const AXES: [(&str, egui::Color32, &str); 6] = [
 ];
 
 const UNITS: [f32; 6] = [0.01, 0.1, 1.0, 5.0, 10.0, 100.0];
+
+/// Come si definisce l'asse della rotazione su cerniera.
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+pub enum HingeMode {
+    /// Due punti cliccati (es. i centri delle due cerniere)
+    #[default]
+    TwoPoints,
+    /// Il centro di due fori, ognuno da tre punti sul bordo
+    TwoHoles,
+    /// Un foro (tre punti sul bordo): l'asse passa per il centro, perpendicolare al foro
+    OneHole,
+    /// Un punto e uno degli assi X, Y, Z (0, 1, 2)
+    PointAxis(usize),
+}
+
+impl HingeMode {
+    /// Clic necessari.
+    pub fn points(self) -> usize {
+        match self {
+            HingeMode::TwoPoints => 2,
+            HingeMode::TwoHoles => 6,
+            HingeMode::OneHole => 3,
+            HingeMode::PointAxis(_) => 1,
+        }
+    }
+
+    /// Cosa cliccare per il punto `i` (da 0).
+    pub fn prompt(self, i: usize) -> String {
+        match self {
+            HingeMode::TwoPoints => ["Clic sul primo punto dell'asse", "Clic sul secondo punto dell'asse"][i.min(1)].to_string(),
+            HingeMode::TwoHoles => format!("Foro {}: clic sul bordo, punto {} di 3", i / 3 + 1, i % 3 + 1),
+            HingeMode::OneHole => format!("Clic sul bordo del foro, punto {} di 3", i + 1),
+            HingeMode::PointAxis(_) => "Clic sul punto per cui passa l'asse".to_string(),
+        }
+    }
+
+    /// Asse (punto, direzione) dai punti cliccati.
+    pub fn axis(self, p: &[Vec3]) -> Result<(Vec3, Vec3), &'static str> {
+        let line = |a: Vec3, b: Vec3| {
+            let d = b - a;
+            if d.length_squared() > 1e-12 { Ok((a, d.normalize())) } else { Err("I due punti coincidono") }
+        };
+        match (self, p) {
+            (HingeMode::TwoPoints, [a, b]) => line(*a, *b),
+            (HingeMode::TwoHoles, [a, b, c, d, e, f]) => {
+                let (c1, _) = circle_through(*a, *b, *c).ok_or("I tre punti del primo foro sono allineati")?;
+                let (c2, _) = circle_through(*d, *e, *f).ok_or("I tre punti del secondo foro sono allineati")?;
+                line(c1, c2)
+            }
+            (HingeMode::OneHole, [a, b, c]) => circle_through(*a, *b, *c).ok_or("I tre punti del foro sono allineati"),
+            (HingeMode::PointAxis(k), [a]) => {
+                let mut d = Vec3::ZERO;
+                d[k.min(2)] = 1.0;
+                Ok((*a, d))
+            }
+            _ => Err("Punti mancanti"),
+        }
+    }
+}
+
+/// Rotazione su cerniera: asse scelto nella vista e angolo.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct Hinge {
+    pub mode: HingeMode,
+    /// Il clic nella vista prende i punti dell'asse invece di selezionare
+    pub picking: bool,
+    pub points: Vec<Vec3>,
+    /// Punto e direzione (unitaria) dell'asse
+    pub axis: Option<(Vec3, Vec3)>,
+    /// Angolo applicato da quando l'asse è stato scelto (gradi)
+    pub angle: f32,
+    pub error: Option<String>,
+}
+
+impl Hinge {
+    /// Inizia la scelta dell'asse.
+    pub fn start(&mut self) {
+        self.picking = true;
+        self.points.clear();
+        self.axis = None;
+        self.angle = 0.0;
+        self.error = None;
+    }
+
+    /// Punto cliccato nella vista; all'ultimo calcola l'asse.
+    pub fn add_point(&mut self, p: Vec3) {
+        if !self.picking {
+            return;
+        }
+        self.points.push(p);
+        if self.points.len() >= self.mode.points() {
+            self.picking = false;
+            match self.mode.axis(&self.points) {
+                Ok(axis) => {
+                    self.axis = Some(axis);
+                    self.error = None;
+                }
+                Err(e) => {
+                    self.error = Some(e.to_string());
+                    self.points.clear();
+                }
+            }
+        }
+    }
+
+    /// Testo per chi sta scegliendo l'asse.
+    pub fn prompt(&self) -> Option<String> {
+        self.picking.then(|| self.mode.prompt(self.points.len()))
+    }
+}
+
+/// Punti e asse della cerniera sopra la vista.
+pub fn draw_overlay(
+    ui: &mut egui::Ui,
+    rect: egui::Rect,
+    hinge: &Hinge,
+    to_screen: impl Fn(Vec3) -> Option<egui::Pos2>,
+    scene_size: f32,
+) {
+    let painter = ui.painter_at(rect);
+    let accent = egui::Color32::from_rgb(255, 140, 30);
+    if let Some((o, d)) = hinge.axis {
+        let half = scene_size.max(1.0) * 0.6;
+        if let (Some(a), Some(b)) = (to_screen(o - d * half), to_screen(o + d * half)) {
+            painter.line_segment([a, b], egui::Stroke::new(2.0, accent));
+        }
+        if let (Some(a), Some(b)) = (to_screen(o), to_screen(o + d * scene_size.max(1.0) * 0.05)) {
+            painter.arrow(a, b - a, egui::Stroke::new(3.0, accent));
+        }
+    }
+    for p in &hinge.points {
+        if let Some(s) = to_screen(*p) {
+            painter.circle(s, 4.5, accent, egui::Stroke::new(1.5, egui::Color32::BLACK));
+        }
+    }
+    if let Some(text) = hinge.prompt() {
+        painter.text(
+            rect.center_bottom() - egui::vec2(0.0, 40.0),
+            egui::Align2::CENTER_CENTER,
+            format!("Asse della cerniera: {text}  ·  Esc per annullare"),
+            egui::FontId::proportional(15.0),
+            accent,
+        );
+    }
+}
 
 /// Movimento elementare: `amount` mm lungo l'asse 0..2, o gradi attorno all'asse 3..5.
 pub fn axis_motion(axis: usize, amount: f32) -> Mat4 {
@@ -200,6 +348,10 @@ pub fn draw(ctx: &egui::Context, app: &mut GestoreApp) {
     }
     let target = panel.target;
     let key = target.map(|t| (t, panel.axis, panel.world));
+    if revision != panel.revision {
+        // Modifica fatta altrove (Annulla, altri comandi): l'angolo riparte da 0
+        panel.hinge.angle = 0.0;
+    }
     if key != panel.key || revision != panel.revision {
         panel.value = 0.0;
         panel.key = key;
@@ -214,6 +366,7 @@ pub fn draw(ctx: &egui::Context, app: &mut GestoreApp) {
     let mut actions: Vec<Action> = Vec::new();
     let mut copy: Option<String> = None;
     let mut status: Option<String> = None;
+    let mut start_picking = false;
 
     egui::Window::new(format!("{}  Posizione", icon::ARROWS_OUT_CARDINAL))
         .id(egui::Id::new("finestra_posizione"))
@@ -318,6 +471,100 @@ pub fn draw(ctx: &egui::Context, app: &mut GestoreApp) {
                 {
                     actions.push(Action::ResetPosition(nodes.clone()));
                 }
+
+                // ── Rotazione su un asse (cerniere) ─────────────────────────────
+                ui.separator();
+                egui::CollapsingHeader::new(egui::RichText::new("Rotazione su un asse (cerniere)").strong())
+                    .id_salt("posizione_cerniera")
+                    .default_open(true)
+                    .show(ui, |ui| {
+                        let h = &mut panel.hinge;
+                        let before_mode = h.mode;
+                        ui.horizontal_wrapped(|ui| {
+                            ui.selectable_value(&mut h.mode, HingeMode::TwoPoints, "Due punti")
+                                .on_hover_text("Due clic sull'asse, es. i centri delle due cerniere");
+                            ui.selectable_value(&mut h.mode, HingeMode::TwoHoles, "Due fori")
+                                .on_hover_text("Tre clic sul bordo di ogni foro: l'asse unisce i due centri");
+                            ui.selectable_value(&mut h.mode, HingeMode::OneHole, "Un foro")
+                                .on_hover_text("Tre clic sul bordo: l'asse passa per il centro, perpendicolare al foro (come un perno)");
+                            let axis_k = match h.mode { HingeMode::PointAxis(k) => Some(k), _ => None };
+                            if ui.selectable_label(axis_k.is_some(), "Punto + asse").on_hover_text("Un clic e la direzione X, Y o Z della cabina").clicked() {
+                                h.mode = HingeMode::PointAxis(axis_k.unwrap_or(2));
+                            }
+                            if let Some(k) = axis_k {
+                                for (j, name) in ["X", "Y", "Z"].iter().enumerate() {
+                                    let text = egui::RichText::new(*name).color(AXES[j].1).strong();
+                                    if ui.selectable_label(k == j, text).clicked() {
+                                        h.mode = HingeMode::PointAxis(j);
+                                    }
+                                }
+                            }
+                        });
+                        if h.mode != before_mode {
+                            // Un asse da un punto si aggiorna subito, gli altri si rifanno
+                            match (before_mode, h.mode, h.points.first().copied()) {
+                                (HingeMode::PointAxis(_), HingeMode::PointAxis(_), Some(p)) if h.points.len() == 1 => {
+                                    h.axis = h.mode.axis(&[p]).ok();
+                                }
+                                _ => {
+                                    h.points.clear();
+                                    h.axis = None;
+                                    h.picking = false;
+                                }
+                            }
+                            h.angle = 0.0;
+                        }
+                        ui.horizontal(|ui| {
+                            if h.picking {
+                                if ui.button("Annulla scelta").clicked() {
+                                    h.picking = false;
+                                    h.points.clear();
+                                }
+                                ui.label(egui::RichText::new(h.prompt().unwrap_or_default()).italics());
+                            } else if ui
+                                .button(icon_text(ui, icon::CROSSHAIR, if h.axis.is_some() { "Scegli un altro asse" } else { "Scegli l'asse nella vista" }))
+                                .on_hover_text("Clic sui pezzi nella vista (si aggancia ai vertici vicini, come le Misure)")
+                                .clicked()
+                            {
+                                h.start();
+                                start_picking = true;
+                            }
+                        });
+                        if let Some(e) = &h.error {
+                            ui.colored_label(egui::Color32::from_rgb(230, 90, 80), e);
+                        }
+                        if let Some((o, d)) = h.axis {
+                            ui.label(
+                                egui::RichText::new(format!(
+                                    "Asse per {:.2} {:.2} {:.2}, direzione {:.3} {:.3} {:.3}",
+                                    o.x, o.y, o.z, d.x, d.y, d.z
+                                ))
+                                .small()
+                                .weak(),
+                            );
+                            let before = h.angle;
+                            ui.horizontal(|ui| {
+                                ui.label("Angolo");
+                                if ui.small_button(icon::CARET_LEFT).clicked() {
+                                    h.angle -= panel.unit;
+                                }
+                                ui.spacing_mut().slider_width = 150.0;
+                                ui.add(egui::Slider::new(&mut h.angle, -180.0..=180.0).step_by(panel.unit as f64).show_value(false));
+                                if ui.small_button(icon::CARET_RIGHT).clicked() {
+                                    h.angle += panel.unit;
+                                }
+                                ui.add(egui::DragValue::new(&mut h.angle).speed(panel.unit).max_decimals(3).suffix(" °"))
+                                    .on_hover_text("Angolo dalla posizione in cui è stato scelto l'asse");
+                            });
+                            if h.angle != before && !nodes.is_empty() {
+                                actions.push(Action::Move { nodes: nodes.clone(), matrix: about_axis(o, d, h.angle - before) });
+                            }
+                            if ui.small_button("Inverti verso").on_hover_text("L'angolo positivo gira dall'altra parte").clicked() {
+                                h.axis = Some((o, -d));
+                                h.angle = -h.angle;
+                            }
+                        }
+                    });
 
                 // ── Applica offset ─────────────────────────────────────────────
                 ui.separator();
@@ -468,7 +715,15 @@ pub fn draw(ctx: &egui::Context, app: &mut GestoreApp) {
         app.ui_state.status_message = s;
     }
     panel.open = open;
+    if !open {
+        panel.hinge.picking = false;
+    }
     app.ui_state.position = panel;
+    if start_picking {
+        // Un solo strumento alla volta sui clic nella vista
+        app.ui_state.measure = None;
+        app.ui_state.eyedropper = false;
+    }
     for a in actions {
         app.apply(a);
     }
@@ -657,5 +912,75 @@ DEF Destinazione Group { children [
         let texts = ui.run(&mut app, vec![]);
         assert!(texts.iter().any(|(t, _)| t.starts_with("+1367.98")), "risultato mostrato");
         assert!(app.ui_state.status_message.contains("BASE_A  ->  BASE_B"));
+    }
+
+    /// Cerniera: asse verticale da due punti, la freccia dell'angolo ruota il pezzo attorno
+    /// all'asse (i punti sull'asse restano), un solo Annulla; «Inverti verso» gira dall'altra parte.
+    #[test]
+    fn hinge_rotates_the_piece_about_the_picked_axis() {
+        let mut app = app();
+        let ui = Ui { ctx: egui::Context::default() };
+        let rif = node(&app, "Riferimento", 0);
+        app.ui_state.select_single(Some(rif));
+        ui.run(&mut app, vec![]);
+        ui.click(&mut app, "Due punti", 0);
+        ui.click(&mut app, "Scegli l'asse nella vista", 0);
+        assert!(app.ui_state.position.hinge.picking);
+        let texts = ui.run(&mut app, vec![]);
+        assert!(texts.iter().any(|(t, _)| t == "Clic sul primo punto dell'asse"), "{:?}", texts.iter().map(|t| &t.0).collect::<Vec<_>>());
+        app.ui_state.position.hinge.add_point(Vec3::new(100.0, 200.0, 300.0));
+        app.ui_state.position.hinge.add_point(Vec3::new(100.0, 200.0, 310.0));
+        let (o, d) = app.ui_state.position.hinge.axis.expect("asse");
+        assert_eq!(o, Vec3::new(100.0, 200.0, 300.0));
+        assert!((d - Vec3::Z).length() < 1e-6);
+
+        let vertex = |app: &GestoreApp, i: usize| {
+            let s = app.scene_graph.as_ref().unwrap();
+            Vec3::from(s.shapes_data[s.meshes_of(&[rif])[0] as usize].world_vertices[i])
+        };
+        assert!((vertex(&app, 1) - Vec3::new(100.0, 250.0, 300.0)).length() < 1e-3);
+        app.ui_state.position.unit = 90.0;
+        // Seconda freccia a destra: quella dell'angolo (la prima è della Trasformazione)
+        ui.click(&mut app, icon::CARET_RIGHT, 1);
+        assert_eq!(app.ui_state.position.hinge.angle, 90.0);
+        assert!((vertex(&app, 0) - Vec3::new(100.0, 200.0, 300.0)).length() < 1e-3, "il punto sull'asse resta");
+        assert!((vertex(&app, 1) - Vec3::new(50.0, 200.0, 300.0)).length() < 1e-3, "{:?}", vertex(&app, 1));
+        ui.click(&mut app, icon::CARET_RIGHT, 1);
+        assert!((vertex(&app, 1) - Vec3::new(100.0, 150.0, 300.0)).length() < 1e-3, "{:?}", vertex(&app, 1));
+        assert_eq!(app.project.undo.len(), 1, "i passi dell'angolo sono un solo Annulla");
+
+        ui.click(&mut app, "Inverti verso", 0);
+        assert_eq!(app.ui_state.position.hinge.angle, -180.0);
+        ui.click(&mut app, icon::CARET_RIGHT, 1);
+        // Verso invertito: +90 gira all'indietro, da 180° a 90°
+        assert!((vertex(&app, 1) - Vec3::new(50.0, 200.0, 300.0)).length() < 1e-3, "{:?}", vertex(&app, 1));
+
+        app.undo();
+        assert!((vertex(&app, 1) - Vec3::new(100.0, 250.0, 300.0)).length() < 1e-3, "annullato");
+        ui.run(&mut app, vec![]);
+        assert_eq!(app.ui_state.position.hinge.angle, 0.0, "dopo Annulla l'angolo riparte da 0");
+    }
+
+    #[test]
+    fn hinge_modes_build_the_axis() {
+        let c = |x: f32, y: f32, z: f32| Vec3::new(x, y, z);
+        // Due fori di raggio 5 sull'asse X, in x = 0 e x = 100
+        let hole = |x: f32| [c(x, 5.0, 0.0), c(x, 0.0, 5.0), c(x, -5.0, 0.0)];
+        let mut pts = hole(0.0).to_vec();
+        pts.extend(hole(100.0));
+        let (o, d) = HingeMode::TwoHoles.axis(&pts).unwrap();
+        assert!(o.length() < 1e-4 && (d - Vec3::X).length() < 1e-4, "{o:?} {d:?}");
+        let (o, d) = HingeMode::OneHole.axis(&hole(50.0)).unwrap();
+        assert!((o - c(50.0, 0.0, 0.0)).length() < 1e-4 && d.x.abs() > 0.999, "{o:?} {d:?}");
+        assert_eq!(HingeMode::PointAxis(1).axis(&[c(1.0, 2.0, 3.0)]).unwrap(), (c(1.0, 2.0, 3.0), Vec3::Y));
+        assert!(HingeMode::TwoPoints.axis(&[c(1.0, 1.0, 1.0), c(1.0, 1.0, 1.0)]).is_err());
+
+        // Punti allineati: errore e si ricomincia
+        let mut h = Hinge { mode: HingeMode::OneHole, ..Default::default() };
+        h.start();
+        for p in [c(0.0, 0.0, 0.0), c(1.0, 0.0, 0.0), c(2.0, 0.0, 0.0)] {
+            h.add_point(p);
+        }
+        assert!(h.axis.is_none() && h.error.is_some() && h.points.is_empty() && !h.picking);
     }
 }

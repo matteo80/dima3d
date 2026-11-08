@@ -181,8 +181,21 @@ pub fn draw_viewport(ui: &mut egui::Ui, app: &mut crate::app::GestoreApp) {
         //  - click sul vuoto → deseleziona
         // (il secondo click di un doppio click non cambia la selezione)
         // Strumento di misura: il clic prende un punto del pezzo (agganciato al vertice vicino)
-        let measuring = app.ui_state.measure.is_some();
-        if measuring && response.clicked() {
+        // Scelta dell'asse di una cerniera (finestra Posizione): come le misure, prende i punti
+        let hinge_picking = app.ui_state.position.open && app.ui_state.position.hinge.picking;
+        if hinge_picking && response.clicked() {
+            if let (Some(scene), Some(pos)) = (&app.scene_graph, response.interact_pointer_pos()) {
+                renderer.sync_with_scene(scene, &app.ui_state.selected_nodes());
+                let (origin, dir) = pointer_ray(&renderer.camera, rect, pos);
+                if let Some((_, t, triangle)) = pick(scene, &renderer.visibility, section, (origin, dir)) {
+                    let camera = &renderer.camera;
+                    let point = super::measure::snap(triangle, origin + dir * t, |v| to_screen(camera, rect, v), pos);
+                    app.ui_state.position.hinge.add_point(point.pos);
+                }
+            }
+        }
+        let measuring = app.ui_state.measure.is_some() || hinge_picking;
+        if app.ui_state.measure.is_some() && !hinge_picking && response.clicked() {
             if let (Some(scene), Some(pos)) = (&app.scene_graph, response.interact_pointer_pos()) {
                 renderer.sync_with_scene(scene, &app.ui_state.selected_nodes());
                 let (origin, dir) = pointer_ray(&renderer.camera, rect, pos);
@@ -344,6 +357,17 @@ pub fn draw_viewport(ui: &mut egui::Ui, app: &mut crate::app::GestoreApp) {
         let size = scene.compute_bounding_box().diagonal();
         super::measure::draw(ui, rect, m, |v| to_screen(camera, rect, v), size);
         ui.ctx().set_cursor_icon(egui::CursorIcon::Crosshair);
+    }
+    // Cerniera: punti e asse
+    if app.ui_state.position.open {
+        if let (Some(renderer), Some(scene)) = (&app.renderer, &app.scene_graph) {
+            let camera = &renderer.camera;
+            let size = scene.compute_bounding_box().diagonal();
+            super::position_panel::draw_overlay(ui, rect, &app.ui_state.position.hinge, |v| to_screen(camera, rect, v), size);
+        }
+        if app.ui_state.position.hinge.picking && response.hovered() {
+            ui.ctx().set_cursor_icon(egui::CursorIcon::Crosshair);
+        }
     }
     if app.ui_state.eyedropper && response.hovered() {
         ui.ctx().set_cursor_icon(egui::CursorIcon::Crosshair);
@@ -731,5 +755,27 @@ mod tests {
         assert!(app.settings.invert_zoom);
         let inverted = wheel(&mut app);
         assert!(inverted > 1.0, "invertito: rotella in avanti allontana: {inverted}");
+    }
+
+    /// Con la scelta dell'asse di una cerniera attiva, il clic sul pezzo prende un punto (agganciato
+    /// al vertice vicino) e non cambia la selezione.
+    #[test]
+    fn hinge_axis_points_are_picked_in_the_view() {
+        let _gpu = crate::renderer::gpu_lock();
+        let Some(mut app) = app_with_renderer() else { return };
+        let ctx = egui::Context::default();
+        let texts = frame(&ctx, &mut app, vec![]);
+        let center = viewport_center(&texts);
+        app.ui_state.position.open = true;
+        app.ui_state.position.hinge.start();
+        click(&ctx, &mut app, center);
+        let hinge = &app.ui_state.position.hinge;
+        assert_eq!(hinge.points.len(), 1, "un punto preso");
+        assert!(hinge.picking, "ne manca ancora uno");
+        assert_eq!(app.ui_state.selected_node, None, "il clic non seleziona");
+        click(&ctx, &mut app, center + egui::vec2(30.0, 0.0));
+        let hinge = &app.ui_state.position.hinge;
+        assert!(!hinge.picking);
+        assert!(hinge.axis.is_some() || hinge.error.is_some(), "{hinge:?}");
     }
 }

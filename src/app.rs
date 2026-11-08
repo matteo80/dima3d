@@ -547,6 +547,14 @@ impl GestoreApp {
         if m_key {
             self.ui_state.measure = if self.ui_state.measure.is_some() { None } else { Some(Default::default()) };
             self.ui_state.eyedropper = false;
+            self.ui_state.position.hinge.picking = false;
+        }
+        if esc_key && self.ui_state.position.hinge.picking {
+            let hinge = &mut self.ui_state.position.hinge;
+            hinge.picking = false;
+            hinge.points.clear();
+            self.ui_state.status_message = "Scelta dell'asse annullata".to_string();
+            return;
         }
         if esc_key && self.ui_state.eyedropper {
             self.ui_state.eyedropper = false;

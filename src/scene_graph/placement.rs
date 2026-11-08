@@ -43,6 +43,29 @@ pub fn rigid(t: Vec3, angles_deg: Vec3, pivot: Vec3) -> Mat4 {
     Mat4::from_translation(t + pivot) * r * Mat4::from_translation(-pivot)
 }
 
+/// Rotazione di `degrees` attorno alla retta per `origin` con direzione `dir` (regola della mano
+/// destra: pollice lungo `dir`).
+pub fn about_axis(origin: Vec3, dir: Vec3, degrees: f32) -> Mat4 {
+    let d = dir.normalize_or_zero();
+    if d == Vec3::ZERO {
+        return Mat4::IDENTITY;
+    }
+    Mat4::from_translation(origin) * Mat4::from_axis_angle(d, degrees.to_radians()) * Mat4::from_translation(-origin)
+}
+
+/// Circonferenza per tre punti (es. sul bordo di un foro): centro e normale del suo piano.
+/// `None` se i punti sono allineati o coincidenti.
+pub fn circle_through(a: Vec3, b: Vec3, c: Vec3) -> Option<(Vec3, Vec3)> {
+    let (ab, ac) = (b - a, c - a);
+    let n = ab.cross(ac);
+    let n2 = n.length_squared();
+    if n2 <= 1e-12 * (ab.length_squared() * ac.length_squared()).max(f32::MIN_POSITIVE) {
+        return None;
+    }
+    let center = a + (n.cross(ab) * ac.length_squared() + ac.cross(n) * ab.length_squared()) / (2.0 * n2);
+    Some((center, n.normalize()))
+}
+
 /// Posizione e orientamento come nei `CONST BASE` e nella finestra del visualizzatore usato in
 /// azienda: X Y Z e angoli A B C in gradi, rotazioni ad assi fissi prima attorno a X (A), poi a Y
 /// (B), poi a Z (C): R = Rz(C)·Ry(B)·Rx(A), la convenzione "xyz" di scipy degli script di calcolo
@@ -515,5 +538,23 @@ DEF Destinazione Group { children [
         scene.scale_file(1, 1000.0);
         let scaled = Pose::from_matrix(scene.object_frame(copy));
         assert!(close_pose(&scaled, (f_dest.xyz * 1000.0).into(), f_dest.abc.into(), 2.0), "{scaled:?}");
+    }
+
+    /// Centro e asse di un foro da tre punti del bordo; rotazione attorno a un asse qualsiasi.
+    #[test]
+    fn hole_centre_and_rotation_about_an_axis() {
+        // Foro di raggio 5 centrato in (10, 20, 30), nel piano perpendicolare a Y
+        let c = Vec3::new(10.0, 20.0, 30.0);
+        let on = |deg: f32| c + Vec3::new(deg.to_radians().cos(), 0.0, deg.to_radians().sin()) * 5.0;
+        let (centre, normal) = circle_through(on(10.0), on(100.0), on(250.0)).unwrap();
+        assert!((centre - c).length() < 1e-3, "{centre:?}");
+        assert!(normal.y.abs() > 0.999, "{normal:?}");
+        assert!(circle_through(Vec3::ZERO, Vec3::X, Vec3::X * 2.0).is_none(), "punti allineati");
+
+        // 90° attorno all'asse verticale per (1, 0, 0): (2, 0, 0) va in (1, 1, 0)
+        let m = about_axis(Vec3::X, Vec3::Z, 90.0);
+        assert!(close(m.transform_point3(Vec3::new(2.0, 0.0, 0.0)).into(), [1.0, 1.0, 0.0]));
+        assert!(close(m.transform_point3(Vec3::new(1.0, 0.0, 7.0)).into(), [1.0, 0.0, 7.0]), "i punti sull'asse restano");
+        assert_eq!(about_axis(Vec3::X, Vec3::ZERO, 30.0), Mat4::IDENTITY);
     }
 }

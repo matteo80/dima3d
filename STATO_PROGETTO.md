@@ -786,11 +786,13 @@ errori passano già da stdout/stderr (`parser/jt.rs`), e ogni convertitore si ag
             i Transform) e aggiunge unità e spostamenti. Angoli: R = Rz(C)·Ry(B)·Rx(A), «xyz» di scipy; verificato
             su un esempio di due BASE, con valori calcolati indipendentemente. Valori in
             mm (unità della scena). Da provare dall'utente sulla stazione.
-- [ ] **Rotazione di un pezzo attorno a un asse** (es. baule sulle due cerniere), dopo la finestra Posizione: selezione dei pezzi da muovere, asse
-      definito da due punti cliccati con aggancio ai vertici (come le Misure) — o centro di un foro/perno da tre punti
-      sul bordo — oppure un punto + asse X/Y/Z; angolo con cursore e valore numerico, anteprima dal vivo, Annulla.
-      In seguito anche la traslazione. Nell'export il pezzo esce nella posizione ruotata (`Transform` attorno ai suoi
-      figli). Da decidere con l'utente: punti sulle cerniere o centro del perno; salvare più posizioni (aperto/chiuso).
+- [x] **Rotazione su un asse (cerniere)** (2026-11-08, sezione della finestra Posizione): ruota l'oggetto della
+      finestra (file o pezzi selezionati) attorno a un asse scelto nella vista con aggancio ai vertici come le Misure:
+      «Due punti», «Due fori» (tre punti sul bordo di ognuno: l'asse unisce i centri), «Un foro» (asse per il centro,
+      perpendicolare al foro) o «Punto + asse» X/Y/Z. Angolo con cursore, frecce e valore (passo = «Unità»), un solo
+      Annulla per i passi consecutivi, «Inverti verso»; punti e asse disegnati sopra la vista, Esc annulla la scelta.
+      `placement::about_axis`, `placement::circle_through`. Da decidere con l'utente: salvare più posizioni
+      (aperto/chiuso).
 
 ### Step 6 — WRL più leggeri (richiesta dell'utente 2026-11-07: JT da 70 MB → WRL da 600 MB)
 
