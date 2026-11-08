@@ -20,6 +20,29 @@ pub enum RotationMode {
     FixedAxis,
 }
 
+/// Tassellazione degli STEP (come le "Opzioni di mesh" Standard di FreeCAD).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct StepMesh {
+    /// Deviazione di superficie: distanza massima tra mesh e superficie vera, in mm (o frazione
+    /// della dimensione di ogni spigolo, se `relative`)
+    pub deviation: f32,
+    /// Deviazione angolare massima tra triangoli vicini, in gradi
+    pub angle: f32,
+    /// Deviazione relativa alla dimensione delle facce invece che in mm
+    pub relative: bool,
+}
+
+impl Default for StepMesh {
+    fn default() -> Self {
+        // Gli stessi valori predefiniti di FreeCAD
+        Self { deviation: 0.1, angle: 30.0, relative: false }
+    }
+}
+
+/// Limiti della deviazione di superficie (mm, o frazione se relativa) e di quella angolare (°).
+pub const STEP_DEVIATION_RANGE: std::ops::RangeInclusive<f32> = 0.001..=100.0;
+pub const STEP_ANGLE_RANGE: std::ops::RangeInclusive<f32> = 1.0..=90.0;
+
 /// Tema dell'interfaccia.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum ThemeMode {
@@ -60,6 +83,8 @@ pub struct Settings {
     pub invert_zoom: bool,
     /// Colori salvati dall'utente (sRGB), mostrati per primi nel menu Colore
     pub saved_colors: Vec<[f32; 3]>,
+    /// Tassellazione all'apertura degli STEP
+    pub step: StepMesh,
 }
 
 impl Default for Settings {
@@ -80,6 +105,7 @@ impl Default for Settings {
             export_iv_binary: false,
             invert_zoom: false,
             saved_colors: Vec::new(),
+            step: StepMesh::default(),
         }
     }
 }
@@ -180,6 +206,17 @@ impl Settings {
                 "export_stl_testo" => s.export_stl_ascii = value == "1",
                 "export_iv_binario" => s.export_iv_binary = value == "1",
                 "zoom_invertito" => s.invert_zoom = value == "1",
+                "step_deviazione" => {
+                    if let Ok(v) = value.parse::<f32>() {
+                        s.step.deviation = v.clamp(*STEP_DEVIATION_RANGE.start(), *STEP_DEVIATION_RANGE.end());
+                    }
+                }
+                "step_angolo" => {
+                    if let Ok(v) = value.parse::<f32>() {
+                        s.step.angle = v.clamp(*STEP_ANGLE_RANGE.start(), *STEP_ANGLE_RANGE.end());
+                    }
+                }
+                "step_relativa" => s.step.relative = value == "1",
                 "colore_salvato" => {
                     if let Some(v) = parse_floats::<3>(value) {
                         if s.saved_colors.len() < MAX_SAVED_COLORS {
@@ -202,7 +239,7 @@ impl Settings {
         let [r, g, b] = self.background;
         let [dr, dg, db, da] = self.default_color;
         let mut out = format!(
-            "tema = {}\nsfondo = {r} {g} {b}\ncolore_predefinito = {dr} {dg} {db} {da}\nsfondo_sfumato = {}\nraggruppamento_tolleranza = {}\nraggruppamento_vertici = {}\nassi = {}\nrotazione = {}\nsensibilita_rotazione = {}\nexport_compatto = {}\nexport_normali = {}\nexport_stl_testo = {}\nexport_iv_binario = {}\nzoom_invertito = {}\n",
+            "tema = {}\nsfondo = {r} {g} {b}\ncolore_predefinito = {dr} {dg} {db} {da}\nsfondo_sfumato = {}\nraggruppamento_tolleranza = {}\nraggruppamento_vertici = {}\nassi = {}\nrotazione = {}\nsensibilita_rotazione = {}\nexport_compatto = {}\nexport_normali = {}\nexport_stl_testo = {}\nexport_iv_binario = {}\nzoom_invertito = {}\nstep_deviazione = {}\nstep_angolo = {}\nstep_relativa = {}\n",
             match self.theme {
                 ThemeMode::Dark => "scuro",
                 ThemeMode::Light => "chiaro",
@@ -225,6 +262,9 @@ impl Settings {
             u8::from(self.export_stl_ascii),
             u8::from(self.export_iv_binary),
             u8::from(self.invert_zoom),
+            self.step.deviation,
+            self.step.angle,
+            u8::from(self.step.relative),
         );
         for [r, g, b] in &self.saved_colors {
             out.push_str(&format!("colore_salvato = {r} {g} {b}\n"));
@@ -275,6 +315,7 @@ mod tests {
             export_iv_binary: true,
             invert_zoom: true,
             saved_colors: vec![[0.1, 0.2, 0.3], [1.0, 0.5, 0.0]],
+            step: StepMesh { deviation: 0.025, angle: 12.5, relative: true },
         };
         s.add_recent(Path::new(r"C:\a b\uno.wrl"));
         s.add_recent(Path::new(r"C:\due.wrl"));

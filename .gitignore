@@ -23,3 +23,5 @@ Thumbs.db
 
 # Pacchetto da distribuire (pacchetto.ps1)
 /dist/
+tools-src/step2wrl/obj/
+__pycache__/

@@ -107,7 +107,7 @@ impl GestoreApp {
     pub fn new(cc: &eframe::CreationContext) -> Self {
         let wgpu_render_state = cc.wgpu_render_state.clone();
         let settings = crate::settings::Settings::load();
-        parser::jt::cleanup_old_conversions();
+        parser::external::cleanup_old_conversions();
         ui::theme::install_fonts(&cc.egui_ctx);
         ui::theme::apply(&cc.egui_ctx, settings.theme);
         let renderer = wgpu_render_state.as_ref().map(|rs| {
@@ -175,8 +175,8 @@ impl GestoreApp {
         self.ui_state.status_message = format!("Apertura: {}", path.display());
         self.load_rx = Some(rx);
 
-        if parser::jt::is_jt(&path) {
-            parser::jt::convert_and_load(path, self.settings.cluster, tx);
+        if let Some(kind) = parser::external::Kind::of(&path, self.settings.step) {
+            parser::external::convert_and_load(path, kind, self.settings.cluster, tx);
         } else {
             parser::load_wrl_async_with(path, self.settings.cluster, tx);
         }
@@ -781,6 +781,7 @@ impl eframe::App for GestoreApp {
         self.handle_shortcuts(ctx);
         ui::draw_main_layout(ctx, self);
         crate::project::draw_confirm_dialog(ctx, self);
+        crate::project::draw_step_prompt(ctx, self);
         crate::project::draw_unit_suggestion(ctx, self);
         crate::project::draw_export_progress(ctx, self);
         crate::ui::reduce_panel::draw(ctx, self);

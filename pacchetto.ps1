@@ -29,6 +29,14 @@ if (Test-Path $jt) {
     Write-Warning 'tools\jt2wrl.exe non trovato: il pacchetto non aprirà i file JT (vedi tools-src\jt2wrl\README.md)'
 }
 
+$step = 'target\release\tools\step2wrl'
+if (Test-Path (Join-Path $step 'step2wrl.exe')) {
+    New-Item -ItemType Directory -Force (Join-Path $dir 'tools') | Out-Null
+    Copy-Item -Recurse $step (Join-Path $dir 'tools')
+} else {
+    Write-Warning 'tools\step2wrl non trovato: il pacchetto non aprirà i file STEP (vedi tools-src\step2wrl\README.md)'
+}
+
 $readme = @"
 Gestore WRL $version
 ====================
@@ -37,9 +45,10 @@ Avvio: doppio clic su gestore-wrl.exe. Non serve installare niente: si può copi
 intera su un altro PC (Windows 10 o 11, 64 bit) o su una chiavetta.
 
 Formati
-- Apertura: WRL (VRML 2.0 e 1.0), STL, JT (con tools\jt2wrl.exe, che deve restare nella
-  cartella tools accanto all'eseguibile).
-- Export: WRL, STL, Open Inventor (.iv), scegliendo il tipo nella finestra Salva.
+- Apertura: WRL (VRML 2.0 e 1.0), STL, HSF, Open Inventor (.iv), JT (con tools\jt2wrl.exe)
+  e STEP (con la cartella tools\step2wrl). La cartella tools deve restare accanto
+  all'eseguibile.
+- Export: WRL, STL, Open Inventor (.iv), HSF, scegliendo il tipo nella finestra Salva.
 
 Le preferenze sono salvate in %APPDATA%\Gestore-WRL\impostazioni.txt.
 

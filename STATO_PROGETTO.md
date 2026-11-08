@@ -2,7 +2,7 @@
 
 > Applicazione desktop nativa Rust per la visualizzazione, analisi e manipolazione interattiva  
 > di file VRML V2.0 (`.wrl`) di grandi dimensioni (fino a 600+ MB).  
-> **Aggiornato:** 2026-11-08 · **Fatti:** visualizzazione, albero, colori, export, rendering veloce, rotazione OpenInventor (confermata dall'utente), Step 1 completo (exe provato dall'utente su un altro PC), lettura VRML 1.0, interfaccia dello Step 2, normali originali (`normalIndex`), antialiasing 4x, illuminazione solidale alla camera, selezione con contorno, viste standard in coordinate veicolo, più matematiche nella stessa scena con conversione delle unità, apertura dei file JT · cubo di orientamento, proprietà e misure, piano di sezione, export in background, rifiniture (blocco 6) · **Prossimo:** piano completato; nuove richieste dall'utente (sezione 8)
+> **Aggiornato:** 2026-11-08 · **Fatti:** visualizzazione, albero, colori, export, rendering veloce, rotazione OpenInventor (confermata dall'utente), Step 1 completo (exe provato dall'utente su un altro PC), lettura VRML 1.0, interfaccia dello Step 2, normali originali (`normalIndex`), antialiasing 4x, illuminazione solidale alla camera, selezione con contorno, viste standard in coordinate veicolo, più matematiche nella stessa scena con conversione delle unità, apertura dei file JT, HSF, IV e STEP (con le opzioni di mesh) · cubo di orientamento, proprietà e misure, piano di sezione, export in background, rifiniture (blocco 6) · **Prossimo:** piano completato; nuove richieste dall'utente (sezione 8)
 
 ---
 
@@ -735,9 +735,16 @@ errori passano già da stdout/stderr (`parser/jt.rs`), e ogni convertitore si ag
 - [x] **STL, import ed export** (2026-11-08, vedi note): binario e ASCII in apertura (un pezzo per `solid`); export
       binario (predefinito) o ASCII con un `solid` per pezzo, scegliendo `.stl` nella finestra Salva
 - [x] **STL, apertura veloce** (2026-11-08): pezzi costruiti dai triangoli senza testo VRML intermedio
-- [ ] **STEP, import** (convertitore separato `step2wrl.exe` con OpenCASCADE, LGPL): tassellazione della geometria
-      esatta con tolleranza regolabile, nomi e colori dell'assieme (XCAF), trasformazioni. Da valutare peso e tempi su
-      una matematica reale.
+- [x] **STEP, import** (2026-11-08): convertitore separato `tools\step2wrl\step2wrl.exe` (C++, OpenCASCADE 8.0.1
+      come DLL non modificate, LGPL 2.1 + eccezione; sorgente `tools-src/step2wrl`, compilazione con `build.cmd`, vedi
+      il suo README). Assieme, nomi e colori XCAF (anche per faccia: un pezzo con facce di colori diversi diventa un
+      gruppo di Shape), posizioni applicate alle coordinate, mm. All'apertura/aggiunta di uno STEP la finestra
+      "Opzioni di mesh" chiede deviazione di superficie (0,1 mm), angolare (30°) e "relativa", come FreeCAD; i valori
+      restano nelle impostazioni (`step_deviazione`, `step_angolo`, `step_relativa`). JT e STEP condividono
+      `parser/external.rs`. Provato su uno STEP reale da NX (2 pezzi, colori identici al file, 0,8 s) e sull'assieme
+      pubblico as1-oc-214 (18 pezzi, sottoassiemi e istanze ripetute al loro posto). Peso della cartella: ~65 MB,
+      perché `TKService` (richiesto da XCAF) si porta dietro FFmpeg (build LGPL, verificata), FreeImage, OpenVR; si
+      può alleggerire compilando OpenCASCADE senza quelle librerie. Da provare su un assieme reale grande.
 - [ ] **STEP, export**: dalla mesh si può scrivere solo geometria a facce piane (B-rep "sfaccettato" o tassellato
       AP242), non superfici CAD vere; utile per scambio/visualizzazione, non per riprogettare. Da confermare se serve
       così.

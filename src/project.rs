@@ -37,6 +37,20 @@ pub struct ExportJob {
     pub started: Instant,
 }
 
+/// Apertura o aggiunta di file STEP in attesa della scelta delle tolleranze di tassellazione.
+#[derive(Debug, Clone, PartialEq)]
+pub struct StepPrompt {
+    pub request: StepRequest,
+    /// Valori mostrati nella finestra (all'inizio quelli dell'ultima volta)
+    pub options: crate::settings::StepMesh,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum StepRequest {
+    Open(PathBuf),
+    Add(Vec<PathBuf>),
+}
+
 #[derive(Default)]
 pub struct ProjectState {
     /// Export in corso
@@ -56,6 +70,8 @@ pub struct ProjectState {
     /// Ultima modifica "accorpabile" (nodo, istante)
     last_coalesce: Option<(u32, Instant)>,
     pub pending: Option<Pending>,
+    /// Finestra delle opzioni di mesh aperta per degli STEP
+    pub step_prompt: Option<StepPrompt>,
     /// Uscita confermata: non intercettare più la chiusura della finestra
     pub allow_exit: bool,
     /// Riduzione delle facce: pannello, calcolo in corso, originali dei pezzi ridotti
@@ -184,8 +200,20 @@ impl GestoreApp {
         }
     }
 
-    /// Apre un file, chiedendo conferma se ci sono modifiche non esportate.
+    /// Apre un file, chiedendo conferma se ci sono modifiche non esportate. Per uno STEP chiede
+    /// prima le tolleranze di tassellazione.
     pub fn request_open(&mut self, path: PathBuf) {
+        if self.ui_state.is_loading || self.project.busy() || self.project.step_prompt.is_some() {
+            return;
+        }
+        if crate::parser::external::is_step(&path) {
+            self.ask_step_options(StepRequest::Open(path));
+            return;
+        }
+        self.request_open_now(path);
+    }
+
+    fn request_open_now(&mut self, path: PathBuf) {
         if self.ui_state.is_loading || self.project.busy() {
             return;
         }
@@ -199,6 +227,17 @@ impl GestoreApp {
     /// Aggiunge file alla scena aperta (senza scena: il primo si apre, gli altri si aggiungono).
     /// Si caricano uno alla volta; quelli in più attendono in coda.
     pub fn request_add(&mut self, paths: Vec<PathBuf>) {
+        if self.project.busy() || self.project.step_prompt.is_some() {
+            return;
+        }
+        if paths.iter().any(|p| crate::parser::external::is_step(p)) {
+            self.ask_step_options(StepRequest::Add(paths));
+            return;
+        }
+        self.request_add_now(paths);
+    }
+
+    fn request_add_now(&mut self, paths: Vec<PathBuf>) {
         if self.project.busy() {
             return;
         }
@@ -206,11 +245,32 @@ impl GestoreApp {
         if self.scene_graph.is_none() && !self.ui_state.is_loading {
             let Some(first) = paths.next() else { return };
             self.project.add_queue.extend(paths);
-            self.request_open(first);
+            self.request_open_now(first);
             return;
         }
         self.project.add_queue.extend(paths);
         self.start_next_add();
+    }
+
+    /// Apre la finestra delle opzioni di mesh per gli STEP di `request`.
+    fn ask_step_options(&mut self, request: StepRequest) {
+        self.project.step_prompt = Some(StepPrompt { request, options: self.settings.step });
+    }
+
+    /// Conferma della finestra delle opzioni di mesh: i valori diventano quelli predefiniti e i
+    /// file si aprono (o si aggiungono) con quelle tolleranze.
+    pub fn confirm_step_prompt(&mut self) {
+        let Some(prompt) = self.project.step_prompt.take() else { return };
+        if self.settings.step != prompt.options {
+            self.settings.step = prompt.options;
+            if !cfg!(test) {
+                self.settings.save();
+            }
+        }
+        match prompt.request {
+            StepRequest::Open(path) => self.request_open_now(path),
+            StepRequest::Add(paths) => self.request_add_now(paths),
+        }
     }
 
     /// Avvia il caricamento del prossimo file in coda, se non se ne sta già caricando uno.
@@ -248,7 +308,7 @@ impl GestoreApp {
 
     /// Finestra di scelta di uno o più file da aggiungere alla scena.
     pub fn add_dialog(&mut self) {
-        let mut dialog = rfd::FileDialog::new().add_filter("Modelli 3D (WRL, JT, STL, HSF, IV)", &["wrl", "WRL", "vrml", "jt", "JT", "stl", "STL", "hsf", "HSF", "iv", "IV"]);
+        let mut dialog = rfd::FileDialog::new().add_filter("Modelli 3D (WRL, JT, STEP, STL, HSF, IV)", &["wrl", "WRL", "vrml", "jt", "JT", "stp", "STP", "step", "STEP", "stl", "STL", "hsf", "HSF", "iv", "IV"]);
         if let Some(dir) = self.settings.recent.first().and_then(|p| p.parent()) {
             dialog = dialog.set_directory(dir);
         }
@@ -334,7 +394,7 @@ impl GestoreApp {
 
     /// Apre la finestra di scelta file.
     pub fn open_dialog(&mut self) {
-        let mut dialog = rfd::FileDialog::new().add_filter("Modelli 3D (WRL, JT, STL, HSF, IV)", &["wrl", "WRL", "vrml", "jt", "JT", "stl", "STL", "hsf", "HSF", "iv", "IV"]);
+        let mut dialog = rfd::FileDialog::new().add_filter("Modelli 3D (WRL, JT, STEP, STL, HSF, IV)", &["wrl", "WRL", "vrml", "jt", "JT", "stp", "STP", "step", "STEP", "stl", "STL", "hsf", "HSF", "iv", "IV"]);
         if let Some(dir) = self.settings.recent.first().and_then(|p| p.parent()) {
             dialog = dialog.set_directory(dir);
         }
@@ -712,6 +772,46 @@ mod tests {
         assert_eq!(app.project.add_queue, vec![pb]);
     }
 
+    /// Uno STEP (aperto o aggiunto) passa dalla finestra delle opzioni di mesh: i valori scelti
+    /// restano per la volta dopo, e solo dopo la conferma parte il caricamento.
+    #[test]
+    fn step_files_ask_for_the_mesh_options_first() {
+        use super::{StepPrompt, StepRequest};
+        use crate::settings::StepMesh;
+        let stp = std::path::PathBuf::from(r"C:\prove\pezzo.stp");
+        let mut app = GestoreApp::new_headless();
+        app.request_open(stp.clone());
+        assert_eq!(
+            app.project.step_prompt,
+            Some(StepPrompt { request: StepRequest::Open(stp.clone()), options: StepMesh::default() })
+        );
+        assert!(!app.ui_state.is_loading);
+        // Con la finestra aperta le altre richieste aspettano
+        app.request_open(r"C:\prove\altro.wrl".into());
+        assert!(matches!(app.project.step_prompt, Some(StepPrompt { request: StepRequest::Open(_), .. })));
+
+        let chosen = StepMesh { deviation: 0.02, angle: 10.0, relative: false };
+        app.project.step_prompt.as_mut().unwrap().options = chosen;
+        app.confirm_step_prompt();
+        assert!(app.project.step_prompt.is_none());
+        assert_eq!(app.settings.step, chosen);
+        assert!(app.ui_state.is_loading);
+        assert_eq!(app.project.loading_path.as_ref(), Some(&stp));
+
+        // Aggiunta di più file con uno STEP: una sola finestra, poi tutti in coda
+        let mut app = app_with_example();
+        let files = vec![std::path::PathBuf::from(r"C:\prove\a.wrl"), r"C:\prove\b.STEP".into()];
+        app.request_add(files.clone());
+        assert!(matches!(&app.project.step_prompt, Some(StepPrompt { request: StepRequest::Add(v), .. }) if *v == files));
+        app.project.step_prompt = None; // Annulla
+        assert!(!app.ui_state.is_loading && app.project.add_queue.is_empty());
+        app.request_add(files.clone());
+        app.confirm_step_prompt();
+        assert!(app.ui_state.is_loading && app.project.loading_adds);
+        assert_eq!(app.project.loading_path.as_ref(), Some(&files[0]));
+        assert_eq!(app.project.add_queue, vec![files[1].clone()]);
+    }
+
     #[test]
     fn close_asks_only_when_dirty() {
         let mut app = app_with_example();
@@ -800,6 +900,79 @@ pub fn draw_unit_suggestion(ctx: &egui::Context, app: &mut GestoreApp) {
         app.ui_state.unit_suggestions.clear();
     }
 }
+/// Finestra delle opzioni di mesh per gli STEP (come le "Opzioni di mesh" Standard di FreeCAD).
+pub fn draw_step_prompt(ctx: &egui::Context, app: &mut GestoreApp) {
+    let Some(prompt) = &mut app.project.step_prompt else { return };
+    use crate::settings::{StepMesh, STEP_ANGLE_RANGE, STEP_DEVIATION_RANGE};
+    let files: Vec<String> = match &prompt.request {
+        StepRequest::Open(p) => vec![p.clone()],
+        StepRequest::Add(v) => v.iter().filter(|p| crate::parser::external::is_step(p)).cloned().collect(),
+    }
+    .iter()
+    .map(|p| p.file_name().map_or_else(|| p.display().to_string(), |n| n.to_string_lossy().into_owned()))
+    .collect();
+    let mut choice: Option<bool> = None; // true = apri, false = annulla
+    let modal = egui::Modal::new(egui::Id::new("opzioni_mesh_step")).show(ctx, |ui| {
+        ui.set_width(400.0);
+        ui.heading("Opzioni di mesh");
+        ui.add_space(4.0);
+        let shown = files.len().min(4);
+        for f in &files[..shown] {
+            ui.label(egui::RichText::new(f).strong());
+        }
+        if files.len() > shown {
+            ui.label(egui::RichText::new(format!("e altri {} file STEP", files.len() - shown)).weak());
+        }
+        ui.add_space(6.0);
+        let o = &mut prompt.options;
+        egui::Grid::new("griglia_mesh_step").num_columns(2).spacing([12.0, 6.0]).show(ui, |ui| {
+            ui.label("Deviazione di superficie:");
+            let suffix = if o.relative { "" } else { " mm" };
+            ui.add(
+                egui::DragValue::new(&mut o.deviation)
+                    .range(STEP_DEVIATION_RANGE)
+                    .speed(0.005)
+                    .max_decimals(3)
+                    .suffix(suffix),
+            );
+            ui.end_row();
+            ui.label("Deviazione angolare:");
+            ui.add(egui::DragValue::new(&mut o.angle).range(STEP_ANGLE_RANGE).speed(0.5).max_decimals(2).suffix(" °"));
+            ui.end_row();
+        });
+        ui.checkbox(&mut o.relative, "Deviazione relativa delle superfici")
+            .on_hover_text("La deviazione è una frazione della dimensione di ogni faccia invece che in mm");
+        ui.add_space(4.0);
+        ui.label(
+            egui::RichText::new("Valori più piccoli: superfici più fedeli, ma più triangoli e file più pesanti.")
+                .small()
+                .weak(),
+        );
+        ui.add_space(8.0);
+        ui.horizontal(|ui| {
+            if ui.button("Apri").clicked() {
+                choice = Some(true);
+            }
+            if ui.button("Valori predefiniti").clicked() {
+                *o = StepMesh::default();
+            }
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                if ui.button("Annulla").clicked() {
+                    choice = Some(false);
+                }
+            });
+        });
+    });
+    if modal.should_close() && choice.is_none() {
+        choice = Some(false); // Esc o clic fuori
+    }
+    match choice {
+        Some(true) => app.confirm_step_prompt(),
+        Some(false) => app.project.step_prompt = None,
+        None => {}
+    }
+}
+
 /// Finestra modale "modifiche non esportate".
 pub fn draw_confirm_dialog(ctx: &egui::Context, app: &mut GestoreApp) {
     let Some(pending) = app.project.pending.clone() else { return };
