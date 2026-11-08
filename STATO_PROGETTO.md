@@ -833,6 +833,47 @@ gzip escluso: i programmi dell'utente non leggono i WRL compressi (risposta dell
       è un `.hsf` puro e se il visualizzatore di destinazione lo apre. Prima di investirci, l'utente deve dire dove
       serve l'HSF e procurare un file `.hsf` di esempio.
 
+### Step 8 — Misure che seguono i pezzi e asse da due posizioni (richieste dell'utente 2026-11-09)
+
+Uso reale: in cabina si prendono riferimenti sulla scocca con il metro e si riportano sul 3D; un pezzo si ruota o
+sposta finché la distanza dal riferimento è quella misurata.
+
+- [ ] **8.1 Punti della Misura «incollati» al pezzo (pulsante calamita)**
+      - `MeasurePoint` ricorda il pezzo colpito (`mesh`) e il punto nelle coordinate del pezzo prima del suo
+        piazzamento (`inv(placements[mesh]) * pos`); con la calamita accesa, a ogni spostamento/rotazione (finestra
+        Posizione, cerniera, Annulla/Ripeti) il punto si ricalcola con il piazzamento nuovo. Un punto su un pezzo
+        fermo (la scocca) non cambia: la distanza e ΔX ΔY ΔZ si aggiornano mentre si gira il pezzo.
+      - Pulsante calamita nella barra della Misura (acceso di default? da chiedere); calamita spenta = punti fissi
+        nello spazio, come oggi.
+      - La misura resta visibile mentre si usa la finestra Posizione (oggi il clic della cerniera e quello della
+        Misura si escludono: la misura deve restare disegnata anche quando lo strumento non è attivo).
+      - Più misure contemporanee (es. due riferimenti sulla scocca), con elenco e cancellazione: da chiedere.
+      - Nel pannello della cerniera: «porta la distanza a … mm» (cerca l'angolo che dà la distanza voluta, per
+        bisezione). Seconda fase, dopo la calamita.
+      - Test: punto su un pezzo ruotato di 90° con la cerniera segue il pezzo; punto sulla scocca resta; Annulla
+        riporta la distanza di prima.
+- [ ] **8.2 Asse di rotazione da due posizioni (pezzi senza cerniere nel 3D)**
+      Dato lo stesso pezzo in due posizioni (es. chiuso e aperto), il moto rigido tra le due è una rotazione attorno a
+      un asse (teorema di Chasles: in generale rotazione + traslazione lungo l'asse, che per una cerniera vera è ~0 e
+      serve da controllo di qualità). Dalla matrice relativa `M = inv(P1)·P2`: direzione = autovettore di R con
+      autovalore 1, angolo da traccia, punto dell'asse risolvendo `(I − R)·p = t` ai minimi quadrati sul piano
+      perpendicolare all'asse.
+      Due modi per dare le posizioni:
+      - **Due oggetti**: due file o due selezioni con la stessa geometria (es. stessa matematica caricata due volte e
+        messa nelle due posizioni, o due matematiche esportate dal CAD). Il moto si ricava con la stessa funzione
+        di «Calcola offset tra oggetti»; se i vertici non corrispondono uno a uno, si usa il metodo a punti.
+      - **Tre coppie di punti** (o più): clic su tre punti del pezzo nella prima posizione e sugli stessi tre nella
+        seconda (aggancio ai vertici), adattamento ai minimi quadrati (Kabsch) con errore residuo mostrato in mm.
+        Utile anche con punti misurati in cabina scritti a mano.
+      Risultato: asse (punto, direzione), angolo tra le posizioni, scostamento lungo l'asse (se > 1 mm: avviso «non è
+      una rotazione pura»). Il pulsante «Usa come cerniera» mette l'asse nella sezione Cerniere: si gira il pezzo da
+      0° all'angolo trovato, o oltre.
+      Test: pezzo ruotato di un angolo noto attorno a un asse noto → asse e angolo ritrovati; rumore di 0,1 mm sui
+      punti → errore piccolo; traslazione pura → messaggio «nessuna rotazione».
+- Ordine: 8.1 poi 8.2 (indipendenti; 8.2 riusa la cerniera). Ogni blocco: test, prova su JT reali, exe ricompilato.
+- Distribuzione su un altro PC: `pacchetto.ps1` crea `dist\Gestore-WRL-<versione>` (exe, `tools\` con jt2wrl e
+  step2wrl, `licenses\`, LEGGIMI) e lo zip. L'exe ha il runtime C incluso.
+
 ### Piano di lavoro in autonomia (proposto 2026-11-07, in attesa di approvazione)
 
 Ordine proposto: prima la richiesta ripetuta dall'utente, poi l'orientamento, poi le funzioni di analisi, infine la
