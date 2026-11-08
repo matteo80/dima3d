@@ -266,6 +266,7 @@ impl GestoreApp {
             .add_filter("VRML World", &["wrl"])
             .add_filter("STL", &["stl"])
             .add_filter("Open Inventor", &["iv"])
+            .add_filter("HSF (HOOPS)", &["hsf"])
             .set_file_name(format!("{}_export.wrl", crate::exporter::sanitize_identifier(stem)));
         let file_dir = scene
             .sources
@@ -298,6 +299,7 @@ impl GestoreApp {
             let result = match extension.as_str() {
                 "stl" => crate::exporter::stl::export_stl(&scene, node, &out, stl_ascii),
                 "iv" => crate::exporter::iv::export_iv(&scene, node, &out, iv_binary, options.normals, default_color),
+                "hsf" => crate::exporter::hsf::export_hsf(&scene, node, &out, default_color),
                 _ => crate::exporter::export_with(&scene, node, &out, options),
             };
             let _ = tx.send((scene, result));
@@ -373,6 +375,7 @@ impl GestoreApp {
             .add_filter("VRML World", &["wrl"])
             .add_filter("STL", &["stl"])
             .add_filter("Open Inventor", &["iv"])
+            .add_filter("HSF (HOOPS)", &["hsf"])
             .set_file_name(suggested);
         if let Some(dir) = self.project.current_path.as_ref().and_then(|p| p.parent()) {
             dialog = dialog.set_directory(dir);
