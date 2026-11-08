@@ -20,3 +20,6 @@ HANDOFF.md
 # Varie
 *.raw
 Thumbs.db
+
+# Pacchetto da distribuire (pacchetto.ps1)
+/dist/

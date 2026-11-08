@@ -769,6 +769,9 @@ gzip escluso: i programmi dell'utente non leggono i WRL compressi (risposta dell
 - [ ] Unione dei vertici doppi dentro ogni pezzo
 - [ ] Per i JT: usare anche un LOD più leggero già presente nel file
 
+- **Pacchetto da distribuire (2026-11-08):** `pacchetto.ps1` compila e prepara `dist\Gestore-WRL-<versione>.zip`
+  (exe, `tools\jt2wrl.exe`, licenze, LEGGIMI): 9,5 MB; l'exe estratto si avvia.
+
 ### Step 7 — Export Open Inventor e HSF (valutazione 2026-11-07)
 
 - [x] **IV ASCII** (`#Inventor V2.1 ascii`, 2026-11-08, vedi note)

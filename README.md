@@ -16,7 +16,11 @@ automobilistici.
 - Albero della scena con ricerca, raggruppamento automatico dei pezzi connessi, colori, rinomina,
   nascondi/isola/elimina, Annulla/Ripeti
 - Proprietà del pezzo selezionato, misura della distanza tra due punti, piano di sezione
-- Export in WRL delle sole parti visibili, dell'insieme o di un singolo file, senza perdere precisione
+- Export delle sole parti visibili, dell'insieme o di un singolo file in WRL, STL e Open Inventor (`.iv`,
+  testo o binario)
+- Apertura dei file STL (binari e di testo)
+- Riduzione delle facce con anteprima e dimensione prevista del file
+- Colori casuali per pezzo, pipetta per copiare il colore di un pezzo, colori salvati
 
 ## Compilazione
 
@@ -33,6 +37,14 @@ Per aprire i file JT serve anche `tools\jt2wrl.exe` accanto all'eseguibile (comp
 ```
 cargo test --release
 ```
+
+Per preparare lo zip da distribuire (eseguibile, convertitore JT, licenze, LEGGIMI):
+
+```
+powershell -ExecutionPolicy Bypass -File pacchetto.ps1
+```
+
+Il risultato è `dist\Gestore-WRL-<versione>.zip`: si estrae dove si vuole e si avvia `gestore-wrl.exe`.
 
 Lo stato dettagliato del progetto e la roadmap sono in [`STATO_PROGETTO.md`](STATO_PROGETTO.md).
 
