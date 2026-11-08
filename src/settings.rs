@@ -6,6 +6,8 @@ pub use crate::renderer::camera::Axes;
 
 /// Numero massimo di file recenti ricordati.
 pub const MAX_RECENT: usize = 8;
+/// Numero massimo di colori salvati dall'utente.
+pub const MAX_SAVED_COLORS: usize = 12;
 
 /// Come il trascinamento ruota il modello.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -52,6 +54,12 @@ pub struct Settings {
     pub export_normals: bool,
     /// STL esportato in formato testo invece che binario
     pub export_stl_ascii: bool,
+    /// Open Inventor esportato in formato binario invece che testo
+    pub export_iv_binary: bool,
+    /// Rotella al contrario: in avanti allontana invece di avvicinare
+    pub invert_zoom: bool,
+    /// Colori salvati dall'utente (sRGB), mostrati per primi nel menu Colore
+    pub saved_colors: Vec<[f32; 3]>,
 }
 
 impl Default for Settings {
@@ -69,6 +77,9 @@ impl Default for Settings {
             export_compact: true,
             export_normals: true,
             export_stl_ascii: false,
+            export_iv_binary: false,
+            invert_zoom: false,
+            saved_colors: Vec::new(),
         }
     }
 }
@@ -101,6 +112,16 @@ impl Settings {
     /// Opzioni dell'export scelte dall'utente.
     pub fn export_options(&self) -> crate::exporter::ExportOptions {
         crate::exporter::ExportOptions { compact: self.export_compact, normals: self.export_normals }
+    }
+
+    /// Aggiunge un colore in cima ai colori salvati (senza duplicati). False se c'era già.
+    pub fn save_color(&mut self, color: [f32; 3]) -> bool {
+        let same = |c: &[f32; 3]| c.iter().zip(&color).all(|(a, b)| (a - b).abs() < 1.0 / 512.0);
+        let existed = self.saved_colors.iter().any(same);
+        self.saved_colors.retain(|c| !same(c));
+        self.saved_colors.insert(0, color);
+        self.saved_colors.truncate(MAX_SAVED_COLORS);
+        !existed
     }
 
     /// Aggiunge un file in cima ai recenti (senza duplicati).
@@ -157,6 +178,15 @@ impl Settings {
                 "export_compatto" => s.export_compact = value != "0",
                 "export_normali" => s.export_normals = value != "0",
                 "export_stl_testo" => s.export_stl_ascii = value == "1",
+                "export_iv_binario" => s.export_iv_binary = value == "1",
+                "zoom_invertito" => s.invert_zoom = value == "1",
+                "colore_salvato" => {
+                    if let Some(v) = parse_floats::<3>(value) {
+                        if s.saved_colors.len() < MAX_SAVED_COLORS {
+                            s.saved_colors.push(v);
+                        }
+                    }
+                }
                 "recente" => {
                     if !value.is_empty() && s.recent.len() < MAX_RECENT {
                         s.recent.push(PathBuf::from(value));
@@ -172,7 +202,7 @@ impl Settings {
         let [r, g, b] = self.background;
         let [dr, dg, db, da] = self.default_color;
         let mut out = format!(
-            "tema = {}\nsfondo = {r} {g} {b}\ncolore_predefinito = {dr} {dg} {db} {da}\nsfondo_sfumato = {}\nraggruppamento_tolleranza = {}\nraggruppamento_vertici = {}\nassi = {}\nrotazione = {}\nsensibilita_rotazione = {}\nexport_compatto = {}\nexport_normali = {}\nexport_stl_testo = {}\n",
+            "tema = {}\nsfondo = {r} {g} {b}\ncolore_predefinito = {dr} {dg} {db} {da}\nsfondo_sfumato = {}\nraggruppamento_tolleranza = {}\nraggruppamento_vertici = {}\nassi = {}\nrotazione = {}\nsensibilita_rotazione = {}\nexport_compatto = {}\nexport_normali = {}\nexport_stl_testo = {}\nexport_iv_binario = {}\nzoom_invertito = {}\n",
             match self.theme {
                 ThemeMode::Dark => "scuro",
                 ThemeMode::Light => "chiaro",
@@ -193,7 +223,12 @@ impl Settings {
             u8::from(self.export_compact),
             u8::from(self.export_normals),
             u8::from(self.export_stl_ascii),
+            u8::from(self.export_iv_binary),
+            u8::from(self.invert_zoom),
         );
+        for [r, g, b] in &self.saved_colors {
+            out.push_str(&format!("colore_salvato = {r} {g} {b}\n"));
+        }
         for p in &self.recent {
             out.push_str(&format!("recente = {}\n", p.display()));
         }
@@ -237,6 +272,9 @@ mod tests {
             export_compact: false,
             export_normals: false,
             export_stl_ascii: true,
+            export_iv_binary: true,
+            invert_zoom: true,
+            saved_colors: vec![[0.1, 0.2, 0.3], [1.0, 0.5, 0.0]],
         };
         s.add_recent(Path::new(r"C:\a b\uno.wrl"));
         s.add_recent(Path::new(r"C:\due.wrl"));
@@ -245,5 +283,19 @@ mod tests {
         assert_eq!(s.recent.len(), 2);
         assert_eq!(Settings::from_text(&s.to_text()), s);
         assert_eq!(Settings::from_text("garbage"), Settings::default());
+    }
+
+    #[test]
+    fn saved_colors_are_unique_and_limited() {
+        let mut s = Settings::default();
+        assert!(s.save_color([1.0, 0.0, 0.0]));
+        assert!(s.save_color([0.0, 1.0, 0.0]));
+        assert!(!s.save_color([1.0, 0.001, 0.0]), "quasi uguale: non si ripete");
+        assert_eq!(s.saved_colors, vec![[1.0, 0.001, 0.0], [0.0, 1.0, 0.0]]);
+        for i in 0..20 {
+            s.save_color([i as f32 / 20.0, 0.5, 0.5]);
+        }
+        assert_eq!(s.saved_colors.len(), MAX_SAVED_COLORS);
+        assert_eq!(s.saved_colors[0], [19.0 / 20.0, 0.5, 0.5]);
     }
 }

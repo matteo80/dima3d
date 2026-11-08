@@ -265,6 +265,7 @@ impl GestoreApp {
         let mut dialog = rfd::FileDialog::new()
             .add_filter("VRML World", &["wrl"])
             .add_filter("STL", &["stl"])
+            .add_filter("Open Inventor", &["iv"])
             .set_file_name(format!("{}_export.wrl", crate::exporter::sanitize_identifier(stem)));
         let file_dir = scene
             .sources
@@ -287,15 +288,17 @@ impl GestoreApp {
         }
         let options = self.settings.export_options();
         let stl_ascii = self.settings.export_stl_ascii;
-        let is_stl = path.extension().is_some_and(|e| e.eq_ignore_ascii_case("stl"));
+        let iv_binary = self.settings.export_iv_binary;
+        let default_color = self.settings.default_color;
+        let extension = path.extension().map(|e| e.to_string_lossy().to_ascii_lowercase()).unwrap_or_default();
         let Some(scene) = self.scene_graph.take() else { return false };
         let (tx, rx) = std::sync::mpsc::channel();
         let out = path.clone();
         std::thread::spawn(move || {
-            let result = if is_stl {
-                crate::exporter::stl::export_stl(&scene, node, &out, stl_ascii)
-            } else {
-                crate::exporter::export_with(&scene, node, &out, options)
+            let result = match extension.as_str() {
+                "stl" => crate::exporter::stl::export_stl(&scene, node, &out, stl_ascii),
+                "iv" => crate::exporter::iv::export_iv(&scene, node, &out, iv_binary, options.normals, default_color),
+                _ => crate::exporter::export_with(&scene, node, &out, options),
             };
             let _ = tx.send((scene, result));
         });
@@ -369,6 +372,7 @@ impl GestoreApp {
         let mut dialog = rfd::FileDialog::new()
             .add_filter("VRML World", &["wrl"])
             .add_filter("STL", &["stl"])
+            .add_filter("Open Inventor", &["iv"])
             .set_file_name(suggested);
         if let Some(dir) = self.project.current_path.as_ref().and_then(|p| p.parent()) {
             dialog = dialog.set_directory(dir);

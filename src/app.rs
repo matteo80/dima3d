@@ -35,8 +35,15 @@ pub enum Action {
     Batch(Vec<Action>),
     /// Colore utente (RGBA sRGB) di un nodo e del suo sotto-albero; `None` = colore originale.
     SetColor(u32, Option<[f32; 4]>),
+    /// Colori diversi su più nodi (es. colori casuali): un solo passo di Annulla, mai unito ai
+    /// cambi di colore precedenti.
+    SetColors(Vec<(u32, [f32; 4])>),
     /// Ripristina i colori originali di tutta la scena.
     ResetAllColors,
+    /// Aggiunge un colore (sRGB) ai colori salvati nelle preferenze.
+    SaveColor([f32; 3]),
+    /// Toglie un colore salvato (indice nella lista).
+    ForgetColor(usize),
     /// Rinomina un nodo (stringa vuota = nome automatico).
     Rename(u32, String),
     /// Apre il campo di rinomina nell'albero.
@@ -75,6 +82,8 @@ impl Action {
                 | Action::ExportNode(_)
                 | Action::ScaleFile(..)
                 | Action::ReloadFiles
+                | Action::SaveColor(_)
+                | Action::ForgetColor(_)
         )
     }
 }
@@ -189,6 +198,25 @@ impl GestoreApp {
         }
         if let Action::ScaleFile(n, factor) = action {
             self.scale_file(n, factor);
+            return;
+        }
+        if let Action::SaveColor(c) = action {
+            let mut settings = self.settings.clone();
+            self.ui_state.status_message = if settings.save_color(c) {
+                "Colore aggiunto ai miei colori".to_string()
+            } else {
+                "Il colore era già tra i miei colori".to_string()
+            };
+            self.apply_settings(settings);
+            return;
+        }
+        if let Action::ForgetColor(i) = action {
+            let mut settings = self.settings.clone();
+            if i < settings.saved_colors.len() {
+                settings.saved_colors.remove(i);
+                self.ui_state.status_message = "Colore tolto dai miei colori".to_string();
+            }
+            self.apply_settings(settings);
             return;
         }
         if action.is_edit() {
@@ -325,6 +353,12 @@ impl GestoreApp {
                     None => format!("Colore originale: {}", scene.display_name(n)),
                 };
             }
+            Action::SetColors(list) => {
+                for &(n, color) in &list {
+                    scene.set_color(n, Some(color));
+                }
+                self.ui_state.status_message = format!("Colori casuali su {} pezzi", list.len());
+            }
             Action::ResetAllColors => {
                 scene.reset_all_colors();
                 self.ui_state.status_message = "Ripristinati i colori originali.".to_string();
@@ -335,7 +369,12 @@ impl GestoreApp {
                 self.ui_state.status_message =
                     format!("Rinominato: da {old} a {}", scene.display_name(n));
             }
-            Action::StartRename(_) | Action::ExportNode(_) | Action::ScaleFile(..) | Action::ReloadFiles => {}
+            Action::StartRename(_)
+            | Action::ExportNode(_)
+            | Action::ScaleFile(..)
+            | Action::ReloadFiles
+            | Action::SaveColor(_)
+            | Action::ForgetColor(_) => {}
             Action::View(v) => {
                 if let Some(r) = &mut self.renderer {
                     let q = crate::renderer::camera::ArcballCamera::standard_orientation(v, self.settings.axes);
@@ -444,6 +483,12 @@ impl GestoreApp {
         let (m_key, esc_key) = ctx.input(|i| (i.key_pressed(egui::Key::M) && !i.modifiers.command, i.key_pressed(egui::Key::Escape)));
         if m_key {
             self.ui_state.measure = if self.ui_state.measure.is_some() { None } else { Some(Default::default()) };
+            self.ui_state.eyedropper = false;
+        }
+        if esc_key && self.ui_state.eyedropper {
+            self.ui_state.eyedropper = false;
+            self.ui_state.status_message = "Pipetta annullata".to_string();
+            return;
         }
         if esc_key && self.ui_state.measure.is_some() {
             self.ui_state.measure = None;

@@ -142,7 +142,7 @@ fn write_scene(scene: &SceneGraph, node: Option<u32>, w: &mut impl Write, option
 
 /// Cifre decimali delle coordinate nella scrittura compatta: passo di circa un milionesimo
 /// dell'ingombro della scena (1 µm per una scocca in metri, 0,001 mm se in millimetri).
-fn coordinate_decimals(scene: &SceneGraph) -> u32 {
+pub(super) fn coordinate_decimals(scene: &SceneGraph) -> u32 {
     let bbox = scene.compute_bounding_box();
     let extent = if bbox.is_valid() { (bbox.max - bbox.min).length() as f64 } else { 0.0 };
     if !(extent.is_finite() && extent > 0.0) {

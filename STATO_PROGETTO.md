@@ -2,7 +2,7 @@
 
 > Applicazione desktop nativa Rust per la visualizzazione, analisi e manipolazione interattiva  
 > di file VRML V2.0 (`.wrl`) di grandi dimensioni (fino a 600+ MB).  
-> **Aggiornato:** 2026-11-07 · **Fatti:** visualizzazione, albero, colori, export, rendering veloce, rotazione OpenInventor (confermata dall'utente), Step 1 completo (exe provato dall'utente su un altro PC), lettura VRML 1.0, interfaccia dello Step 2, normali originali (`normalIndex`), antialiasing 4x, illuminazione solidale alla camera, selezione con contorno, viste standard in coordinate veicolo, più matematiche nella stessa scena con conversione delle unità, apertura dei file JT · cubo di orientamento, proprietà e misure, piano di sezione, export in background, rifiniture (blocco 6) · **Prossimo:** piano completato; nuove richieste dall'utente (sezione 8)
+> **Aggiornato:** 2026-11-08 · **Fatti:** visualizzazione, albero, colori, export, rendering veloce, rotazione OpenInventor (confermata dall'utente), Step 1 completo (exe provato dall'utente su un altro PC), lettura VRML 1.0, interfaccia dello Step 2, normali originali (`normalIndex`), antialiasing 4x, illuminazione solidale alla camera, selezione con contorno, viste standard in coordinate veicolo, più matematiche nella stessa scena con conversione delle unità, apertura dei file JT · cubo di orientamento, proprietà e misure, piano di sezione, export in background, rifiniture (blocco 6) · **Prossimo:** piano completato; nuove richieste dall'utente (sezione 8)
 
 ---
 
@@ -652,6 +652,34 @@ cargo flamegraph --bin gestore-wrl -- path\to\file.wrl
     saldatura 1 s, normali 1,6 s, testo intermedio 3 s, parsing 4,4 s): possibile miglioramento costruendo la scena
     senza passare dal testo.
 
+- **Colori, pipetta e zoom invertito (richiesta dell'utente 2026-11-08):**
+  - "Colori casuali" (icona dado nella toolbar): un colore per pezzo della selezione o, senza selezione, di tutta la
+    scena. Pezzo = il macro-oggetto che contiene la Shape (quello del clic nella vista); un macro-oggetto o una Shape
+    selezionati ricevono un colore solo. Tinte distanziate con la sezione aurea da una tinta casuale, saturazione e
+    luminosità alternate (`color_menu::random_colors`). Azione `SetColors`: un passo di Annulla per clic, mai unito ai
+    cambi di colore precedenti.
+  - Pipetta (toolbar): il clic su un pezzo nella vista ne legge il colore (utente, ereditato, del file o predefinito) e
+    lo dà alla selezione; senza selezione lo salva tra "I miei colori". Si spegne dopo la lettura o con Esc; esclude la
+    misura. Provata con il picking vero in un test con la scheda video.
+  - "I miei colori" nel menu Colore (toolbar e albero): fino a 12 colori salvati nelle preferenze (`colore_salvato`),
+    "+" salva il colore attuale, tasto destro toglie. Interpretazione della richiesta "salvarlo come default": da
+    confermare con l'utente (alternativa: colore delle parti senza materiale, già nel menu Vista).
+  - Zoom invertito: tasto "Zoom" tra i comandi della vista e voce nel menu Vista (`zoom_invertito`); vale per la
+    rotella e per sinistro + rotella premuti.
+- **Open Inventor (2026-11-08):** `exporter/iv.rs`, scegliendo `.iv` nella finestra Salva; testo o binario dal menu
+  accanto a Esporta (`export_iv_binario`), normali secondo "Scrivi le normali". Struttura come l'export WRL: un
+  `Separator` con nome per gruppo e pezzo, `Material` (con trasparenza), `ShapeHints UNKNOWN_ORDERING` (due lati
+  illuminati), `Coordinate3`, `Normal` + `NormalBinding PER_VERTEX_INDEXED` o `creaseAngle 0.5`, `IndexedFaceSet`.
+  - Binario: intestazione `#Inventor V2.1 binary  \n`, interi e float big-endian, stringhe con lunghezza e
+    allineamento a 4 byte; nodo = [DEF nome] classe, flag (2 = gruppo), numero di campi, campi (nome, valore, 0),
+    figli. Attenzione: `transparency` del Material è un campo multiplo (serve il conteggio; senza, Coin va in crash).
+  - Scocca_G (1662 pezzi, 3,3 M triangoli): testo 221 MB, riletto da Coin in 18 s;
+    binario 78 MB senza normali / 160 MB con, scritto in 0,1–0,2 s, riletto da Coin in 1,9–2,9 s. Coin ritrova pezzi,
+    triangoli, nomi, colori e ingombro.
+- **STL senza testo intermedio (2026-11-08):** `parser/stl.rs::shapes` costruisce i `ShapeInfo` (coordinate esatte,
+  `rewritten`) e `shape_extractor::scene_from_shapes` l'albero, come per il VRML. Scocca_G in STL binario: apertura
+  2,5 s (era ~10 s; lettura 0,06, saldatura 1,0, normali 1,4); ASCII 7,4 s. I nomi dei solidi restano quelli del file.
+
 ---
 
 ## 8. Roadmap (aggiornata 2026-11-07)
@@ -706,6 +734,7 @@ errori passano già da stdout/stderr (`parser/jt.rs`), e ogni convertitore si ag
 
 - [x] **STL, import ed export** (2026-11-08, vedi note): binario e ASCII in apertura (un pezzo per `solid`); export
       binario (predefinito) o ASCII con un `solid` per pezzo, scegliendo `.stl` nella finestra Salva
+- [x] **STL, apertura veloce** (2026-11-08): pezzi costruiti dai triangoli senza testo VRML intermedio
 - [ ] **STEP, import** (convertitore separato `step2wrl.exe` con OpenCASCADE, LGPL): tassellazione della geometria
       esatta con tolleranza regolabile, nomi e colori dell'assieme (XCAF), trasformazioni. Da valutare peso e tempi su
       una matematica reale.
@@ -742,11 +771,9 @@ gzip escluso: i programmi dell'utente non leggono i WRL compressi (risposta dell
 
 ### Step 7 — Export Open Inventor e HSF (valutazione 2026-11-07)
 
-- [ ] **IV ASCII** (`#Inventor V2.1 ascii`): fattibile, basso rischio. Il VRML 1.0, che il Gestore legge già, deriva da
-      Inventor: `Separator`, `Material`, `Coordinate3`, `Normal`/`NormalBinding`, `IndexedFaceSet`, `Transform`.
-- [ ] **IV binario** (`#Inventor V2.1 binary`): fattibile, rischio medio. Formato non documentato in una specifica
-      pubblica: riferimento al codice di Coin3D (BSD-3, github.com/coin3d/coin), che sa anche rileggerlo per la verifica.
-      Più compatto del testo e più veloce da aprire.
+- [x] **IV ASCII** (`#Inventor V2.1 ascii`, 2026-11-08, vedi note)
+- [x] **IV binario** (`#Inventor V2.1 binary`, 2026-11-08, vedi note): formato ricavato dai file scritti da Coin e
+      verificato rileggendo con Coin (FreeCAD 1.0)
 - [ ] **HSF** (HOOPS Stream File, Tech Soft 3D): fattibilità incerta. Formato proprietario senza specifica pubblica,
       con il toolkit commerciale. Unica strada senza licenza HOOPS: il toolkit HOOPS Stream incluso nel DWF Toolkit 7.7
       di Autodesk (`w3dtk`, copia su GitHub), in un convertitore separato. Da verificare: la licenza Autodesk, se il file

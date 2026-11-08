@@ -3,7 +3,7 @@ use crate::app::Action;
 use crate::settings::{RotationMode, ThemeMode};
 
 /// Sotto questa larghezza di finestra i pulsanti mostrano solo l'icona.
-const FULL_LABELS_WIDTH: f32 = 1180.0;
+const FULL_LABELS_WIDTH: f32 = 1250.0;
 
 /// Pulsante con icona: il testo sparisce nelle finestre strette e resta nel suggerimento.
 fn tool(ui: &mut egui::Ui, enabled: bool, compact: bool, icon: &str, label: &str, hint: &str) -> bool {
@@ -65,7 +65,7 @@ pub fn draw_toolbar(ui: &mut egui::Ui, app: &mut crate::app::GestoreApp) {
     if tool(ui, has_scene && !loading, compact, icon::FILE_PLUS, "Aggiungi", "Aggiunge uno o più file WRL alla scena aperta (anche trascinandoli sulla finestra)") {
         app.add_dialog();
     }
-    if tool(ui, has_scene, compact, icon::EXPORT, "Esporta", "Salva solo le parti visibili in un nuovo file WRL o STL  [Ctrl+S]") {
+    if tool(ui, has_scene, compact, icon::EXPORT, "Esporta", "Salva solo le parti visibili in un nuovo file WRL, STL o IV  [Ctrl+S]") {
         app.export_dialog(None);
     }
     let mut export_settings = app.settings.clone();
@@ -84,6 +84,13 @@ pub fn draw_toolbar(ui: &mut egui::Ui, app: &mut crate::app::GestoreApp) {
         ui.checkbox(&mut export_settings.export_stl_ascii, "In formato testo (ASCII)").on_hover_text(
             "Il testo tiene un nome per pezzo ma è circa 5 volte più grande. Il binario è letto da tutti i programmi. \
              In entrambi i casi colori e albero non esistono nel formato STL.",
+        );
+        ui.separator();
+        ui.label(egui::RichText::new("Open Inventor (scegli .iv nella finestra Salva)").strong());
+        ui.checkbox(&mut export_settings.export_iv_binary, "In formato binario").on_hover_text(
+            "Il binario è circa un terzo del testo e si apre molte volte più in fretta (FreeCAD, Coin3D). \
+             Il testo si può leggere e modificare con un editor. Pezzi, nomi e colori restano in entrambi; \
+             le normali seguono l'opzione «Scrivi le normali».",
         );
     })
     .response
@@ -137,12 +144,44 @@ Toglie triangoli dove non servono (come MeshLab), con anteprima e dimensione pre
         let title = icon_text(ui, icon::PALETTE, if compact { "" } else { "Colore" });
         ui.menu_button(title, |ui| {
             if let (Some(n), Some(scene)) = (selection, &app.scene_graph) {
-                crate::ui::color_menu::color_menu(ui, scene, n, app.settings.default_color, &mut color_actions);
+                crate::ui::color_menu::color_menu(
+                    ui,
+                    scene,
+                    n,
+                    app.settings.default_color,
+                    &app.settings.saved_colors,
+                    &mut color_actions,
+                );
             }
         })
         .response
         .on_hover_text("Colore dell'elemento selezionato (vale per tutto il suo contenuto)");
     });
+    let picking = app.ui_state.eyedropper;
+    let pipette = ui
+        .add_enabled(has_scene, egui::Button::new(icon_text(ui, icon::EYEDROPPER, "")).selected(picking))
+        .on_hover_text(
+            "Pipetta: clic su un pezzo nella vista per leggerne il colore e darlo alla selezione. \
+             Senza selezione il colore va tra i miei colori (menu Colore).  [Esc per annullare]",
+        );
+    if pipette.clicked() {
+        app.ui_state.eyedropper = !picking;
+        if !picking {
+            app.ui_state.measure = None;
+            app.ui_state.status_message = if has_selection {
+                "Pipetta: clic sul pezzo da cui leggere il colore".to_string()
+            } else {
+                "Pipetta: clic su un pezzo per salvarne il colore tra i miei colori".to_string()
+            };
+        }
+    }
+    let random_hint = "Colori casuali\nUn colore diverso per ogni pezzo selezionato; senza selezione, per tutti i pezzi \
+                       della scena. Ogni clic dà nuovi colori (Ctrl+Z per tornare indietro)";
+    if tool(ui, has_scene, true, icon::DICE_FIVE, "Colori casuali", random_hint) {
+        if let Some(scene) = &app.scene_graph {
+            action = crate::ui::color_menu::random_colors_action(scene, &app.ui_state.selected_nodes());
+        }
+    }
 
     group_separator(ui);
 
@@ -242,6 +281,8 @@ fn view_menu(
             .fixed_decimals(1),
     )
     .on_hover_text("Velocità della rotazione con il mouse (1 = normale)");
+    ui.checkbox(&mut settings.invert_zoom, "Zoom invertito")
+        .on_hover_text("Rotella in avanti per allontanarsi invece di avvicinarsi (anche dal tasto Zoom nella vista)");
 
     ui.separator();
     ui.label(egui::RichText::new("Viste standard").strong());

@@ -1,5 +1,5 @@
-//! Lettura dei file STL (binari e di testo), convertiti in VRML 2.0 come i file VRML 1.0: il
-//! resto del programma (albero, export, riduzione) lavora sul testo convertito.
+//! Lettura dei file STL (binari e di testo): ogni `solid` diventa un pezzo della scena, costruito
+//! direttamente dai triangoli (senza testo VRML intermedio).
 //!
 //! Un STL è una lista di triangoli senza vertici condivisi, senza colori e senza unità (di solito
 //! millimetri). I vertici uguali vengono uniti e le normali ricalcolate con un angolo di spigolo
@@ -97,12 +97,10 @@ pub fn read(data: &[u8]) -> Result<Vec<Solid>, String> {
     Ok(solids)
 }
 
-/// Converte un STL in testo VRML 2.0: una Shape per `solid`, con le normali a spigolo vivo.
-/// Coordinate con un passo di un milionesimo dell'ingombro (come l'export compatto), normali con
-/// 4 decimali.
-pub(crate) fn convert(data: &[u8]) -> super::vrml1::Converted {
-    use crate::exporter::writer::{push_fixed, push_uint};
-    let mut out: Vec<u8> = b"#VRML V2.0 utf8\n# Convertito da STL dal Gestore WRL\n\n".to_vec();
+/// Pezzi di un STL, uno per `solid`, già pronti per la scena: vertici uguali uniti (coordinate
+/// esatte del file), normali a spigolo vivo. Ritorna anche gli avvisi (file rotto, solidi vuoti).
+pub(crate) fn shapes(data: &[u8]) -> (Vec<crate::parser::ShapeInfo>, Vec<String>) {
+    use rayon::prelude::*;
     let mut warnings = Vec::new();
     let solids = match read(data) {
         Ok(s) => s,
@@ -111,64 +109,42 @@ pub(crate) fn convert(data: &[u8]) -> super::vrml1::Converted {
             Vec::new()
         }
     };
-    let mut bbox = crate::scene_graph::Aabb::empty();
-    for s in &solids {
-        for &p in &s.corners {
-            bbox.extend_point(glam::Vec3::from(p));
+    let built: Vec<Result<crate::parser::ShapeInfo, String>> = solids
+        .into_par_iter()
+        .map(|solid| {
+            let order: Vec<u32> = (0..solid.corners.len() as u32).collect();
+            let mesh = crate::reduce::weld(&solid.corners, &order);
+            if mesh.indices.is_empty() {
+                return Err(format!("Solido «{}»: solo triangoli degeneri, ignorato", solid.name));
+            }
+            let (normals, split) = crate::reduce::crease_normals(&mesh.positions, &mesh.indices, crate::reduce::CREASE_ANGLE);
+            Ok(crate::parser::ShapeInfo {
+                source_start: 0,
+                source_end: 0,
+                point_range_start: 0,
+                point_range_end: 0,
+                matrix: glam::Mat4::IDENTITY,
+                face_count: (mesh.indices.len() / 3) as u32,
+                world_vertices: mesh.positions,
+                normals,
+                split,
+                indices: mesh.indices,
+                name: Some(solid.name),
+                color: None,
+                path: Vec::new(),
+                // Nessun testo VRML da copiare: l'export scrive sempre dai dati
+                rewritten: true,
+            })
+        })
+        .collect();
+    let mut out = Vec::with_capacity(built.len());
+    for b in built {
+        match b {
+            Ok(s) => out.push(s),
+            Err(w) => warnings.push(w),
         }
     }
-    let extent = if bbox.is_valid() { bbox.diagonal() as f64 } else { 1.0 };
-    let decimals = if extent > 0.0 && extent.is_finite() { (-(extent * 1e-6).log10()).ceil().clamp(0.0, 9.0) as u32 } else { 6 };
-    let vector = |out: &mut Vec<u8>, v: &[f32; 3], d: u32| {
-        push_fixed(out, v[0], d);
-        out.push(b' ');
-        push_fixed(out, v[1], d);
-        out.push(b' ');
-        push_fixed(out, v[2], d);
-        out.push(b'\n');
-    };
-    let triangle = |out: &mut Vec<u8>, t: &[u32]| {
-        push_uint(out, t[0] as u64);
-        out.push(b' ');
-        push_uint(out, t[1] as u64);
-        out.push(b' ');
-        push_uint(out, t[2] as u64);
-        out.extend_from_slice(b" -1\n");
-    };
-    let mut names = std::collections::HashMap::new();
-    for solid in solids {
-        let order: Vec<u32> = (0..solid.corners.len() as u32).collect();
-        let mesh = crate::reduce::weld(&solid.corners, &order);
-        if mesh.indices.is_empty() {
-            warnings.push(format!("Solido «{}»: solo triangoli degeneri, ignorato", solid.name));
-            continue;
-        }
-        let (normals, split) = crate::reduce::crease_normals(&mesh.positions, &mesh.indices, crate::reduce::CREASE_ANGLE);
-        let base = crate::exporter::sanitize_identifier(&solid.name);
-        let count: &mut u32 = names.entry(base.clone()).or_insert(0);
-        *count += 1;
-        let name = if *count == 1 { base } else { format!("{base}_{count}") };
-        out.reserve(mesh.positions.len() * 30 + mesh.indices.len() * 12 + normals.len() * 22);
-        out.extend_from_slice(format!("DEF {name} Shape {{\ngeometry IndexedFaceSet {{\nsolid FALSE\ncoord Coordinate {{ point [\n").as_bytes());
-        for p in &mesh.positions {
-            vector(&mut out, p, decimals);
-        }
-        out.extend_from_slice(b"] }\ncoordIndex [\n");
-        for t in mesh.indices.chunks_exact(3) {
-            triangle(&mut out, t);
-        }
-        out.extend_from_slice(b"]\nnormal Normal { vector [\n");
-        for n in &normals {
-            vector(&mut out, n, 4);
-        }
-        out.extend_from_slice(b"] }\nnormalIndex [\n");
-        let render = split.as_ref().map_or(&mesh.indices, |s| &s.indices);
-        for t in render.chunks_exact(3) {
-            triangle(&mut out, t);
-        }
-        out.extend_from_slice(b"]\n}\n}\n");
-    }
-    super::vrml1::Converted { text: out, warnings }
+    (out, warnings)
 }
 
 #[cfg(test)]
@@ -237,7 +213,7 @@ mod tests {
             let v = glam::Vec3::from(n);
             assert!((v.abs().max_element() - 1.0).abs() < 1e-4, "{v:?}");
         }
-        assert_eq!(scene.display_name(scene.mesh_to_node[0]), "cubo_binario");
+        assert_eq!(scene.display_name(scene.mesh_to_node[0]), "cubo binario");
     }
 
     #[test]
@@ -246,7 +222,7 @@ mod tests {
         let scene = crate::parser::parse_wrl(text.as_bytes());
         assert_eq!(scene.shapes_data.len(), 2);
         let names: Vec<String> = scene.mesh_to_node.iter().map(|&n| scene.display_name(n)).collect();
-        assert_eq!(names, vec!["primo_pezzo", "secondo"]);
+        assert_eq!(names, vec!["primo pezzo", "secondo"]);
         assert!(scene.load_warnings.is_empty());
     }
 
@@ -277,10 +253,8 @@ mod timing {
         let _ = crate::reduce::crease_normals(&mesh.positions, &mesh.indices, crate::reduce::CREASE_ANGLE);
         println!("normali {:?}", t.elapsed());
         let t = std::time::Instant::now();
-        let c = super::convert(&data);
-        println!("conversione completa {:?} ({:.1} MB di testo)", t.elapsed(), c.text.len() as f64 / 1e6);
-        let t = std::time::Instant::now();
-        let _ = crate::parser::parse_wrl(&c.text);
-        println!("parsing del testo {:?}", t.elapsed());
+        let scene = crate::parser::parse_wrl(&data);
+        let tris: usize = scene.shapes_data.iter().map(|s| s.indices.len() / 3).sum();
+        println!("apertura completa {:?}: {} pezzi, {tris} triangoli", t.elapsed(), scene.shapes_data.len());
     }
 }

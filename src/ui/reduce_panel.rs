@@ -229,7 +229,7 @@ pub fn draw(ctx: &egui::Context, app: &mut GestoreApp) {
             ui.add_space(4.0);
             if ui
                 .add_enabled(can_export, egui::Button::new(icon_text(ui, icon::EXPORT, "Esporta…")))
-                .on_hover_text("Salva le parti visibili, con le facce ridotte, in un nuovo file WRL o STL")
+                .on_hover_text("Salva le parti visibili, con le facce ridotte, in un nuovo file WRL, STL o IV")
                 .clicked()
             {
                 export = true;

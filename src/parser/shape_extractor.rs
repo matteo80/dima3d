@@ -211,8 +211,14 @@ where
         progress_fn(0.0, "Conversione da VRML 1.0...".to_string());
         crate::parser::vrml1::convert(data)
     } else if crate::parser::stl::is_stl(data) {
-        progress_fn(0.0, "Conversione da STL...".to_string());
-        crate::parser::stl::convert(data)
+        // Nessun testo intermedio: i pezzi si costruiscono direttamente dai triangoli
+        progress_fn(0.0, "Lettura STL...".to_string());
+        let (shapes, warnings) = crate::parser::stl::shapes(data);
+        let mut scene = scene_from_shapes(shapes, cluster_cfg, &mut progress_fn);
+        scene.load_warnings.extend(warnings);
+        // Testo minimo al posto del file: i pezzi sono `rewritten`, l'export non lo legge
+        scene.source_data = b"#VRML V2.0 utf8\n".to_vec().into();
+        return scene;
     } else {
         return parse_vrml2(data, cluster_cfg, progress_fn);
     };
@@ -296,19 +302,7 @@ where
 
     tracing::info!("Shape estratte: {}", shapes.len());
 
-    // 3. Gerarchia: ricostruzione dei macro-oggetti dai percorsi Group/Transform/USE
-    //    + auto-clustering geometrico dei contenitori con molte Shape dirette.
-    progress_fn(
-        0.85,
-        format!("Ricostruzione gerarchia e raggruppamento di {} shape...", shapes.len()),
-    );
-    let tree = crate::scene_graph::builder::build_tree(
-        shapes.iter().map(|s| (s.path.as_slice(), s.name.as_deref())),
-        |ids: &[u32]| crate::clusterer::cluster_subset(&shapes, ids, &cluster_cfg),
-    );
-
-    progress_fn(0.95, "Costruzione grafo scena...".to_string());
-    let mut scene = SceneGraph::from_built(tree, shapes);
+    let mut scene = scene_from_shapes(shapes, cluster_cfg, &mut progress_fn);
     let hidden = hidden_switches.lock().map_or(0, |h| h.len());
     match hidden {
         0 => {}
@@ -329,6 +323,24 @@ where
     progress_fn(1.0, "Parsing completato con successo.".to_string());
 
     scene
+}
+
+/// Albero dei pezzi: macro-oggetti dai percorsi Group/Transform/USE e raggruppamento
+/// automatico dei contenitori con molte Shape dirette.
+pub(crate) fn scene_from_shapes<F>(shapes: Vec<ShapeInfo>, cluster_cfg: crate::clusterer::ClusterConfig, progress_fn: &mut F) -> SceneGraph
+where
+    F: FnMut(f32, String),
+{
+    progress_fn(
+        0.85,
+        format!("Ricostruzione gerarchia e raggruppamento di {} shape...", shapes.len()),
+    );
+    let tree = crate::scene_graph::builder::build_tree(
+        shapes.iter().map(|s| (s.path.as_slice(), s.name.as_deref())),
+        |ids: &[u32]| crate::clusterer::cluster_subset(&shapes, ids, &cluster_cfg),
+    );
+    progress_fn(0.95, "Costruzione grafo scena...".to_string());
+    SceneGraph::from_built(tree, shapes)
 }
 
 /// Registra il template di un `DEF` contenitore riusato: `matrix` è la matrice locale del nodo.

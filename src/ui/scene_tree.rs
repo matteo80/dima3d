@@ -144,6 +144,7 @@ pub fn draw_scene_tree(ui: &mut egui::Ui, app: &mut crate::app::GestoreApp) {
             expanded: &mut app.ui_state.expanded,
             renaming: &mut app.ui_state.renaming,
             default_color: app.settings.default_color,
+            saved_colors: app.settings.saved_colors.clone(),
             actions: &mut actions,
             search: search_mode.then_some(query.as_str()),
         };
@@ -315,6 +316,8 @@ struct RowCtx<'a> {
     expanded: &'a mut std::collections::HashSet<u32>,
     renaming: &'a mut Option<crate::ui::Renaming>,
     default_color: [f32; 4],
+    /// Colori salvati dall'utente, per il menu Colore
+    saved_colors: Vec<[f32; 3]>,
     actions: &'a mut Vec<Action>,
 }
 
@@ -462,6 +465,7 @@ fn draw_row(ui: &mut egui::Ui, ctx: &mut RowCtx, node_idx: u32, depth: u16) {
 
         let actions = &mut *ctx.actions;
         let default_color = ctx.default_color;
+        let saved_colors = &ctx.saved_colors[..];
         // La stessa azione sulla riga o su tutta la selezione multipla di cui fa parte
         let on_targets = |action: fn(u32) -> Action| match group {
             Some(nodes) => Action::Batch(nodes.iter().map(|&n| action(n)).collect()),
@@ -503,7 +507,7 @@ fn draw_row(ui: &mut egui::Ui, ctx: &mut RowCtx, node_idx: u32, depth: u16) {
             }
             ui.menu_button(icon_text(ui, icon::PALETTE, "Colore"), |ui| {
                 let mut chosen = Vec::new();
-                crate::ui::color_menu::color_menu(ui, scene, node_idx, default_color, &mut chosen);
+                crate::ui::color_menu::color_menu(ui, scene, node_idx, default_color, saved_colors, &mut chosen);
                 actions.extend(crate::ui::color_menu::spread_colors(chosen, group.unwrap_or(&[])));
             });
             ui.separator();

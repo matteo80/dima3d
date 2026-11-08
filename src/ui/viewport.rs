@@ -56,6 +56,7 @@ pub fn draw_viewport(ui: &mut egui::Ui, app: &mut crate::app::GestoreApp) {
     let (rect, response) = ui.allocate_exact_size(available_size, egui::Sense::click_and_drag());
 
     let mut actions: Vec<Action> = Vec::new();
+    let mut eyedropper_message: Option<String> = None;
 
     // ── 1. Gestione interazione telecamera con mouse / trackpad ──────────────────
     let section = app.ui_state.section;
@@ -96,9 +97,10 @@ pub fn draw_viewport(ui: &mut egui::Ui, app: &mut crate::app::GestoreApp) {
 
         // Modalità zoom: tasto sinistro + rotella premuti insieme.
         // Mouse verso l'alto → zoom in, verso il basso → zoom out.
+        let zoom_sign = if app.settings.invert_zoom { -1.0 } else { 1.0 };
         if response.dragged() && left_down && middle_down {
             let delta = response.drag_delta();
-            renderer.camera.dolly(drag.pivot, delta.y);
+            renderer.camera.dolly(drag.pivot, delta.y * zoom_sign);
             ui.ctx().request_repaint();
         }
         // Rotazione (tasto sinistro trascinato)
@@ -161,7 +163,7 @@ pub fn draw_viewport(ui: &mut egui::Ui, app: &mut crate::app::GestoreApp) {
                         .and_then(|scene| surface_point(scene, &renderer.visibility, section, ray))
                         .unwrap_or_else(|| camera.point_on_target_plane(ray.0, ray.1))
                 });
-                renderer.camera.zoom_about(point, (-scroll_delta * 0.002).exp());
+                renderer.camera.zoom_about(point, (-scroll_delta * zoom_sign * 0.002).exp());
                 app.ui_state.zoom_anchor = Some(ZoomAnchor {
                     cursor,
                     target: renderer.camera.target,
@@ -194,7 +196,30 @@ pub fn draw_viewport(ui: &mut egui::Ui, app: &mut crate::app::GestoreApp) {
             }
         }
 
-        if !measuring && response.clicked() && !response.double_clicked() {
+        // Pipetta: il clic legge il colore del pezzo e lo dà alla selezione (o lo salva)
+        let picking_color = app.ui_state.eyedropper && !measuring;
+        if picking_color && response.clicked() {
+            if let (Some(scene), Some(pos)) = (&app.scene_graph, response.interact_pointer_pos()) {
+                renderer.sync_with_scene(scene, &app.ui_state.selected_nodes());
+                let ray = pointer_ray(&renderer.camera, rect, pos);
+                if let Some((mesh, _, _)) = pick(scene, &renderer.visibility, section, ray) {
+                    let color = super::color_menu::mesh_color(scene, mesh, app.settings.default_color);
+                    let name = scene.mesh_to_node.get(mesh as usize).map(|&n| scene.display_name(n)).unwrap_or_default();
+                    let selection = app.ui_state.selected_nodes();
+                    if selection.is_empty() {
+                        actions.push(Action::SaveColor([color[0], color[1], color[2]]));
+                        eyedropper_message = Some(format!("Colore di {name} salvato tra i miei colori"));
+                    } else {
+                        let count = selection.len();
+                        actions.push(Action::Batch(selection.into_iter().map(|n| Action::SetColor(n, Some(color))).collect()));
+                        eyedropper_message = Some(format!("Colore di {name} dato a {count} elementi"));
+                    }
+                    app.ui_state.eyedropper = false;
+                }
+            }
+        }
+
+        if !measuring && !picking_color && response.clicked() && !response.double_clicked() {
             if let (Some(scene), Some(pos)) = (&app.scene_graph, response.interact_pointer_pos()) {
                 // Allinea i flag prima del picking (le mesh nascoste non sono selezionabili)
                 renderer.sync_with_scene(scene, &app.ui_state.selected_nodes());
@@ -232,6 +257,9 @@ pub fn draw_viewport(ui: &mut egui::Ui, app: &mut crate::app::GestoreApp) {
     // Le azioni modificano scena/camera: applicale prima del rendering del frame
     for a in actions.drain(..) {
         app.apply(a);
+    }
+    if let Some(m) = eyedropper_message {
+        app.ui_state.status_message = m;
     }
     if let (Some(renderer), Some(scene)) = (&mut app.renderer, &app.scene_graph) {
         renderer.sync_with_scene(scene, &app.ui_state.selected_nodes());
@@ -317,6 +345,9 @@ pub fn draw_viewport(ui: &mut egui::Ui, app: &mut crate::app::GestoreApp) {
         super::measure::draw(ui, rect, m, |v| to_screen(camera, rect, v), size);
         ui.ctx().set_cursor_icon(egui::CursorIcon::Crosshair);
     }
+    if app.ui_state.eyedropper && response.hovered() {
+        ui.ctx().set_cursor_icon(egui::CursorIcon::Crosshair);
+    }
 
     // ── 4. Comandi sopra la vista ────────────────────────────────────────────────
     let dragging_file = ui.ctx().input(|i| !i.raw.hovered_files.is_empty());
@@ -333,7 +364,16 @@ pub fn draw_viewport(ui: &mut egui::Ui, app: &mut crate::app::GestoreApp) {
     }
     if app.scene_graph.is_some() {
         let start = app.scene_graph.as_ref().map(default_section);
-        draw_view_controls(ui, rect, &mut actions, &mut app.ui_state.measure, &mut app.ui_state.section, start.flatten());
+        let mut settings = app.settings.clone();
+        let ui_state = &mut app.ui_state;
+        let tools = ViewTools {
+            measure: &mut ui_state.measure,
+            eyedropper: &mut ui_state.eyedropper,
+            section: &mut ui_state.section,
+            invert_zoom: &mut settings.invert_zoom,
+        };
+        draw_view_controls(ui, rect, &mut actions, tools, start.flatten());
+        app.apply_settings(settings);
         if let Some(renderer) = &app.renderer {
             actions.extend(super::view_cube::draw(ui, rect, &renderer.camera, app.settings.axes));
         }
@@ -470,14 +510,22 @@ fn draw_empty_state(ui: &egui::Ui, rect: egui::Rect, background: [f32; 3], dragg
 }
 
 /// Inquadratura e viste in alto a sinistra, guida ai comandi in alto a destra.
+/// Strumenti della vista che i comandi sopra la vista accendono e spengono.
+struct ViewTools<'a> {
+    measure: &'a mut Option<super::measure::Measure>,
+    eyedropper: &'a mut bool,
+    section: &'a mut Option<crate::renderer::Section>,
+    invert_zoom: &'a mut bool,
+}
+
 fn draw_view_controls(
     ui: &mut egui::Ui,
     rect: egui::Rect,
     actions: &mut Vec<Action>,
-    measure: &mut Option<super::measure::Measure>,
-    section: &mut Option<crate::renderer::Section>,
+    tools: ViewTools,
     section_start: Option<crate::renderer::Section>,
 ) {
+    let ViewTools { measure, eyedropper, section, invert_zoom } = tools;
     use crate::renderer::camera::StandardView as V;
     let area = rect.shrink(10.0);
 
@@ -519,6 +567,7 @@ fn draw_view_controls(
                 .clicked()
             {
                 *measure = if active { None } else { Some(Default::default()) };
+                *eyedropper = false;
             }
             let cutting = section.is_some();
             if ui
@@ -527,6 +576,19 @@ fn draw_view_controls(
                 .clicked()
             {
                 *section = if cutting { None } else { section_start };
+            }
+            ui.separator();
+            let inverted = *invert_zoom;
+            if ui
+                .selectable_label(inverted, icon_text(ui, icon::ARROWS_DOWN_UP, "Zoom"))
+                .on_hover_text(if inverted {
+                    "Zoom invertito: rotella in avanti per allontanarsi. Clic per tornare al verso normale"
+                } else {
+                    "Inverti lo zoom della rotella (e di sinistro + rotella premuti)"
+                })
+                .clicked()
+            {
+                *invert_zoom = !inverted;
             }
         });
     });
@@ -543,7 +605,7 @@ fn draw_view_controls(
                     ("Sinistro", "Ruota attorno al punto cliccato"),
                     ("Shift + sinistro", "Rollio"),
                     ("Destro o rotella premuta", "Sposta"),
-                    ("Rotella", "Zoom verso il mouse"),
+                    ("Rotella", "Zoom verso il mouse (verso invertibile con il tasto Zoom)"),
                     ("Sinistro + rotella premuti", "Zoom"),
                     ("Click", "Seleziona il macro-oggetto"),
                     ("Ctrl + click", "Seleziona il singolo pezzo"),
@@ -581,5 +643,83 @@ fn draw_axes(painter: &egui::Painter, rect: egui::Rect, camera: &ArcballCamera) 
             egui::FontId::proportional(12.0),
             color,
         );
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::ui::color_menu::tests::{node, TWO_PARTS};
+    use crate::ui::tests::{click, frame};
+
+    /// App con un renderer vero (per il picking), se c'è una scheda video.
+    fn app_with_renderer() -> Option<crate::app::GestoreApp> {
+        let instance = wgpu::Instance::default();
+        let adapter = pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions::default()))?;
+        let (device, _queue) = pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor::default(), None)).ok()?;
+        let mut app = crate::app::GestoreApp::new_headless();
+        let scene = crate::parser::parse_wrl(TWO_PARTS);
+        let mut r = crate::renderer::WgpuRenderer::new(&device, wgpu::TextureFormat::Rgba8UnormSrgb);
+        r.upload_meshes(&scene.shapes_data, &device);
+        // Vista dall'alto sul quadrato rosso, che riempie la vista
+        let red = scene.subtree_bounding_box(node(&scene, "R1"));
+        r.camera.fit_to_bbox(&red);
+        r.camera.orientation = glam::Quat::IDENTITY;
+        r.camera.scene_bounds = Some(scene.compute_bounding_box());
+        app.project.on_loaded(scene.revision);
+        app.scene_graph = Some(scene);
+        app.renderer = Some(r);
+        Some(app)
+    }
+
+    /// Centro della vista 3D: tra il bordo sinistro dei comandi sopra la vista e il fondo.
+    fn viewport_center(texts: &[(String, egui::Pos2)]) -> egui::Pos2 {
+        let centra = texts.iter().find(|(s, _)| s.contains("Centra")).map(|(_, p)| *p).expect("comandi della vista");
+        egui::pos2((centra.x + 1280.0) / 2.0 + 20.0, (centra.y + 760.0) / 2.0)
+    }
+
+    /// Pipetta: con Blu selezionato, il clic sul pezzo rosso dà il rosso a Blu e spegne la
+    /// pipetta; senza selezione il colore va tra i miei colori.
+    #[test]
+    fn eyedropper_copies_the_color_of_the_clicked_piece() {
+        let Some(mut app) = app_with_renderer() else { return };
+        let ctx = egui::Context::default();
+        let texts = frame(&ctx, &mut app, vec![]);
+        let center = viewport_center(&texts);
+        let blu = node(app.scene_graph.as_ref().unwrap(), "Blu");
+        app.ui_state.select_single(Some(blu));
+        app.ui_state.eyedropper = true;
+        click(&ctx, &mut app, center);
+        assert!(!app.ui_state.eyedropper, "la pipetta si spegne dopo la lettura");
+        let scene = app.scene_graph.as_ref().unwrap();
+        assert_eq!(scene.info[blu as usize].color, Some([1.0, 0.0, 0.0, 1.0]), "{}", app.ui_state.status_message);
+        assert_eq!(app.ui_state.selected_node, Some(blu), "la selezione non cambia");
+        assert!(app.ui_state.status_message.contains("R1"), "{}", app.ui_state.status_message);
+
+        app.ui_state.select_single(None);
+        app.ui_state.eyedropper = true;
+        click(&ctx, &mut app, center);
+        assert_eq!(app.settings.saved_colors.first(), Some(&[1.0, 0.0, 0.0]));
+    }
+
+    /// Il tasto "Zoom" della vista inverte il verso della rotella.
+    #[test]
+    fn zoom_button_inverts_the_wheel() {
+        let Some(mut app) = app_with_renderer() else { return };
+        let ctx = egui::Context::default();
+        let texts = frame(&ctx, &mut app, vec![]);
+        let center = viewport_center(&texts);
+        let wheel = |app: &mut crate::app::GestoreApp| {
+            let before = app.renderer.as_ref().unwrap().camera.distance;
+            let scroll = egui::Event::MouseWheel { unit: egui::MouseWheelUnit::Point, delta: egui::vec2(0.0, 50.0), modifiers: Default::default() };
+            frame(&ctx, app, vec![egui::Event::PointerMoved(center), scroll]);
+            app.renderer.as_ref().unwrap().camera.distance / before
+        };
+        let normal = wheel(&mut app);
+        assert!(normal < 1.0, "rotella in avanti avvicina: {normal}");
+        let button = texts.iter().find(|(s, _)| s.ends_with("Zoom")).map(|(_, p)| *p + egui::vec2(4.0, 6.0)).expect("tasto Zoom");
+        click(&ctx, &mut app, button);
+        assert!(app.settings.invert_zoom);
+        let inverted = wheel(&mut app);
+        assert!(inverted > 1.0, "invertito: rotella in avanti allontana: {inverted}");
     }
 }

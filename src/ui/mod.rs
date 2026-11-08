@@ -51,6 +51,8 @@ pub struct UiState {
     pub unit_suggestions: Vec<UnitSuggestion>,
     /// Strumento di misura attivo (il clic nella vista prende punti invece di selezionare)
     pub measure: Option<measure::Measure>,
+    /// Pipetta attiva: il clic nella vista legge il colore di un pezzo invece di selezionare
+    pub eyedropper: bool,
     /// Piano di sezione attivo
     pub section: Option<crate::renderer::Section>,
     /// Riferimento del trascinamento in corso nella viewport
@@ -87,6 +89,7 @@ impl Default for UiState {
             load_warnings: Vec::new(),
             unit_suggestions: Vec::new(),
             measure: None,
+            eyedropper: false,
             section: None,
             drag: None,
             zoom_anchor: None,
@@ -498,4 +501,38 @@ pub fn draw_main_layout(ctx: &egui::Context, app: &mut crate::app::GestoreApp) {
     egui::CentralPanel::default().frame(egui::Frame::new()).show(ctx, |ui| {
         viewport::draw_viewport(ui, app);
     });
+}
+
+#[cfg(test)]
+pub(crate) mod tests {
+    use crate::app::GestoreApp;
+
+    fn screen() -> egui::Rect {
+        egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(1280.0, 800.0))
+    }
+
+    /// Un frame dell'interfaccia completa; ritorna i testi disegnati con la loro posizione.
+    pub fn frame(ctx: &egui::Context, app: &mut GestoreApp, events: Vec<egui::Event>) -> Vec<(String, egui::Pos2)> {
+        let out = ctx.run(egui::RawInput { screen_rect: Some(screen()), events, ..Default::default() }, |ctx| {
+            super::draw_main_layout(ctx, app);
+        });
+        fn walk(s: &egui::Shape, out: &mut Vec<(String, egui::Pos2)>) {
+            match s {
+                egui::Shape::Text(t) => out.push((t.galley.text().to_string(), t.pos)),
+                egui::Shape::Vec(v) => v.iter().for_each(|s| walk(s, out)),
+                _ => {}
+            }
+        }
+        let mut texts = Vec::new();
+        out.shapes.iter().for_each(|c| walk(&c.shape, &mut texts));
+        texts
+    }
+
+    /// Clic sinistro (pressione e rilascio) in un punto.
+    pub fn click(ctx: &egui::Context, app: &mut GestoreApp, at: egui::Pos2) {
+        let button = |pressed| egui::Event::PointerButton { pos: at, button: egui::PointerButton::Primary, pressed, modifiers: Default::default() };
+        for events in [vec![egui::Event::PointerMoved(at)], vec![button(true)], vec![button(false)], vec![]] {
+            frame(ctx, app, events);
+        }
+    }
 }
