@@ -762,6 +762,17 @@ errori passano già da stdout/stderr (`parser/jt.rs`), e ogni convertitore si ag
       all'origine (0,0,0) del veicolo. Prima una base comune (matrice di posizione per file/pezzo che valga per
       disegno, selezione, misure, sezione, ingombri, Annulla ed export), poi la finestra; la stessa base servirà alla
       rotazione sulle cerniere.
+      - [x] **Base** (2026-11-08, `scene_graph/placement.rs`): lo spostamento si applica a vertici mondo, normali,
+            matrice della Shape (l'export la usa per le normali del file) e ingombri, come la conversione delle unità;
+            ogni mesh ricorda la posizione accumulata (`SceneGraph::placements`) per «Ripristina» e per Annulla/Ripeti
+            (lo stato salvato tiene solo le posizioni diverse dall'identità; `swap_snapshot` applica la differenza).
+            `scale_file` coniuga le posizioni (S·P·S⁻¹). Azioni `Move { nodes, matrix }` (passi consecutivi = un solo
+            Annulla) e `ResetPosition`; `sync_moved_geometry` riporta gli spostamenti su GPU (`update_geometry`
+            riscrive in posto solo i vertici delle mesh mosse: buffer con `COPY_DST`) e negli originali della
+            riduzione. `rigid(t, angoli, perno)`: rotazioni X, poi Y, poi Z attorno al perno, poi spostamento.
+            Misura: scocca da 540 MB (2,1 M vertici) spostata tutta in 8–19 ms di scena, 100–135 ms con la GPU
+            (caricamento completo 200 ms). Se il trascinamento risultasse lento: matrice per mesh nello shader.
+      - [ ] **Finestra Posizione**
 - [ ] **Rotazione di un pezzo attorno a un asse** (es. baule sulle due cerniere), dopo la finestra Posizione: selezione dei pezzi da muovere, asse
       definito da due punti cliccati con aggancio ai vertici (come le Misure) — o centro di un foro/perno da tre punti
       sul bordo — oppure un punto + asse X/Y/Z; angolo con cursore e valore numerico, anteprima dal vivo, Annulla.

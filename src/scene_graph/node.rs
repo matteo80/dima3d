@@ -226,6 +226,11 @@ pub struct SceneGraph {
     /// Incrementato a ogni modifica di visibilità/struttura: il renderer
     /// risincronizza i propri flag solo quando cambia.
     pub revision: u64,
+    /// Posizione applicata a ogni mesh dopo il caricamento (vedi `placement.rs`), per mesh_id;
+    /// più corta delle mesh (anche vuota) = identità per le restanti
+    pub placements: Vec<glam::Mat4>,
+    /// Spostamenti non ancora riportati su GPU e negli originali della riduzione
+    pub moved: Vec<super::placement::Moved>,
 }
 
 impl SceneGraph {
@@ -416,6 +421,10 @@ impl SceneGraph {
         self.mesh_bboxes.append(&mut other.mesh_bboxes);
         self.sources.append(&mut other.sources);
         self.load_warnings.append(&mut other.load_warnings);
+        if !other.placements.is_empty() {
+            self.placements.resize(mesh_shift as usize, glam::Mat4::IDENTITY);
+            self.placements.append(&mut other.placements);
+        }
         self.revision += 1;
     }
 
@@ -443,6 +452,11 @@ impl SceneGraph {
         file.scale *= factor;
         let range = file.meshes.start as usize..file.meshes.end as usize;
         let scale = glam::Mat4::from_scale(glam::Vec3::splat(factor));
+        // Posizione nelle nuove unità: geometria nuova = S·P·base = (S·P·S⁻¹)·(S·base)
+        let inverse = scale.inverse();
+        for p in self.placements.iter_mut().skip(range.start).take(range.len()) {
+            *p = scale * *p * inverse;
+        }
         for s in &mut self.shapes_data[range.clone()] {
             for v in &mut s.world_vertices {
                 *v = (glam::Vec3::from(*v) * factor).into();
@@ -681,7 +695,8 @@ impl SceneGraph {
     }
 
     /// Copia dello stato modificabile (visibilità, struttura, nomi, colori) per Annulla/Ripeti.
-    /// La geometria (`shapes_data`, `mesh_bboxes`) non cambia mai e non viene copiata.
+    /// La geometria (`shapes_data`, `mesh_bboxes`) non viene copiata: degli spostamenti si salva
+    /// solo la posizione di ogni mesh, e `swap_snapshot` applica la differenza.
     pub fn snapshot(&self) -> EditSnapshot {
         EditSnapshot {
             nodes: self.nodes.clone(),
@@ -689,6 +704,7 @@ impl SceneGraph {
             roots: self.roots.clone(),
             mesh_to_node: self.mesh_to_node.clone(),
             macro_components: self.macro_components.clone(),
+            placements: self.moved_placements(),
         }
     }
 
@@ -699,6 +715,14 @@ impl SceneGraph {
         std::mem::swap(&mut self.roots, &mut s.roots);
         std::mem::swap(&mut self.mesh_to_node, &mut s.mesh_to_node);
         std::mem::swap(&mut self.macro_components, &mut s.macro_components);
+        // Posizioni: si riportano le mesh a quelle salvate, applicando la differenza
+        let current = self.moved_placements();
+        let wanted: std::collections::HashMap<u32, glam::Mat4> = s.placements.iter().copied().collect();
+        let mut meshes: Vec<u32> = current.iter().map(|(m, _)| *m).chain(wanted.keys().copied()).collect();
+        meshes.sort_unstable();
+        meshes.dedup();
+        self.set_placements(&meshes, |m| wanted.get(&m).copied().unwrap_or(glam::Mat4::IDENTITY));
+        s.placements = current;
         self.revision += 1;
         s
     }
@@ -1314,6 +1338,8 @@ pub struct EditSnapshot {
     roots: Vec<u32>,
     mesh_to_node: Vec<u32>,
     macro_components: Vec<MacroComponent>,
+    /// Mesh spostate e loro posizione (solo quelle diverse dall'identità)
+    placements: Vec<(u32, glam::Mat4)>,
 }
 
 impl EditSnapshot {
@@ -1330,6 +1356,7 @@ impl EditSnapshot {
         self.roots.extend(scene.roots.iter().filter(|&&r| r >= first_node));
         self.mesh_to_node.extend_from_slice(&scene.mesh_to_node[m..]);
         self.macro_components.extend_from_slice(&scene.macro_components[first_macro.min(scene.macro_components.len())..]);
+        self.placements.extend(scene.moved_placements().into_iter().filter(|(mesh, _)| *mesh >= first_mesh));
     }
 }
 

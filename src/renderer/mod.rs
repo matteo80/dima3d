@@ -545,6 +545,44 @@ impl WgpuRenderer {
         undrawn
     }
 
+    /// Riscrive sulla GPU i vertici delle mesh spostate (stessi vertici e indici di prima, solo
+    /// posizioni e normali nuove): niente nuovi buffer, si copiano solo i byte di quelle mesh.
+    pub fn update_geometry(&mut self, shapes: &[crate::parser::ShapeInfo], meshes: &[u32], queue: &wgpu::Queue) {
+        use rayon::prelude::*;
+        let jobs: Vec<(u32, mesh_buffer::MeshSlot)> = meshes
+            .iter()
+            .filter_map(|&m| {
+                let slot = *self.slots.get(m as usize)?;
+                let shape = shapes.get(m as usize)?;
+                (slot.index_count > 0 && slot.vertex_count as usize == shape.render_vertex_count()).then_some((m, slot))
+            })
+            .collect();
+        let written: Vec<(u32, mesh_buffer::MeshSlot, Vec<mesh_buffer::Vertex>, glam::Vec3)> = jobs
+            .into_par_iter()
+            .map(|(m, slot)| {
+                let shape = &shapes[m as usize];
+                let mut vertices = vec![bytemuck::Zeroable::zeroed(); slot.vertex_count as usize];
+                let mut indices = vec![0u32; slot.index_count as usize];
+                mesh_buffer::write_mesh(shape, m, slot.first_vertex, &mut vertices, &mut indices);
+                let mut bb = crate::scene_graph::Aabb::empty();
+                for &v in &shape.world_vertices {
+                    bb.extend_point(glam::Vec3::from(v));
+                }
+                (m, slot, vertices, if bb.is_valid() { bb.center() } else { glam::Vec3::ZERO })
+            })
+            .collect();
+        let stride = std::mem::size_of::<mesh_buffer::Vertex>() as u64;
+        for (m, slot, vertices, center) in written {
+            if let Some(chunk) = self.chunks.get(slot.chunk as usize) {
+                queue.write_buffer(&chunk.vertex_buffer, slot.first_vertex as u64 * stride, bytemuck::cast_slice(&vertices));
+            }
+            if let Some(c) = self.centers.get_mut(m as usize) {
+                *c = center;
+            }
+        }
+        self.frame_dirty = true;
+    }
+
     /// Allinea i flag di visibilità/selezione delle mesh GPU allo stato del SceneGraph.
     /// Lavoro O(nodi) eseguito solo quando cambia la revisione della scena o la selezione.
     pub fn sync_with_scene(&mut self, scene: &crate::scene_graph::SceneGraph, selection: &[u32]) {
@@ -1039,6 +1077,26 @@ mod bench {
         let _ = device.poll(wgpu::Maintain::Wait);
         println!("{} shape, caricamento su GPU: {:?}", scene.shapes_data.len(), t.elapsed());
 
+        // GESTORE_SPOSTA: misura lo spostamento di tutta la scena (scena + GPU), poi la riporta
+        if std::env::var_os("GESTORE_SPOSTA").is_some() {
+            let all: Vec<u32> = (0..scene.shapes_data.len() as u32).collect();
+            let vertices: usize = scene.shapes_data.iter().map(|s| s.world_vertices.len()).sum();
+            for round in 0..3 {
+                let m = crate::scene_graph::placement::rigid(glam::Vec3::new(1.0, 0.0, 0.0), glam::Vec3::new(0.0, 0.0, 1.0), glam::Vec3::ZERO);
+                let t = std::time::Instant::now();
+                scene.transform_meshes(&all, m);
+                let cpu = t.elapsed();
+                let moved = scene.take_moved();
+                r.update_geometry(&scene.shapes_data, &moved[0].meshes, &queue);
+                queue.submit([]);
+                let _ = device.poll(wgpu::Maintain::Wait);
+                println!("Spostamento {round}: {vertices} vertici, scena {cpu:?}, totale con GPU {:?}", t.elapsed());
+            }
+            scene.reset_placements(&all);
+            let moved = scene.take_moved();
+            r.update_geometry(&scene.shapes_data, &moved[0].meshes, &queue);
+        }
+
         let bbox = scene.compute_bounding_box();
         println!("Ingombro: {:?} → {:?}, diagonale {}", bbox.min, bbox.max, bbox.diagonal());
         for (i, s) in scene.sources.iter().enumerate() {
@@ -1236,6 +1294,61 @@ Shape { appearance Appearance { material Material { diffuseColor 0 0 1 } }
             assert_eq!(left == background, !keep_red, "rosso {left:?} con flip {flip}");
             assert_eq!(right == background, keep_red, "blu {right:?} con flip {flip}");
         }
+    }
+
+    /// Un pezzo spostato si ridisegna nella posizione nuova riscrivendo solo i suoi vertici.
+    #[test]
+    fn moved_piece_is_redrawn_in_place() {
+        let _gpu = gpu_lock();
+        let instance = wgpu::Instance::default();
+        let Some(adapter) =
+            pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions::default()))
+        else {
+            return;
+        };
+        let (device, queue) =
+            pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor::default(), None)).unwrap();
+        let two = br#"#VRML V2.0 utf8
+Shape { appearance Appearance { material Material { diffuseColor 1 0 0 } }
+  geometry IndexedFaceSet { coord Coordinate { point [ -3 -1 0, -1 -1 0, -2 1 0 ] } coordIndex [ 0, 1, 2, -1 ] } }
+Shape { appearance Appearance { material Material { diffuseColor 0 0 1 } }
+  geometry IndexedFaceSet { coord Coordinate { point [ 1 -1 0, 3 -1 0, 2 1 0 ] } coordIndex [ 0, 1, 2, -1 ] } }
+"#;
+        let format = wgpu::TextureFormat::Rgba8UnormSrgb;
+        let mut egui_renderer = eframe::egui_wgpu::Renderer::new(&device, format, None, 1, false);
+        let mut r = WgpuRenderer::new(&device, format);
+        let mut scene = crate::parser::parse_wrl(two);
+        scene.into_file("due.wrl".into(), None);
+        r.upload_meshes(&scene.shapes_data, &device);
+        let bbox = scene.compute_bounding_box();
+        r.camera.fit_to_bbox(&bbox);
+        r.camera.scene_bounds = Some(bbox);
+        r.camera.orientation = glam::Quat::IDENTITY;
+        r.sync_with_scene(&scene, &[]);
+        const SIZE: u32 = 256;
+        let mut shot = |r: &mut WgpuRenderer| {
+            r.render_frame(&device, &queue, &mut egui_renderer, SIZE, SIZE);
+            let pixels = read_pixels(r, &device, &queue);
+            let at = |p: glam::Vec3| {
+                let n = r.camera.view_proj().project_point3(p);
+                let x = ((n.x + 1.0) * 0.5 * SIZE as f32) as usize;
+                let y = ((1.0 - n.y) * 0.5 * SIZE as f32) as usize;
+                let o = (y * SIZE as usize + x) * 4;
+                [pixels[o], pixels[o + 1], pixels[o + 2]]
+            };
+            (at(glam::Vec3::new(-2.0, -0.3, 0.0)), at(glam::Vec3::new(2.0, -0.3, 0.0)))
+        };
+        let (left, right) = shot(&mut r);
+        assert!(left[0] > 120 && right[2] > 120, "{left:?} {right:?}");
+
+        // Il rosso va sopra il blu, un po' davanti: a sinistra resta lo sfondo
+        let red = 0u32; // prima Shape del file
+        scene.transform_meshes(&[red], glam::Mat4::from_translation(glam::Vec3::new(4.0, 0.0, 0.5)));
+        let moved = scene.take_moved();
+        r.update_geometry(&scene.shapes_data, &moved[0].meshes, &queue);
+        let (left, right) = shot(&mut r);
+        assert!(left[0] < 120 && left[2] < 120, "a sinistra non c'è più il rosso: {left:?}");
+        assert!(right[0] > 120 && right[2] < 60, "a destra il rosso copre il blu: {right:?}");
     }
 
     /// Disegno vero su scheda video con una scena piccola: colori, parti nascoste, selezione,

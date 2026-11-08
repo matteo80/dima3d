@@ -108,6 +108,17 @@ impl Reduction {
     }
 }
 
+impl Reduction {
+    /// Sposta anche gli originali messi da parte, come `SceneGraph::transform_meshes` con la scena.
+    pub fn transform(&mut self, meshes: &[u32], m: glam::Mat4) {
+        for &i in meshes {
+            if let Some(Some(s)) = self.stash.get_mut(i as usize) {
+                crate::scene_graph::placement::transform_shape(s, m);
+            }
+        }
+    }
+}
+
 /// Rimette nella scena gli originali messi da parte. Ritorna quanti pezzi ha ripristinato.
 fn restore(scene: &mut SceneGraph, stash: &mut [Option<ShapeInfo>]) -> usize {
     let mut n = 0;

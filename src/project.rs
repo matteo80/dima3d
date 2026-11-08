@@ -195,6 +195,8 @@ impl GestoreApp {
     }
 
     fn after_history_change(&mut self, what: &str) {
+        // Annulla/Ripeti possono riportare dei pezzi alla posizione precedente
+        self.sync_moved_geometry();
         let Some(scene) = &self.scene_graph else { return };
         // La selezione può puntare a un nodo eliminato
         self.ui_state
@@ -936,6 +938,46 @@ mod tests {
         app.ui_state.is_loading = false;
         app.undo();
         assert!(!app.scene_graph.as_ref().unwrap().info[node as usize].deleted);
+    }
+
+    /// Spostamento di un file: i passi consecutivi del cursore sono un solo Annulla, Ripeti e
+    /// Ripristina funzionano, e l'export (riaperto) ha la geometria nella posizione nuova.
+    #[test]
+    fn moving_a_file_undo_reset_and_export() {
+        use crate::scene_graph::node::multi_file_tests::two_files;
+        use glam::{Mat4, Vec3};
+        let mut app = GestoreApp::new_headless();
+        let scene = two_files();
+        app.project.on_loaded(scene.revision);
+        app.scene_graph = Some(scene);
+        let file_b = app.scene_graph.as_ref().unwrap().sources[1].node;
+        let start = app.scene_graph.as_ref().unwrap().shapes_data[2].world_vertices[0];
+        let step = Mat4::from_translation(Vec3::new(0.0, 0.0, 10.0));
+        for _ in 0..3 {
+            app.apply(Action::Move { nodes: vec![file_b], matrix: step });
+        }
+        let at = |app: &GestoreApp| app.scene_graph.as_ref().unwrap().shapes_data[2].world_vertices[0];
+        assert_eq!(at(&app), [start[0], start[1], start[2] + 30.0]);
+        assert_eq!(app.project.undo.len(), 1, "tre passi del cursore, un solo Annulla");
+        assert!(app.is_dirty());
+
+        app.undo();
+        assert_eq!(at(&app), start);
+        app.redo();
+        assert_eq!(at(&app), [start[0], start[1], start[2] + 30.0]);
+
+        // Export: riaperto, il pannello è 30 più in alto e l'altro file è dov'era
+        let path = std::env::temp_dir().join("gestore_spostato.wrl");
+        crate::exporter::writer::export_visible_wrl(app.scene_graph.as_ref().unwrap(), &path).unwrap();
+        let again = crate::parser::parse_wrl(&std::fs::read(&path).unwrap());
+        let bb = again.compute_bounding_box();
+        assert!((bb.max.z - (start[2] + 30.0)).abs() < 1e-3 && bb.min.z.abs() < 1e-3, "{bb:?}");
+
+        app.apply(Action::ResetPosition(vec![file_b]));
+        assert_eq!(at(&app), start);
+        assert_eq!(app.project.undo.len(), 2);
+        app.undo();
+        assert_eq!(at(&app), [start[0], start[1], start[2] + 30.0]);
     }
 
     #[test]

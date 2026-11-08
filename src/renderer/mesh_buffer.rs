@@ -184,7 +184,8 @@ pub fn build_chunks(
         let vertex_buffer = create(
             "mesh_vertices",
             size.vertices as u64 * std::mem::size_of::<Vertex>() as u64,
-            wgpu::BufferUsages::VERTEX,
+            // COPY_DST: i vertici dei pezzi spostati si riscrivono in posto
+            wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
         );
         let index_buffer = create(
             "mesh_indices",

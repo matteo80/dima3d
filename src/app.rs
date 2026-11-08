@@ -63,6 +63,12 @@ pub enum Action {
     ScaleFile(u32, f32),
     /// "Converti in mesh…" su un file STEP aperto (nodo radice del file).
     RemeshStep(u32),
+    /// Sposta/ruota i sotto-alberi dei nodi con una matrice in coordinate mondo
+    /// (vedi `scene_graph::placement`). Spostamenti consecutivi degli stessi nodi sono un solo
+    /// passo di Annulla.
+    Move { nodes: Vec<u32>, matrix: glam::Mat4 },
+    /// Riporta i sotto-alberi dei nodi alla posizione del caricamento.
+    ResetPosition(Vec<u32>),
 }
 
 impl Action {
@@ -231,6 +237,8 @@ impl GestoreApp {
         if action.is_edit() {
             let coalesce = match &action {
                 Action::SetColor(n, _) => Some(*n),
+                // Bit alto: chiave diversa da quella dei colori dello stesso nodo
+                Action::Move { nodes, .. } => nodes.first().map(|n| n | 0x8000_0000),
                 Action::Batch(list) => match list.first() {
                     Some(Action::SetColor(n, _)) => Some(*n),
                     _ => None,
@@ -240,6 +248,31 @@ impl GestoreApp {
             self.push_undo(coalesce);
         }
         self.apply_without_undo(action);
+        self.sync_moved_geometry();
+    }
+
+    /// Porta gli spostamenti della scena sulla GPU e negli originali della riduzione delle facce.
+    pub fn sync_moved_geometry(&mut self) {
+        let Some(scene) = &mut self.scene_graph else { return };
+        let moved = scene.take_moved();
+        if moved.is_empty() {
+            return;
+        }
+        let mut meshes: Vec<u32> = Vec::new();
+        for m in &moved {
+            self.project.reduction.transform(&m.meshes, m.matrix);
+            meshes.extend_from_slice(&m.meshes);
+        }
+        meshes.sort_unstable();
+        meshes.dedup();
+        // La stima della dimensione dei file non cambia, ma l'ingombro sì
+        if let (Some(renderer), Some(rs)) = (&mut self.renderer, &self.wgpu_render_state) {
+            renderer.update_geometry(&scene.shapes_data, &meshes, &rs.queue);
+            let all = scene.compute_bounding_box();
+            if all.is_valid() {
+                renderer.camera.scene_bounds = Some(all);
+            }
+        }
     }
 
     /// Inquadra l'unione dei sotto-alberi dati.
@@ -279,13 +312,33 @@ impl GestoreApp {
                 self.fit_nodes(nodes);
                 return;
             }
+            Action::Move { nodes, matrix } => {
+                if let Some(scene) = &mut self.scene_graph {
+                    let meshes = scene.meshes_of(nodes);
+                    scene.transform_meshes(&meshes, *matrix);
+                    self.ui_state.status_message = format!("Spostati {} pezzi", meshes.len());
+                }
+                return;
+            }
+            Action::ResetPosition(nodes) => {
+                if let Some(scene) = &mut self.scene_graph {
+                    let meshes = scene.meshes_of(nodes);
+                    scene.reset_placements(&meshes);
+                    self.ui_state.status_message = "Posizione ripristinata".to_string();
+                }
+                return;
+            }
             _ => {}
         }
         let Some(scene) = &mut self.scene_graph else {
             return;
         };
         match action {
-            Action::Batch(_) | Action::IsolateMany(_) | Action::FocusMany(_) => {}
+            Action::Batch(_)
+            | Action::IsolateMany(_)
+            | Action::FocusMany(_)
+            | Action::Move { .. }
+            | Action::ResetPosition(_) => {}
             Action::SelectMany { nodes, primary, anchor } => {
                 self.ui_state.status_message = format!("Selezionati: {} elementi", nodes.len());
                 self.ui_state.selected_node = Some(primary);
