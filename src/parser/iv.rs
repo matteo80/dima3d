@@ -199,7 +199,8 @@ impl<'a> Binary<'a> {
                 return Err(format!("campo «{name}» collegato a un engine: non supportato"));
             }
         }
-        if flags & 2 != 0 {
+        // I nodi VRML 2.0 di Coin sono gruppi, ma i figli stanno solo nel campo `children`
+        if flags & 2 != 0 && !class.starts_with("VRML") {
             let children = self.u32()?;
             for _ in 0..children {
                 self.node(depth + 1)?;
@@ -312,8 +313,54 @@ fn ascii_name(name: &str) -> Cow<'_, str> {
     }
 }
 
+/// Tipo dei campi dei nodi VRML 2.0 di Coin (`VRMLTransform`, `VRMLShape`...): quelli del
+/// VRML97, dove i campi dei materiali sono singoli e i figli sono un campo con dei nodi.
+fn vrml97_field_type(class: &str, field: &str) -> Option<&'static str> {
+    let specific = match (class, field) {
+        ("VRMLSwitch", "choice") | ("VRMLLOD", "level") => Some("MFNode"),
+        ("VRMLSwitch", "whichChoice") => Some("SFInt32"),
+        ("VRMLLOD", "range") => Some("MFFloat"),
+        ("VRMLColor", "color") => Some("MFColor"),
+        ("VRMLTextureCoordinate", "point") => Some("MFVec2f"),
+        ("VRMLTextureTransform", "center" | "scale" | "translation") => Some("SFVec2f"),
+        ("VRMLTextureTransform", "rotation") => Some("SFFloat"),
+        ("VRMLTransform", "scale") => Some("SFVec3f"),
+        ("VRMLBox", "size") => Some("SFVec3f"),
+        ("VRMLWorldInfo", "info") => Some("MFString"),
+        ("VRMLNavigationInfo", "type") => Some("MFString"),
+        ("VRMLNavigationInfo", "avatarSize") => Some("MFFloat"),
+        ("VRMLViewpoint" | "VRMLAnchor", "description") => Some("SFString"),
+        ("VRMLBackground", "groundColor" | "skyColor") => Some("MFColor"),
+        ("VRMLBackground", "groundAngle" | "skyAngle") => Some("MFFloat"),
+        ("VRMLIndexedFaceSet" | "VRMLIndexedLineSet" | "VRMLPointSet", "color") => Some("SFNode"),
+        ("VRMLIndexedFaceSet", "normal") => Some("SFNode"),
+        ("VRMLIndexedFaceSet", "texCoord") => Some("SFNode"),
+        _ => None,
+    };
+    specific.or(match field {
+        "children" | "addChildren" | "removeChildren" => Some("MFNode"),
+        "appearance" | "geometry" | "material" | "texture" | "textureTransform" | "coord" | "proxy" => Some("SFNode"),
+        "coordIndex" | "normalIndex" | "colorIndex" | "texCoordIndex" => Some("MFInt32"),
+        "ccw" | "convex" | "solid" | "colorPerVertex" | "normalPerVertex" | "collide" | "on" | "headlight"
+        | "jump" | "repeatS" | "repeatT" | "bottom" | "side" | "top" | "loop" | "global" => Some("SFBool"),
+        "translation" | "center" | "bboxCenter" | "bboxSize" | "axisOfRotation" | "position" | "direction"
+        | "location" | "attenuation" => Some("SFVec3f"),
+        "rotation" | "scaleOrientation" | "orientation" => Some("SFRotation"),
+        "ambientIntensity" | "shininess" | "transparency" | "creaseAngle" | "intensity" | "radius" | "height"
+        | "bottomRadius" | "speed" | "visibilityLimit" | "fieldOfView" | "beamWidth" | "cutOffAngle" => Some("SFFloat"),
+        "diffuseColor" | "specularColor" | "emissiveColor" | "color" => Some("SFColor"),
+        "point" | "vector" => Some("MFVec3f"),
+        "url" | "parameter" | "backUrl" | "bottomUrl" | "frontUrl" | "leftUrl" | "rightUrl" | "topUrl" => Some("MFString"),
+        "title" | "description" => Some("SFString"),
+        _ => None,
+    })
+}
+
 /// Tipo dei campi dei nodi standard di Open Inventor 2.1 / Coin.
 fn field_type(class: &str, field: &str) -> Option<&'static str> {
+    if class.starts_with("VRML") {
+        return vrml97_field_type(class, field);
+    }
     let specific = match (class, field) {
         ("Complexity", "value") => Some("SFFloat"),
         ("Complexity", "type") => Some("SFEnum"),
@@ -495,6 +542,124 @@ DEF Assieme Transform { translation 10 0 0 children [
     }
 
     /// File veri (non nel repository): `GESTORE_IV_DIR` = cartella con gli .iv.
+    /// IV binario come quelli del visualizzatore usato in azienda: un involucro Inventor con la
+    /// posa (`Translation`, `RotationXYZ`) e dentro la scena VRML 2.0 di Coin, con i figli nel
+    /// campo `children` e senza numero di figli dopo i campi.
+    #[test]
+    fn coin_vrml2_nodes_in_a_binary_file() {
+        let mut d = b"#Inventor V2.1 binary  \n".to_vec();
+        s(&mut d, "Separator");
+        u(&mut d, 2);
+        u(&mut d, 0);
+        u(&mut d, 3);
+        // Translation { translation 100 0 0 }
+        s(&mut d, "Translation");
+        u(&mut d, 0);
+        u(&mut d, 1);
+        s(&mut d, "translation");
+        [100.0, 0.0, 0.0].into_iter().for_each(|v| f(&mut d, v));
+        u(&mut d, 0);
+        // RotationXYZ {} (angolo 0)
+        s(&mut d, "RotationXYZ");
+        u(&mut d, 0);
+        u(&mut d, 0);
+        // VRMLNavigationInfo { type ["EXAMINE"] } : da ignorare
+        // VRMLTransform { children [ DEF Pezzo VRMLShape {...} ] translation 0 10 0 }
+        s(&mut d, "VRMLTransform");
+        u(&mut d, 2);
+        u(&mut d, 2);
+        s(&mut d, "children");
+        u(&mut d, 1);
+        s(&mut d, "DEF");
+        s(&mut d, "Pezzo");
+        s(&mut d, "VRMLShape");
+        u(&mut d, 0);
+        u(&mut d, 2);
+        s(&mut d, "appearance");
+        s(&mut d, "VRMLAppearance");
+        u(&mut d, 0);
+        u(&mut d, 1);
+        s(&mut d, "material");
+        s(&mut d, "VRMLMaterial");
+        u(&mut d, 0);
+        u(&mut d, 1);
+        s(&mut d, "diffuseColor");
+        [1.0, 0.0, 0.0].into_iter().for_each(|v| f(&mut d, v));
+        u(&mut d, 0); // flag di diffuseColor
+        u(&mut d, 0); // flag di material
+        u(&mut d, 0); // flag di appearance
+        s(&mut d, "geometry");
+        s(&mut d, "VRMLIndexedFaceSet");
+        u(&mut d, 0);
+        u(&mut d, 2);
+        s(&mut d, "coord");
+        s(&mut d, "VRMLCoordinate");
+        u(&mut d, 0);
+        u(&mut d, 1);
+        s(&mut d, "point");
+        u(&mut d, 3);
+        [0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0, 0.0].into_iter().for_each(|v| f(&mut d, v));
+        u(&mut d, 0); // flag di point
+        u(&mut d, 0); // flag di coord
+        s(&mut d, "coordIndex");
+        u(&mut d, 4);
+        [0, 1, 2, u32::MAX].into_iter().for_each(|v| u(&mut d, v));
+        u(&mut d, 0); // flag di coordIndex
+        u(&mut d, 0); // flag di geometry
+        u(&mut d, 0); // flag di children
+        s(&mut d, "translation");
+        [0.0, 10.0, 0.0].into_iter().for_each(|v| f(&mut d, v));
+        u(&mut d, 0);
+
+        let (_, warnings) = ascii(&d);
+        assert!(warnings.is_empty(), "{warnings:?}");
+        let scene = crate::parser::parse_wrl(&d);
+        assert!(scene.load_warnings.is_empty(), "{:?}", scene.load_warnings);
+        assert_eq!(scene.shapes_data.len(), 1);
+        let shape = &scene.shapes_data[0];
+        assert_eq!(shape.world_vertices[1], [101.0, 10.0, 0.0], "posa Inventor + Transform VRML");
+        assert_eq!(shape.color, Some([1.0, 0.0, 0.0, 1.0]));
+        assert!((0..scene.nodes.len() as u32).any(|n| scene.display_name(n) == "Pezzo"));
+    }
+
+    /// IV di testo con `VRMLMaterial` come materiale e i vertici nel `VertexProperty`.
+    #[test]
+    fn vertex_property_and_vrml_material_in_text() {
+        let text = br#"#Inventor V2.1 ascii
+Separator {
+  Translation { translation 0 0 5 }
+  VRMLMaterial { diffuseColor 0 0 1 transparency 0.5 }
+  ShapeHints { vertexOrdering COUNTERCLOCKWISE creaseAngle 0.5 }
+  DEF Lamiera IndexedFaceSet {
+    vertexProperty VertexProperty {
+      vertex [ 0 0 0, 2 0 0, 0 2 0 ]
+      normal [ 0 0 1, 0 0 1, 0 0 1 ]
+      normalBinding PER_VERTEX_INDEXED
+    }
+    coordIndex [ 0, 1, 2, -1 ]
+  }
+}
+"#;
+        let scene = crate::parser::parse_wrl(text);
+        assert!(scene.load_warnings.is_empty(), "{:?}", scene.load_warnings);
+        assert_eq!(scene.shapes_data.len(), 1);
+        let shape = &scene.shapes_data[0];
+        assert_eq!(shape.world_vertices[1], [2.0, 0.0, 5.0]);
+        assert_eq!(shape.color, Some([0.0, 0.0, 1.0, 0.5]));
+        assert!(shape.normals.iter().all(|n| n[2] > 0.99), "{:?}", shape.normals);
+    }
+
+    #[test]
+    #[ignore]
+    fn iv_testo() {
+        // GESTORE_IV_FILE=binario.iv GESTORE_IV_OUT=testo.iv: salva la traduzione in testo
+        let src = std::env::var("GESTORE_IV_FILE").expect("GESTORE_IV_FILE");
+        let data = std::fs::read(src).unwrap();
+        let (text, warnings) = ascii(&data);
+        std::fs::write(std::env::var("GESTORE_IV_OUT").expect("GESTORE_IV_OUT"), &text).unwrap();
+        println!("{} byte, avvisi {warnings:?}", text.len());
+    }
+
     #[test]
     #[ignore]
     fn iv_reali() {
@@ -509,7 +674,8 @@ DEF Assieme Transform { translation 10 0 0 children [
             let scene = crate::parser::parse_wrl(&data);
             let tris: usize = scene.shapes_data.iter().map(|s| s.indices.len() / 3).sum();
             println!(
-                "{:.1} MB: {} pezzi, {tris} triangoli, {:?}, avvisi {:?}",
+                "{}: {:.1} MB: {} pezzi, {tris} triangoli, {:?}, avvisi {:?}",
+                p.file_name().unwrap().to_string_lossy(),
                 data.len() as f64 / 1e6,
                 scene.shapes_data.len(),
                 t.elapsed(),

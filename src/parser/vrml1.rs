@@ -50,6 +50,49 @@ pub(crate) fn convert(data: &[u8]) -> Converted {
     Converted { text: conv.out, warnings }
 }
 
+/// Nodi VRML 2.0 di Coin che formano la scena: si passano al lettore VRML 2.0 così come sono.
+/// Gli altri nodi `VRML*` (`VRMLWorldInfo`, `VRMLViewpoint`, `VRMLBackground`...) non hanno
+/// geometria e si ignorano.
+fn is_vrml2_subtree(ty: &str) -> bool {
+    matches!(
+        ty,
+        "VRMLTransform" | "VRMLGroup" | "VRMLShape" | "VRMLCollision" | "VRMLSwitch" | "VRMLLOD" | "VRMLAnchor"
+            | "VRMLBillboard"
+    )
+}
+
+/// Testo VRML 2.0 dai nomi dei nodi di Coin: `VRMLTransform` → `Transform`, ... (solo le parole
+/// che cominciano con `VRML` seguito da una maiuscola, fuori dalle stringhe).
+fn rename_vrml2(text: &[u8]) -> Vec<u8> {
+    let mut out = Vec::with_capacity(text.len());
+    let mut i = 0;
+    let mut in_string = false;
+    while i < text.len() {
+        let b = text[i];
+        if in_string {
+            out.push(b);
+            if b == b'\\' && i + 1 < text.len() {
+                out.push(text[i + 1]);
+                i += 2;
+                continue;
+            }
+            in_string = b != b'"';
+            i += 1;
+            continue;
+        }
+        let word_start = i == 0 || !(text[i - 1].is_ascii_alphanumeric() || text[i - 1] == b'_');
+        if b == b'"' {
+            in_string = true;
+        } else if word_start && text[i..].starts_with(b"VRML") && text.get(i + 4).is_some_and(|c| c.is_ascii_uppercase()) {
+            i += 4;
+            continue;
+        }
+        out.push(b);
+        i += 1;
+    }
+    out
+}
+
 /// Contenuto ignorato durante la conversione.
 #[derive(Default)]
 struct Counts {
@@ -339,6 +382,11 @@ impl<'a> Conv<'a> {
         let fields = |conv: &Self| conv.fields(item);
         match item.ty {
             "USE" => match self.resolve(item) {
+                // Un nodo VRML 2.0 resta un `USE`, che il lettore VRML 2.0 sa risolvere
+                Some(target) if is_vrml2_subtree(target.ty) => {
+                    let text = format!("USE {}", item.name.unwrap_or_default());
+                    self.vrml2(text.as_bytes(), state);
+                }
                 // Il nodo viene rivisitato con lo stato corrente, che può essere diverso da quello
                 // del `DEF`. Il nome resta: l'istanza compare nell'albero come l'originale.
                 Some(target) => self.visit(target, state, depth + 1),
@@ -359,7 +407,8 @@ impl<'a> Conv<'a> {
             }
             "LOD" => self.lod(item, state, depth),
             "Switch" => self.switch(item, state, depth),
-            "Material" => {
+            // VRMLMaterial (Coin) in una scena Inventor: vale come materiale, con i campi singoli
+            "Material" | "VRMLMaterial" => {
                 let f = fields(self);
                 let diffuse = self.numbers(&f, "diffuseColor").unwrap_or_default();
                 state.material = Some(Material {
@@ -428,7 +477,15 @@ impl<'a> Conv<'a> {
                     state.matrix *= glam::Mat4::from_cols_array(&m);
                 }
             }
-            "IndexedFaceSet" => self.face_set(item, state, None),
+            "IndexedFaceSet" => {
+                let local = self.with_vertex_property(item, state);
+                self.face_set(item, &local, None);
+            }
+            // Sotto-albero VRML 2.0 dentro una scena Inventor (Coin): passa al lettore VRML 2.0
+            ty if is_vrml2_subtree(ty) => {
+                let text = rename_vrml2(&self.data[item.pos..=item.close]);
+                self.vrml2(&text, state);
+            }
             // Nodi solo Open Inventor
             "BaseColor" => {
                 let f = fields(self);
@@ -466,7 +523,8 @@ impl<'a> Conv<'a> {
                 let f = fields(self);
                 let index = self.numbers_i32(&f, "coordIndex");
                 let faces = strips_to_faces(index.split(|&i| i < 0));
-                self.face_set(item, state, Some(faces));
+                let local = self.with_vertex_property(item, state);
+                self.face_set(item, &local, Some(faces));
             }
             "TriangleStripSet" | "FaceSet" => {
                 let f = fields(self);
@@ -502,6 +560,51 @@ impl<'a> Conv<'a> {
             // Info, luci, camere, texture...: senza effetto sulla geometria
             _ => {}
         }
+    }
+
+    /// Inventor 2.1: vertici e normali di una superficie possono stare nel suo campo
+    /// `vertexProperty` (un nodo `VertexProperty`) invece che nello stato.
+    fn with_vertex_property(&mut self, item: Item<'a>, state: &State<'a>) -> State<'a> {
+        let mut local = *state;
+        let fields = self.fields(item);
+        let Some(&(_, start, end)) = fields.iter().find(|f| f.0 == "vertexProperty") else { return local };
+        let Some(mut vp) = self.items(start, end).into_iter().next() else { return local };
+        if vp.ty == "USE" {
+            match self.resolve(vp) {
+                Some(target) => vp = target,
+                None => return local,
+            }
+        }
+        let f = self.fields(vp);
+        if let Some(&(_, s, e)) = f.iter().find(|x| x.0 == "vertex") {
+            local.coords = Some(self.inner(s, e));
+        }
+        if let Some(&(_, s, e)) = f.iter().find(|x| x.0 == "normal") {
+            local.normals = Some(self.inner(s, e));
+            local.normal_binding = self.word(&f, "normalBinding").unwrap_or("PER_VERTEX_INDEXED");
+        }
+        local
+    }
+
+    /// Scrive un pezzo di VRML 2.0 così com'è, dentro un `Transform` con la posizione accumulata
+    /// dai nodi Inventor che lo precedono.
+    fn vrml2(&mut self, text: &[u8], state: &State<'a>) {
+        if state.matrix == glam::Mat4::IDENTITY {
+            self.out.extend_from_slice(text);
+            self.out.push(b'\n');
+        } else {
+            let (scale, rotation, translation) = state.matrix.to_scale_rotation_translation();
+            let (axis, angle) = rotation.to_axis_angle();
+            let _ = write!(
+                self.out,
+                "Transform {{ translation {} {} {} rotation {} {} {} {} scale {} {} {} children [\n",
+                translation.x, translation.y, translation.z, axis.x, axis.y, axis.z, angle, scale.x, scale.y, scale.z
+            );
+            self.out.extend_from_slice(text);
+            self.out.extend_from_slice(b"\n] }\n");
+        }
+        // Il contenitore con nome che lo contiene va tenuto
+        self.shapes += 1;
     }
 
     fn resolve(&mut self, item: Item<'a>) -> Option<Item<'a>> {
