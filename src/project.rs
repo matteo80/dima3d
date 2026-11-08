@@ -248,7 +248,7 @@ impl GestoreApp {
 
     /// Finestra di scelta di uno o più file da aggiungere alla scena.
     pub fn add_dialog(&mut self) {
-        let mut dialog = rfd::FileDialog::new().add_filter("Modelli 3D (WRL, JT, STL, HSF)", &["wrl", "WRL", "vrml", "jt", "JT", "stl", "STL", "hsf", "HSF"]);
+        let mut dialog = rfd::FileDialog::new().add_filter("Modelli 3D (WRL, JT, STL, HSF, IV)", &["wrl", "WRL", "vrml", "jt", "JT", "stl", "STL", "hsf", "HSF", "iv", "IV"]);
         if let Some(dir) = self.settings.recent.first().and_then(|p| p.parent()) {
             dialog = dialog.set_directory(dir);
         }
@@ -332,7 +332,7 @@ impl GestoreApp {
 
     /// Apre la finestra di scelta file.
     pub fn open_dialog(&mut self) {
-        let mut dialog = rfd::FileDialog::new().add_filter("Modelli 3D (WRL, JT, STL, HSF)", &["wrl", "WRL", "vrml", "jt", "JT", "stl", "STL", "hsf", "HSF"]);
+        let mut dialog = rfd::FileDialog::new().add_filter("Modelli 3D (WRL, JT, STL, HSF, IV)", &["wrl", "WRL", "vrml", "jt", "JT", "stl", "STL", "hsf", "HSF", "iv", "IV"]);
         if let Some(dir) = self.settings.recent.first().and_then(|p| p.parent()) {
             dialog = dialog.set_directory(dir);
         }

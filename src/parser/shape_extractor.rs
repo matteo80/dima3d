@@ -210,6 +210,14 @@ where
     let converted = if crate::parser::vrml1::is_vrml1(data) {
         progress_fn(0.0, "Conversione da VRML 1.0...".to_string());
         crate::parser::vrml1::convert(data)
+    } else if crate::parser::iv::is_inventor(data) {
+        // Il testo Inventor è quasi VRML 1.0; il binario viene prima tradotto in testo
+        progress_fn(0.0, "Lettura Open Inventor...".to_string());
+        let (text, mut warnings) = crate::parser::iv::ascii(data);
+        let mut converted = crate::parser::vrml1::convert(&text);
+        warnings.append(&mut converted.warnings);
+        converted.warnings = warnings;
+        converted
     } else if crate::parser::hsf::is_hsf(data) {
         progress_fn(0.0, "Lettura HSF...".to_string());
         let (shapes, warnings) = crate::parser::hsf::shapes(data);

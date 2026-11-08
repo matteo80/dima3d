@@ -279,6 +279,13 @@ impl<'a> Conv<'a> {
         fields
     }
 
+    fn numbers_i32(&self, fields: &[(&'a str, usize, usize)], name: &str) -> Vec<i32> {
+        match fields.iter().find(|f| f.0 == name) {
+            Some(&(_, start, end)) => lexer::scan_numbers_i32(self.data, start, end),
+            None => Vec::new(),
+        }
+    }
+
     fn numbers(&self, fields: &[(&'a str, usize, usize)], name: &str) -> Option<Vec<f32>> {
         let &(_, start, end) = fields.iter().find(|f| f.0 == name)?;
         Some(lexer::scan_numbers_f32(self.data, start, end))
@@ -421,9 +428,75 @@ impl<'a> Conv<'a> {
                     state.matrix *= glam::Mat4::from_cols_array(&m);
                 }
             }
-            "IndexedFaceSet" => self.face_set(item, state),
-            "IndexedLineSet" | "PointSet" => self.counts.lines += 1,
-            "Cube" | "Sphere" | "Cone" | "Cylinder" | "AsciiText" | "WWWInline" => {
+            "IndexedFaceSet" => self.face_set(item, state, None),
+            // Nodi solo Open Inventor
+            "BaseColor" => {
+                let f = fields(self);
+                let rgb = self.numbers(&f, "rgb").unwrap_or_default();
+                let mut m = state.material.unwrap_or(Material {
+                    diffuse: [0.8; 3],
+                    emissive: [0.0; 3],
+                    specular: [0.0; 3],
+                    shininess: 0.2,
+                    transparency: 0.0,
+                    multi_color: false,
+                });
+                if let [r, g, b, ..] = rgb[..] {
+                    m.diffuse = [r, g, b];
+                }
+                m.multi_color = rgb.len() > 3;
+                state.material = Some(m);
+            }
+            "RotationXYZ" => {
+                let f = fields(self);
+                let axis = match self.word(&f, "axis") {
+                    Some("Y") => glam::Vec3::Y,
+                    Some("Z") => glam::Vec3::Z,
+                    _ => glam::Vec3::X,
+                };
+                state.matrix *= glam::Mat4::from_axis_angle(axis, self.scalar(&f, "angle", 0.0));
+            }
+            "ResetTransform" => {
+                let f = fields(self);
+                if self.word(&f, "whatToReset").is_none_or(|w| w.contains("TRANSFORM")) {
+                    state.matrix = glam::Mat4::IDENTITY;
+                }
+            }
+            "IndexedTriangleStripSet" => {
+                let f = fields(self);
+                let index = self.numbers_i32(&f, "coordIndex");
+                let faces = strips_to_faces(index.split(|&i| i < 0));
+                self.face_set(item, state, Some(faces));
+            }
+            "TriangleStripSet" | "FaceSet" => {
+                let f = fields(self);
+                let Some((start, end)) = state.coords else {
+                    self.counts.broken += 1;
+                    return;
+                };
+                let vertices = (lexer::scan_numbers_f32(self.data, start, end).len() / 3) as i32;
+                let mut next = self.scalar(&f, "startIndex", 0.0) as i32;
+                let mut groups: Vec<Vec<i32>> = Vec::new();
+                let mut counts = self.numbers_i32(&f, "numVertices");
+                if counts.is_empty() {
+                    counts.push(-1);
+                }
+                for n in counts {
+                    // -1: tutti i vertici rimasti
+                    let n = if n < 0 { vertices - next } else { n };
+                    groups.push((next..(next + n).min(vertices)).collect());
+                    next += n;
+                }
+                let faces = if item.ty == "FaceSet" {
+                    groups.iter().flat_map(|g| g.iter().copied().chain([-1])).collect()
+                } else {
+                    strips_to_faces(groups.iter().map(Vec::as_slice))
+                };
+                self.face_set(item, state, Some(faces));
+            }
+            "IndexedLineSet" | "PointSet" | "LineSet" => self.counts.lines += 1,
+            "Cube" | "Sphere" | "Cone" | "Cylinder" | "AsciiText" | "WWWInline" | "Text2" | "Text3"
+            | "NurbsSurface" | "IndexedNurbsSurface" => {
                 self.counts.unsupported += 1;
             }
             // Info, luci, camere, texture...: senza effetto sulla geometria
@@ -520,20 +593,28 @@ impl<'a> Conv<'a> {
         });
     }
 
-    fn face_set(&mut self, item: Item<'a>, state: &State<'a>) {
+    /// Superficie con le facce di `coordIndex` o, per le strisce e i nodi senza indici di
+    /// Inventor, con quelle già costruite (`built`: le normali le ricalcola il parser).
+    fn face_set(&mut self, item: Item<'a>, state: &State<'a>, built: Option<Vec<i32>>) {
         let fields = self.fields(item);
         let Some((coord_start, coord_end)) = state.coords else {
             self.counts.broken += 1;
             return;
         };
-        let Some(&(_, index_start, index_end)) = fields.iter().find(|f| f.0 == "coordIndex") else {
-            self.counts.broken += 1;
-            return;
-        };
+        let text_index = fields.iter().find(|f| f.0 == "coordIndex").map(|&(_, s, e)| (s, e));
         let data = self.data;
+        let verbatim = built.is_none();
+        let indices = match (built, text_index) {
+            (Some(faces), _) => faces,
+            (None, Some((s, e))) => lexer::scan_numbers_i32(data, s, e),
+            (None, None) => {
+                self.counts.broken += 1;
+                return;
+            }
+        };
+        let (index_start, index_end) = text_index.unwrap_or((0, 0));
         let points = lexer::scan_numbers_f32(data, coord_start, coord_end);
         let vertices = points.len() / 3;
-        let indices = lexer::scan_numbers_i32(data, index_start, index_end);
 
         // Un `Coordinate3` può servire più superfici. Ogni superficie tiene solo i suoi vertici,
         // altrimenti il suo ingombro sarebbe quello di tutte le altre.
@@ -620,6 +701,7 @@ impl<'a> Conv<'a> {
             .map(|&(_, s, e)| self.inner(s, e))
             .filter(|&(s, e)| lexer::scan_numbers_i32(data, s, e).iter().any(|&i| i != -1));
         let binding = match state.normal_binding {
+            _ if !verbatim => None,
             "DEFAULT" | "PER_VERTEX_INDEXED" => Some((true, normal_index)),
             "PER_FACE_INDEXED" => Some((false, normal_index)),
             "PER_FACE" => Some((false, None)),
@@ -674,7 +756,7 @@ impl<'a> Conv<'a> {
         }
 
         self.out.extend_from_slice(b"coordIndex [\n");
-        if all_used {
+        if all_used && verbatim {
             let (start, end) = self.inner(index_start, index_end);
             self.out.extend_from_slice(&data[start..end]);
         } else {
@@ -689,6 +771,24 @@ impl<'a> Conv<'a> {
         self.out.extend_from_slice(b"\n] }\n}\n");
         self.shapes += 1;
     }
+}
+
+/// Triangoli delle strisce (`v0 v1 v2`, `v2 v1 v3`, ... con il verso alternato), con -1 dopo
+/// ognuno; i triangoli degeneri sono scartati.
+fn strips_to_faces<'s>(strips: impl Iterator<Item = &'s [i32]>) -> Vec<i32> {
+    let mut faces = Vec::new();
+    for strip in strips {
+        for (k, w) in strip.windows(3).enumerate() {
+            let [a, b, c] = [w[0], w[1], w[2]];
+            if a == b || b == c || a == c {
+                continue;
+            }
+            let t = if k % 2 == 0 { [a, b, c] } else { [b, a, c] };
+            faces.extend_from_slice(&t);
+            faces.push(-1);
+        }
+    }
+    faces
 }
 
 #[cfg(test)]
