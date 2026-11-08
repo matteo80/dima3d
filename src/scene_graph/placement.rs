@@ -43,7 +43,134 @@ pub fn rigid(t: Vec3, angles_deg: Vec3, pivot: Vec3) -> Mat4 {
     Mat4::from_translation(t + pivot) * r * Mat4::from_translation(-pivot)
 }
 
+/// Posizione e orientamento come nei `CONST BASE` e nella finestra del visualizzatore usato in
+/// azienda: X Y Z e angoli A B C in gradi, rotazioni ad assi fissi prima attorno a X (A), poi a Y
+/// (B), poi a Z (C): R = Rz(C)·Ry(B)·Rx(A), la convenzione "xyz" di scipy degli script di calcolo
+/// degli offset.
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+pub struct Pose {
+    pub xyz: Vec3,
+    pub abc: Vec3,
+}
+
+impl Pose {
+    pub fn matrix(&self) -> Mat4 {
+        rigid(self.xyz, self.abc, Vec3::ZERO)
+    }
+
+    /// Posa di una matrice (l'eventuale scala viene ignorata).
+    pub fn from_matrix(m: Mat4) -> Pose {
+        let (_, rotation, translation) = m.to_scale_rotation_translation();
+        Pose { xyz: translation, abc: euler_abc(Mat3::from_quat(rotation)) }
+    }
+
+    /// Scostamento di `dest` nel sistema locale di `self` (come BaseOffsetCalculator): la posa da
+    /// applicare, in coordinate dell'oggetto, a un oggetto in `self` per portarlo in `dest`.
+    pub fn offset_to(&self, dest: &Pose) -> Pose {
+        Pose::from_matrix(self.matrix().inverse() * dest.matrix())
+    }
+
+    /// Valori arrotondati ai millesimi, come li scrivono gli script: "X Y Z A B C".
+    pub fn to_text(&self) -> String {
+        let v = [self.xyz.x, self.xyz.y, self.xyz.z, self.abc.x, self.abc.y, self.abc.z];
+        v.iter().map(|x| format!("{:.3}", x + 0.0)).collect::<Vec<_>>().join(" ")
+    }
+}
+
+/// Angoli A, B, C (gradi) di una rotazione R = Rz(C)·Ry(B)·Rx(A).
+pub fn euler_abc(r: Mat3) -> Vec3 {
+    // r.col(j).k = elemento (riga k, colonna j)
+    let (r00, r10, r20) = (r.x_axis.x, r.x_axis.y, r.x_axis.z);
+    let (r01, r11) = (r.y_axis.x, r.y_axis.y);
+    let (r21, r22) = (r.y_axis.z, r.z_axis.z);
+    // atan2 invece di asin: preciso anche vicino a B = ±90°
+    let b = (-r20).atan2((r00 * r00 + r10 * r10).sqrt());
+    let (a, c) = if (r00 * r00 + r10 * r10).sqrt() > 1e-6 {
+        (r21.atan2(r22), r10.atan2(r00))
+    } else {
+        // B = ±90°: solo A ± C è definito, come scipy si mette A = 0
+        (0.0, (-r01).atan2(r11))
+    };
+    Vec3::new(a.to_degrees(), b.to_degrees(), c.to_degrees())
+}
+
+/// Numeri del testo, nell'ordine (accetta anche la virgola decimale: "12,5").
+fn numbers(text: &str) -> Vec<f32> {
+    text.split(|c: char| !(c.is_ascii_digit() || matches!(c, '.' | ',' | '+' | '-' | 'e' | 'E')))
+        .filter_map(|t| {
+            let t = if t.contains('.') { t.to_string() } else { t.replace(',', ".") };
+            t.parse::<f32>().ok()
+        })
+        .collect()
+}
+
+/// `CONST BASE NOME = X Y Z A B C` → (nome, posa).
+pub fn parse_const_base(text: &str) -> Option<(String, Pose)> {
+    let upper = text.to_ascii_uppercase();
+    let at = upper.find("BASE")?;
+    let rest = &text[at + 4..];
+    let (name, values) = rest.split_once('=')?;
+    let v = numbers(values);
+    (v.len() >= 6).then(|| {
+        (name.trim().to_string(), Pose { xyz: Vec3::new(v[0], v[1], v[2]), abc: Vec3::new(v[3], v[4], v[5]) })
+    })
+}
+
+/// Offset incollato: righe "X  +12.000 mm" … "C  -0.500°" (risultato degli script), oppure sei
+/// numeri X Y Z A B C.
+pub fn parse_offset(text: &str) -> Option<Pose> {
+    let mut found = [None; 6];
+    for line in text.lines() {
+        let t = line.trim_start();
+        let Some(first) = t.chars().next() else { continue };
+        let Some(k) = "XYZABC".find(first.to_ascii_uppercase()) else { continue };
+        let after = &t[first.len_utf8()..];
+        if !after.starts_with([' ', '\t', '=', ':']) {
+            continue;
+        }
+        if let Some(&v) = numbers(after).first() {
+            found[k] = Some(v);
+        }
+    }
+    let v: Vec<f32> = if found.iter().all(Option::is_some) {
+        found.iter().map(|v| v.unwrap()).collect()
+    } else {
+        numbers(text)
+    };
+    (v.len() == 6).then(|| Pose { xyz: Vec3::new(v[0], v[1], v[2]), abc: Vec3::new(v[3], v[4], v[5]) })
+}
+
 impl SceneGraph {
+    /// Coordinate dell'oggetto di un nodo, nello stato attuale: il sistema dei `Transform` del
+    /// file (scendendo lungo una catena di contenitori singoli, come lo script compone i
+    /// Transform dal padre al figlio), con la conversione delle unità e gli spostamenti fatti nel
+    /// Gestore. Senza Transform è l'origine (coordinate della cabina).
+    pub fn object_frame(&self, node: u32) -> Mat4 {
+        let mut n = node as usize;
+        loop {
+            match self.nodes.get(n) {
+                Some(SceneNode::Shape { mesh_id, .. }) => {
+                    return self.shapes_data.get(*mesh_id as usize).map_or(Mat4::IDENTITY, |s| s.matrix);
+                }
+                Some(SceneNode::Group { children, .. } | SceneNode::Transform { children, .. })
+                    if children.len() == 1
+                        && !matches!(self.nodes.get(children[0] as usize), Some(SceneNode::Shape { .. }) | None) =>
+                {
+                    n = children[0] as usize;
+                }
+                _ => break,
+            }
+        }
+        let base = self.frames.get(n).copied().unwrap_or(Mat4::IDENTITY);
+        let mut first = None;
+        self.for_each_subtree_mesh(n as u32, |m| {
+            first.get_or_insert(m);
+        });
+        let Some(m) = first else { return base };
+        let scale = self.source_index(m).map_or(1.0, |i| self.sources[i].scale);
+        self.placement(m) * Mat4::from_scale(Vec3::splat(scale)) * base
+    }
+
     /// Posizione accumulata di una mesh (identità se non è mai stata spostata).
     pub fn placement(&self, mesh: u32) -> Mat4 {
         self.placements.get(mesh as usize).copied().unwrap_or(Mat4::IDENTITY)
@@ -296,5 +423,97 @@ mod tests {
         for (a, b) in scene.shapes_data[2].world_vertices.iter().zip(&original) {
             assert!(close(*a, (Vec3::from(*b) * 0.001).into()), "{a:?}");
         }
+    }
+
+    fn close_pose(p: &Pose, xyz: [f32; 3], abc: [f32; 3], tol: f32) -> bool {
+        (p.xyz - Vec3::from(xyz)).abs().max_element() < tol && (p.abc - Vec3::from(abc)).abs().max_element() < tol
+    }
+
+    /// Lo scostamento tra due CONST BASE è quello di BaseOffsetCalculator (valori calcolati con
+    /// le stesse formule, scipy "xyz", su un esempio).
+    #[test]
+    fn base_offset_matches_the_script() {
+        let (name_o, o) = parse_const_base("CONST BASE BASE_A = 150 2500 -1200 0.5 -20 -85").unwrap();
+        let (name_d, d) = parse_const_base("const base BASE_B = 180 3100 40 1.2 -12.5 -91").unwrap();
+        assert_eq!((name_o.as_str(), name_d.as_str()), ("BASE_A", "BASE_B"));
+        let off = o.offset_to(&d);
+        assert!(close_pose(&off, [-135.1081, 94.1207, 1367.9865], [-1.3675, 7.3426, -5.9709], 2e-3), "{off:?}");
+        // Applicato all'origine, l'offset riporta alla destinazione
+        let back = Pose::from_matrix(o.matrix() * off.matrix());
+        assert!(close_pose(&back, [180.0, 3100.0, 40.0], [1.2, -12.5, -91.0], 2e-3), "{back:?}");
+        assert!(parse_const_base("BASE senza valori = 1 2").is_none());
+    }
+
+    #[test]
+    fn angles_survive_a_round_trip() {
+        for abc in [[10.0, -35.0, 120.0], [0.0, 0.0, 0.0], [-170.0, 80.0, 45.0], [0.287, -22.743, -89.71]] {
+            let p = Pose { xyz: Vec3::new(1.0, 2.0, 3.0), abc: Vec3::from(abc) };
+            let q = Pose::from_matrix(p.matrix());
+            assert!(close_pose(&q, [1.0, 2.0, 3.0], abc, 1e-3), "{abc:?} → {q:?}");
+        }
+        // B = 90°: si ottiene una rotazione uguale, con A = 0
+        let p = Pose { xyz: Vec3::ZERO, abc: Vec3::new(20.0, 90.0, 50.0) };
+        let q = Pose::from_matrix(p.matrix());
+        assert!(q.matrix().abs_diff_eq(p.matrix(), 1e-4) && q.abc.x == 0.0, "{q:?}");
+    }
+
+    /// Il risultato copiato dagli script si incolla così com'è; vanno bene anche sei numeri.
+    #[test]
+    fn pasted_offsets_are_read() {
+        let script = "BASE_A  ->  BASE_B\n\nPOSIZIONE\nX     -135.108 mm\nY      +94.121 mm\nZ    +1367.987 mm\n\n\
+                      ORIENTAMENTO\nA       -1.368°\nB       +7.343°\nC       -5.971°";
+        let p = parse_offset(script).unwrap();
+        assert!(close_pose(&p, [-135.108, 94.121, 1367.987], [-1.368, 7.343, -5.971], 1e-4), "{p:?}");
+        let p = parse_offset("10 -20,5 30 1 2 3").unwrap();
+        assert!(close_pose(&p, [10.0, -20.5, 30.0], [1.0, 2.0, 3.0], 1e-6), "{p:?}");
+        assert!(parse_offset("1 2 3").is_none());
+        assert_eq!(Pose { xyz: Vec3::new(1.0, -0.0004, 2.5), abc: Vec3::ZERO }.to_text(), "1.000 -0.000 2.500 0.000 0.000 0.000");
+    }
+
+    /// Due oggetti nello stesso WRL con i loro Transform (come in WRLOffsetCalculator): le
+    /// coordinate dell'oggetto sono i Transform composti; l'offset tra i due, applicato in
+    /// coordinate dell'oggetto alla copia del primo in un'altra matematica uguale, la porta
+    /// esattamente nella posizione del secondo.
+    #[test]
+    fn object_coordinates_and_the_skid_offset() {
+        const SKID: &[u8] = br#"#VRML V2.0 utf8
+DEF Riferimento Group { children [
+  Transform { translation 100 200 300 rotation 0 0 1 1.5707963 children [
+    Transform { translation 10 0 0 children [
+      Shape { geometry IndexedFaceSet { coord Coordinate { point [ 0 0 0, 50 0 0, 0 50 0 ] } coordIndex [ 0 1 2 -1 ] } }
+    ] } ] } ] }
+DEF Destinazione Group { children [
+  Transform { translation 400 -50 20 rotation 1 0 0 0.3 children [
+    Shape { geometry IndexedFaceSet { coord Coordinate { point [ 0 0 0, 50 0 0, 0 50 0 ] } coordIndex [ 0 1 2 -1 ] } }
+  ] } ] }
+"#;
+        let mut scene = crate::scene_graph::node::multi_file_tests::file(SKID, "skid.wrl");
+        let reference = node(&scene, "Riferimento");
+        let destination = node(&scene, "Destinazione");
+        let f_ref = Pose::from_matrix(scene.object_frame(reference));
+        // Transform composti: (100,200,300) + Rz(90°)·(10,0,0) = (100,210,300), C = 90°
+        assert!(close_pose(&f_ref, [100.0, 210.0, 300.0], [0.0, 0.0, 90.0], 1e-3), "{f_ref:?}");
+        let f_dest = Pose::from_matrix(scene.object_frame(destination));
+        assert!(close_pose(&f_dest, [400.0, -50.0, 20.0], [0.3f32.to_degrees(), 0.0, 0.0], 1e-3), "{f_dest:?}");
+        let offset = f_ref.offset_to(&f_dest);
+
+        // Seconda matematica uguale: la copia del riferimento va dove sta la destinazione
+        scene.append(crate::scene_graph::node::multi_file_tests::file(SKID, "copia.wrl"));
+        let copy = (0..scene.nodes.len() as u32).filter(|&n| scene.display_name(n) == "Riferimento").last().unwrap();
+        assert_ne!(copy, reference);
+        let frame = scene.object_frame(copy);
+        let meshes = scene.meshes_of(&[copy]);
+        scene.transform_meshes(&meshes, frame * offset.matrix() * frame.inverse());
+        let moved = Pose::from_matrix(scene.object_frame(copy));
+        assert!(close_pose(&moved, f_dest.xyz.into(), f_dest.abc.into(), 2e-3), "{moved:?} invece di {f_dest:?}");
+        // I vertici coincidono con quelli della destinazione (stessa geometria nel suo sistema)
+        let dest_mesh = scene.meshes_of(&[destination])[0] as usize;
+        for (a, b) in scene.shapes_data[meshes[0] as usize].world_vertices.iter().zip(&scene.shapes_data[dest_mesh].world_vertices) {
+            assert!(close(*a, *b) || (Vec3::from(*a) - Vec3::from(*b)).length() < 1e-2, "{a:?} {b:?}");
+        }
+        // In metri convertiti in mm le coordinate seguono la scala
+        scene.scale_file(1, 1000.0);
+        let scaled = Pose::from_matrix(scene.object_frame(copy));
+        assert!(close_pose(&scaled, (f_dest.xyz * 1000.0).into(), f_dest.abc.into(), 2.0), "{scaled:?}");
     }
 }

@@ -1,5 +1,6 @@
 pub mod color_menu;
 pub mod measure;
+pub mod position_panel;
 pub mod progress;
 pub mod properties;
 pub mod reduce_panel;
@@ -59,6 +60,8 @@ pub struct UiState {
     pub drag: Option<viewport::DragState>,
     /// Punto usato dall'ultimo scatto di rotella, riutilizzabile finché nulla si muove
     pub zoom_anchor: Option<viewport::ZoomAnchor>,
+    /// Finestra «Posizione»
+    pub position: position_panel::PositionPanel,
 }
 
 /// Un file aggiunto sembra scritto in altre unità rispetto alla scena.
@@ -93,6 +96,7 @@ impl Default for UiState {
             section: None,
             drag: None,
             zoom_anchor: None,
+            position: Default::default(),
         }
     }
 }

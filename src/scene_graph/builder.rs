@@ -55,6 +55,8 @@ pub struct BuiltNode {
     pub children: Vec<u32>,
     /// Indice del padre, `NO_PARENT` per le radici
     pub parent: u32,
+    /// Sistema di coordinate dei figli (vedi `PathSeg::frame`)
+    pub frame: glam::Mat4,
 }
 
 pub const NO_PARENT: u32 = u32::MAX;
@@ -70,6 +72,7 @@ pub struct BuiltTree {
 struct TNode {
     name: Option<String>,
     kind: BuiltKind,
+    frame: glam::Mat4,
     children: Vec<TNode>,
     /// key (offset sorgente) → posizione nel vettore `children`
     index: HashMap<usize, usize>,
@@ -77,10 +80,16 @@ struct TNode {
 
 impl TNode {
     fn container(name: Option<String>, kind: BuiltKind) -> Self {
-        Self { name, kind, children: Vec::new(), index: HashMap::new() }
+        Self { name, kind, frame: glam::Mat4::IDENTITY, children: Vec::new(), index: HashMap::new() }
     }
     fn shape(name: Option<String>, mesh_id: u32) -> Self {
-        Self { name, kind: BuiltKind::Shape { mesh_id }, children: Vec::new(), index: HashMap::new() }
+        Self {
+            name,
+            kind: BuiltKind::Shape { mesh_id },
+            frame: glam::Mat4::IDENTITY,
+            children: Vec::new(),
+            index: HashMap::new(),
+        }
     }
 }
 
@@ -101,7 +110,9 @@ where
             let pos = match cur.index.get(&seg.key) {
                 Some(&p) => p,
                 None => {
-                    cur.children.push(TNode::container(seg.name.clone(), seg.kind.into()));
+                    let mut node = TNode::container(seg.name.clone(), seg.kind.into());
+                    node.frame = seg.frame;
+                    cur.children.push(node);
                     let p = cur.children.len() - 1;
                     cur.index.insert(seg.key, p);
                     p
@@ -167,6 +178,8 @@ fn simplify(node: &mut TNode) {
         };
         node.name = name;
         node.kind = kind;
+        // La catena unita ha il sistema del contenitore più interno (Transform composti)
+        node.frame = only.frame;
         node.children = std::mem::take(&mut only.children);
         node.index.clear();
     }
@@ -254,6 +267,7 @@ where
         }
         *counter += 1;
         let mut cluster = TNode::container(Some(format!("Componente {}", *counter)), BuiltKind::Cluster);
+        cluster.frame = node.frame;
         for m in g {
             if let Some(s) = shapes_by_mesh.remove(&m) {
                 cluster.children.push(s);
@@ -269,6 +283,7 @@ where
     }
     if singles.len() >= SINGLETON_WRAP_MIN {
         let mut wrap = TNode::container(Some("Pezzi singoli".to_string()), BuiltKind::Singles);
+        wrap.frame = node.frame;
         wrap.children = singles;
         new_children.push(wrap);
     } else {
@@ -280,7 +295,7 @@ where
 
 fn flatten(node: TNode, parent: u32, out: &mut Vec<BuiltNode>) -> u32 {
     let idx = out.len() as u32;
-    out.push(BuiltNode { name: node.name, kind: node.kind, children: Vec::new(), parent });
+    out.push(BuiltNode { name: node.name, kind: node.kind, children: Vec::new(), parent, frame: node.frame });
     let mut child_ids = Vec::with_capacity(node.children.len());
     for c in node.children {
         child_ids.push(flatten(c, idx, out));
@@ -294,7 +309,7 @@ mod tests {
     use super::*;
 
     fn seg(key: usize, name: Option<&str>, kind: ContainerKind) -> PathSeg {
-        PathSeg { key, name: name.map(str::to_string), kind }
+        PathSeg { key, name: name.map(str::to_string), kind, frame: glam::Mat4::IDENTITY }
     }
 
     fn no_cluster(ids: &[u32]) -> Vec<Vec<u32>> {

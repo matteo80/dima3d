@@ -992,7 +992,7 @@ impl<'a> Reader<'a> {
             while let Some(c) = cur {
                 if c != 0 {
                     if let Some(name) = self.display_name(c) {
-                        chain.push(PathSeg { key: c, name: Some(name), kind: ContainerKind::Group });
+                        chain.push(PathSeg { key: c, name: Some(name), kind: ContainerKind::Group, frame: Mat4::IDENTITY });
                     }
                 }
                 cur = self.segments[c].parent;

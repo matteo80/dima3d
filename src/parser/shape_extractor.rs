@@ -70,6 +70,8 @@ pub struct ShapeDef {
     pub shapes: Vec<LocalShape>,
     /// Transform/Group/...: un `USE` diventa un nodo "istanza" nell'albero
     pub container: bool,
+    /// Matrice locale del contenitore (identità per Group e Shape): sistema dei figli di un `USE`
+    pub matrix: glam::Mat4,
 }
 
 /// Registro delle definizioni DEF/USE all'interno di un file WRL. Lo stesso nome può essere
@@ -386,7 +388,7 @@ fn register_container(
         &mut local_shapes,
     );
     let shapes = local_shapes.into_iter().map(to_local).collect();
-    defs.add_shape_def(name, ShapeDef { pos: open, shapes, container: true });
+    defs.add_shape_def(name, ShapeDef { pos: open, shapes, container: true, matrix });
 }
 
 /// Esegue una veloce scansione lineare di tutti i token DEF nel file WRL,
@@ -471,7 +473,12 @@ fn pre_scan_all_defs(
                         });
                         defs.add_shape_def(
                             def_name,
-                            ShapeDef { pos: b_pos, shapes: local.into_iter().collect(), container: false },
+                            ShapeDef {
+                                pos: b_pos,
+                                shapes: local.into_iter().collect(),
+                                container: false,
+                                matrix: glam::Mat4::IDENTITY,
+                            },
                         );
                     }
                     pos = close + 1;
@@ -676,6 +683,7 @@ fn extract_shapes_recursive(
                                     key: block_open,
                                     name: Some(def_name.to_string()),
                                     kind: ContainerKind::Transform,
+                                    frame: world_matrix,
                                 },
                             );
 
@@ -722,6 +730,7 @@ fn extract_shapes_recursive(
                                     key: block_open,
                                     name: Some(def_name.to_string()),
                                     kind: ContainerKind::Group,
+                                    frame: parent_matrix,
                                 },
                             );
 
@@ -769,6 +778,7 @@ fn extract_shapes_recursive(
                                             pos: shape_start,
                                             shapes: vec![local_shape],
                                             container: false,
+                                            matrix: glam::Mat4::IDENTITY,
                                         },
                                     );
                                 }
@@ -805,13 +815,15 @@ fn extract_shapes_recursive(
                         key: pos,
                         name: Some(name.to_string()),
                         kind: ContainerKind::Use,
+                        frame: parent_matrix * def.matrix,
                     });
                     for t in &def.shapes {
                         let mut path = Vec::with_capacity(t.path.len() + 1);
                         if let Some(seg) = &use_seg {
                             path.push(seg.clone());
                         }
-                        path.extend(t.path.iter().cloned());
+                        // I sistemi dei contenitori del template sono relativi a dove è definito
+                        path.extend(t.path.iter().map(|s| PathSeg { frame: parent_matrix * s.frame, ..s.clone() }));
                         // Vertici e normali del template hanno già applicato `local_matrix`:
                         // resta solo la matrice corrente. `combined_matrix` è quella che porta
                         // dalle coordinate scritte nel file al mondo.
@@ -895,7 +907,7 @@ fn extract_shapes_recursive(
                         );
                         prefix_path(
                             &mut results[prev_len..],
-                            &PathSeg { key: block_open, name: None, kind: ContainerKind::Transform },
+                            &PathSeg { key: block_open, name: None, kind: ContainerKind::Transform, frame: world_matrix },
                         );
                         pos = block_close + 1;
                     } else {
@@ -925,7 +937,7 @@ fn extract_shapes_recursive(
                         );
                         prefix_path(
                             &mut results[prev_len..],
-                            &PathSeg { key: block_open, name: None, kind: ContainerKind::Group },
+                            &PathSeg { key: block_open, name: None, kind: ContainerKind::Group, frame: parent_matrix },
                         );
                         pos = block_close + 1;
                     } else {

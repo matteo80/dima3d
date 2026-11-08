@@ -772,7 +772,20 @@ errori passano già da stdout/stderr (`parser/jt.rs`), e ogni convertitore si ag
             riduzione. `rigid(t, angoli, perno)`: rotazioni X, poi Y, poi Z attorno al perno, poi spostamento.
             Misura: scocca da 540 MB (2,1 M vertici) spostata tutta in 8–19 ms di scena, 100–135 ms con la GPU
             (caricamento completo 200 ms). Se il trascinamento risultasse lento: matrice per mesh nello shader.
-      - [ ] **Finestra Posizione**
+      - [x] **Finestra Posizione** (2026-11-08, `ui/position_panel.rs`, pulsante «Posizione» nella barra): oggetto
+            (un file, o «Pezzi selezionati», che diventa l'oggetto quando la selezione cambia), coordinate
+            dell'oggetto X Y Z A B C (copiabili), pulsanti X Y Z A B C, cursore con frecce e valore, «Unità» (passo),
+            «Modifica in coordinate World», «Ripristina»; «Applica offset» (campi, o il testo degli script incollato
+            con Ctrl+V); «Calcola offset» tra due oggetti della scena (come WRLOffsetCalculator) o tra due
+            `CONST BASE` (come BaseOffsetCalculator). Precisazione dell'utente: World spento = assi e centro
+            dell'oggetto (le coordinate dei suoi `Transform`, uguali per tutti i suoi pezzi), acceso = cabina; serve
+            per calcolare in cabina l'offset tra due oggetti e applicarlo alla seconda copia di una matematica (skid).
+            Coordinate dell'oggetto: il lettore WRL registra per ogni contenitore il sistema dei figli
+            (`PathSeg::frame`, anche per i `USE`), il builder tiene il più interno di una catena unita e la scena lo
+            conserva (`SceneGraph::frames`); `object_frame` scende lungo i contenitori singoli (come lo script compone
+            i Transform) e aggiunge unità e spostamenti. Angoli: R = Rz(C)·Ry(B)·Rx(A), «xyz» di scipy; verificato
+            su un esempio di due BASE, con valori calcolati indipendentemente. Valori in
+            mm (unità della scena). Da provare dall'utente sulla stazione.
 - [ ] **Rotazione di un pezzo attorno a un asse** (es. baule sulle due cerniere), dopo la finestra Posizione: selezione dei pezzi da muovere, asse
       definito da due punti cliccati con aggancio ai vertici (come le Misure) — o centro di un foro/perno da tre punti
       sul bordo — oppure un punto + asse X/Y/Z; angolo con cursore e valore numerico, anteprima dal vivo, Annulla.

@@ -105,6 +105,15 @@ Toglie triangoli dove non servono (come MeshLab), con anteprima e dimensione pre
     if reduce.clicked() {
         app.project.reduction.panel.open = !reduce_open;
     }
+    let position_open = app.ui_state.position.open;
+    let position_text = icon_text(ui, icon::ARROWS_OUT_CARDINAL, if compact { "" } else { "Posizione" });
+    let position = ui
+        .add_enabled(has_scene && !loading, egui::Button::new(position_text).selected(position_open))
+        .on_hover_text("Posizione
+Sposta e ruota un file o i pezzi selezionati (X Y Z, A B C), applica e calcola gli offset");
+    if position.clicked() {
+        app.ui_state.position.open = !position_open;
+    }
     if tool(ui, has_scene && !loading, compact, icon::X, "Chiudi", "Chiude tutti i file aperti (chiede conferma se ci sono modifiche non esportate). Per chiuderne uno solo: tasto destro sul file nell'albero") {
         app.request_close();
     }

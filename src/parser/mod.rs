@@ -110,7 +110,7 @@ pub enum ContainerKind {
 }
 
 /// Un livello della gerarchia di contenitori di una Shape.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct PathSeg {
     /// Chiave univoca tra fratelli: offset byte della `{` del contenitore
     /// (o del token `USE` per le istanze).
@@ -118,4 +118,7 @@ pub struct PathSeg {
     /// Nome DEF del contenitore, se presente
     pub name: Option<String>,
     pub kind: ContainerKind,
+    /// Sistema di coordinate in cui stanno i figli del contenitore (matrice mondo accumulata
+    /// dei `Transform`, compreso il suo): le "coordinate dell'oggetto"
+    pub frame: glam::Mat4,
 }

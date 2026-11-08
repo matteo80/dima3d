@@ -231,6 +231,9 @@ pub struct SceneGraph {
     pub placements: Vec<glam::Mat4>,
     /// Spostamenti non ancora riportati su GPU e negli originali della riduzione
     pub moved: Vec<super::placement::Moved>,
+    /// Sistema di coordinate di ogni nodo al caricamento, in unità del file (vedi
+    /// `PathSeg::frame`), allineato a `nodes`; più corto = identità
+    pub frames: Vec<glam::Mat4>,
 }
 
 impl SceneGraph {
@@ -251,6 +254,7 @@ impl SceneGraph {
         scene.info.reserve(tree.nodes.len());
         scene.mesh_to_node = vec![NO_PARENT; shapes_data.len()];
 
+        scene.frames = tree.nodes.iter().map(|b| b.frame).collect();
         for (idx, b) in tree.nodes.into_iter().enumerate() {
             let (node, kind) = match b.kind {
                 BuiltKind::Shape { mesh_id } => {
@@ -364,6 +368,9 @@ impl SceneGraph {
             0,
             SceneNode::Group { name: Some(name.clone()), children, visible: true, selected: false },
         );
+        if !self.frames.is_empty() {
+            self.frames.insert(0, glam::Mat4::IDENTITY);
+        }
         self.info.insert(
             0,
             NodeInfo { parent: NO_PARENT, kind: NodeKind::File, shape_count, deleted: false, color: None },
@@ -413,6 +420,10 @@ impl SceneGraph {
             s.meshes = s.meshes.start + mesh_shift..s.meshes.end + mesh_shift;
         }
         self.roots.extend(other.roots.iter().map(|r| r + node_shift));
+        if !other.frames.is_empty() {
+            self.frames.resize(node_shift as usize, glam::Mat4::IDENTITY);
+            self.frames.append(&mut other.frames);
+        }
         self.nodes.append(&mut other.nodes);
         self.info.append(&mut other.info);
         self.mesh_to_node.append(&mut other.mesh_to_node);
