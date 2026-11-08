@@ -433,6 +433,11 @@ fn draw_row(ui: &mut egui::Ui, ctx: &mut RowCtx, node_idx: u32, depth: u16) {
         if has_children {
             ui.label(egui::RichText::new(format!("({})", info.shape_count)).small().weak());
         }
+        if info.kind == NodeKind::File {
+            if let Some(step) = scene.sources.iter().find(|s| s.node == node_idx).and_then(|s| s.step) {
+                ui.label(egui::RichText::new(format!("STEP · {}", step.describe())).small().weak());
+            }
+        }
 
         if resp.clicked() {
             let modifiers = ui.input(|i| i.modifiers);
@@ -516,6 +521,12 @@ fn draw_row(ui: &mut egui::Ui, ctx: &mut RowCtx, node_idx: u32, depth: u16) {
                 if ui.button(icon_text(ui, icon::EXPORT, "Esporta questo file…")).clicked() {
                     actions.push(Action::ExportNode(node_idx));
                     ui.close_menu();
+                }
+                if scene.sources.iter().any(|s| s.node == node_idx && s.step.is_some()) {
+                    if ui.button(icon_text(ui, icon::CUBE, "Converti in mesh…")).clicked() {
+                        actions.push(Action::RemeshStep(node_idx));
+                        ui.close_menu();
+                    }
                 }
                 ui.menu_button(icon_text(ui, icon::RULER, "Unità di misura"), |ui| {
                     let scale = scene.sources.iter().find(|s| s.node == node_idx).map_or(1.0, |s| s.scale);

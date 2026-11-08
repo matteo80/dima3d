@@ -61,6 +61,8 @@ pub enum Action {
     /// Scala la geometria del file con questo nodo radice (es. 0.001 da millimetri a metri).
     /// Non entra in Annulla: si torna indietro con la scala inversa.
     ScaleFile(u32, f32),
+    /// "Converti in mesh…" su un file STEP aperto (nodo radice del file).
+    RemeshStep(u32),
 }
 
 impl Action {
@@ -81,6 +83,7 @@ impl Action {
                 | Action::Straighten
                 | Action::ExportNode(_)
                 | Action::ScaleFile(..)
+                | Action::RemeshStep(_)
                 | Action::ReloadFiles
                 | Action::SaveColor(_)
                 | Action::ForgetColor(_)
@@ -175,7 +178,9 @@ impl GestoreApp {
         self.ui_state.status_message = format!("Apertura: {}", path.display());
         self.load_rx = Some(rx);
 
-        if let Some(kind) = parser::external::Kind::of(&path, self.settings.step) {
+        let step = self.project.step_choice.unwrap_or(crate::settings::StepLoad::Mesh(self.settings.step));
+        self.project.loading_step = parser::external::is_step(&path).then_some(step);
+        if let Some(kind) = parser::external::Kind::of(&path, step.mesh()) {
             parser::external::convert_and_load(path, kind, self.settings.cluster, tx);
         } else {
             parser::load_wrl_async_with(path, self.settings.cluster, tx);
@@ -194,6 +199,10 @@ impl GestoreApp {
         }
         if action == Action::ReloadFiles {
             self.request_reload();
+            return;
+        }
+        if let Action::RemeshStep(n) = action {
+            self.ask_remesh_step(n);
             return;
         }
         if let Action::ScaleFile(n, factor) = action {
@@ -372,6 +381,7 @@ impl GestoreApp {
             Action::StartRename(_)
             | Action::ExportNode(_)
             | Action::ScaleFile(..)
+            | Action::RemeshStep(_)
             | Action::ReloadFiles
             | Action::SaveColor(_)
             | Action::ForgetColor(_) => {}
@@ -657,7 +667,10 @@ impl eframe::App for GestoreApp {
         // Polling non bloccante degli eventi di caricamento dal worker thread
         if let Some(rx) = &self.load_rx {
             let mut finished = false;
-            while let Ok(event) = rx.try_recv() {
+            while let Ok(mut event) = rx.try_recv() {
+                if let LoadEvent::Finished(scene) = &mut event {
+                    self.project.mark_loaded_step(scene);
+                }
                 match event {
                     LoadEvent::Started { path, file_size_bytes } => {
                         let mb = file_size_bytes as f64 / (1024.0 * 1024.0);

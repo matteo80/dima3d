@@ -492,7 +492,7 @@ fn draw_empty_state(ui: &egui::Ui, rect: egui::Rect, background: [f32; 3], dragg
         egui::FontId::proportional(56.0),
         color,
     );
-    let title = if dragging_file { "Rilascia per aprire il file" } else { "Trascina qui un file WRL o JT" };
+    let title = if dragging_file { "Rilascia per aprire il file" } else { "Trascina qui un file 3D" };
     painter.text(
         center + egui::vec2(0.0, 18.0),
         egui::Align2::CENTER_CENTER,
@@ -501,7 +501,14 @@ fn draw_empty_state(ui: &egui::Ui, rect: egui::Rect, background: [f32; 3], dragg
         color,
     );
     painter.text(
-        center + egui::vec2(0.0, 44.0),
+        center + egui::vec2(0.0, 42.0),
+        egui::Align2::CENTER_CENTER,
+        "WRL, STEP, JT, STL, HSF, IV",
+        egui::FontId::proportional(13.5),
+        color,
+    );
+    painter.text(
+        center + egui::vec2(0.0, 64.0),
         egui::Align2::CENTER_CENTER,
         "oppure premi Ctrl+O",
         egui::FontId::proportional(13.5),

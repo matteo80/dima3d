@@ -177,6 +177,8 @@ pub struct SourceFile {
     /// Il formato dichiara le sue unità e il lettore le ha già portate in millimetri (HSF): non
     /// serve indovinarle dalle dimensioni
     pub units_mm: bool,
+    /// File STEP: come è stato tassellato (per "Converti in mesh…" dall'albero)
+    pub step: Option<crate::settings::StepLoad>,
 }
 
 /// Informazioni accessorie, allineate 1:1 con `SceneGraph::nodes`.
@@ -370,6 +372,7 @@ impl SceneGraph {
             node: 0,
             scale: 1.0,
             units_mm: self.units_mm,
+            step: None,
         }];
         self.revision += 1;
     }

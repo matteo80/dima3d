@@ -37,7 +37,7 @@ pub fn draw_toolbar(ui: &mut egui::Ui, app: &mut crate::app::GestoreApp) {
     let mut action: Option<Action> = None;
 
     // ── File ──────────────────────────────────────────────────────────────────
-    if tool(ui, !loading, compact, icon::FOLDER_OPEN, "Apri", "Apri un file WRL (puoi anche trascinarlo sulla finestra)  [Ctrl+O]") {
+    if tool(ui, !loading, compact, icon::FOLDER_OPEN, "Apri", "Apri un file WRL, STEP, JT, STL, HSF o IV (puoi anche trascinarlo sulla finestra)  [Ctrl+O]") {
         app.open_dialog();
     }
     let recent = app.settings.recent.clone();
@@ -62,7 +62,7 @@ pub fn draw_toolbar(ui: &mut egui::Ui, app: &mut crate::app::GestoreApp) {
     if let Some(p) = open_path {
         app.request_open(p);
     }
-    if tool(ui, has_scene && !loading, compact, icon::FILE_PLUS, "Aggiungi", "Aggiunge uno o più file WRL alla scena aperta (anche trascinandoli sulla finestra)") {
+    if tool(ui, has_scene && !loading, compact, icon::FILE_PLUS, "Aggiungi", "Aggiunge uno o più file (WRL, STEP, JT, STL, HSF, IV) alla scena aperta, anche trascinandoli sulla finestra") {
         app.add_dialog();
     }
     if tool(ui, has_scene, compact, icon::EXPORT, "Esporta", "Salva solo le parti visibili in un nuovo file WRL, STL o IV  [Ctrl+S]") {

@@ -748,7 +748,21 @@ errori passano già da stdout/stderr (`parser/jt.rs`), e ogni convertitore si ag
 - [ ] **STEP, export**: dalla mesh si può scrivere solo geometria a facce piane (B-rep "sfaccettato" o tassellato
       AP242), non superfici CAD vere; utile per scambio/visualizzazione, non per riprogettare. Da confermare se serve
       così.
-- [ ] **Rotazione di un pezzo attorno a un asse** (es. baule sulle due cerniere): selezione dei pezzi da muovere, asse
+- [x] **STEP: visualizza o converti** (2026-11-08, richiesta dell'utente dopo la prova su uno STEP da 250 MB): la
+      finestra all'apertura ha «Visualizza STEP» (mesh veloce 0,5 mm / 30°, `StepMesh::VIEW`, senza toccare le
+      tolleranze salvate) e «Converti in mesh» (tolleranze scelte). Il file ricorda come è stato tassellato
+      (`SourceFile::step`, mostrato nell'albero accanto al nome) ed è dichiarato in mm. Dal menu del file
+      «Converti in mesh…» lo rilegge dallo STEP originale: il file vecchio si chiude (torna con Annulla) e la nuova
+      conversione si aggiunge; se è l'unico file sostituisce la scena. Da misurare: quanto fa risparmiare
+      «Visualizza» sui file grandi (lettura e trasferimento dello STEP non cambiano con la tolleranza).
+- [ ] **Posizione dei file e dei pezzi, come la finestra «Edita e salva la scocca» del visualizzatore usato in azienda** (richiesta
+      2026-11-08): spostamento X/Y/Z e rotazione A/B/C (attorno agli assi X/Y/Z) con cursore, valore e passo
+      («Unità»), «Modifica in coordinate World», «Ripristina». Decisioni dell'utente: si spostano sia un file intero
+      (scelto da un elenco, come «Scocche caricate») sia i pezzi selezionati nell'albero; le rotazioni sono attorno
+      all'origine (0,0,0) del veicolo. Prima una base comune (matrice di posizione per file/pezzo che valga per
+      disegno, selezione, misure, sezione, ingombri, Annulla ed export), poi la finestra; la stessa base servirà alla
+      rotazione sulle cerniere.
+- [ ] **Rotazione di un pezzo attorno a un asse** (es. baule sulle due cerniere), dopo la finestra Posizione: selezione dei pezzi da muovere, asse
       definito da due punti cliccati con aggancio ai vertici (come le Misure) — o centro di un foro/perno da tre punti
       sul bordo — oppure un punto + asse X/Y/Z; angolo con cursore e valore numerico, anteprima dal vivo, Annulla.
       In seguito anche la traslazione. Nell'export il pezzo esce nella posizione ruotata (`Transform` attorno ai suoi

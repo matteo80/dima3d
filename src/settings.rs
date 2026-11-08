@@ -39,6 +39,40 @@ impl Default for StepMesh {
     }
 }
 
+impl StepMesh {
+    /// Tassellazione veloce di "Visualizza STEP": per guardare il file, non per esportarlo
+    pub const VIEW: StepMesh = StepMesh { deviation: 0.5, angle: 30.0, relative: false };
+}
+
+/// Come è stato aperto uno STEP: mesh veloce di sola visualizzazione, oppure convertito in mesh
+/// con le tolleranze scelte.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum StepLoad {
+    View,
+    Mesh(StepMesh),
+}
+
+impl StepLoad {
+    /// Tolleranze passate al convertitore.
+    pub fn mesh(self) -> StepMesh {
+        match self {
+            StepLoad::View => StepMesh::VIEW,
+            StepLoad::Mesh(m) => m,
+        }
+    }
+
+    /// Descrizione breve per l'albero: "visualizzazione" o "mesh 0.1 mm · 30°".
+    pub fn describe(self) -> String {
+        match self {
+            StepLoad::View => "visualizzazione".to_string(),
+            StepLoad::Mesh(m) => {
+                let unit = if m.relative { " rel." } else { " mm" };
+                format!("mesh {}{unit} · {}°", m.deviation, m.angle)
+            }
+        }
+    }
+}
+
 /// Limiti della deviazione di superficie (mm, o frazione se relativa) e di quella angolare (°).
 pub const STEP_DEVIATION_RANGE: std::ops::RangeInclusive<f32> = 0.001..=100.0;
 pub const STEP_ANGLE_RANGE: std::ops::RangeInclusive<f32> = 1.0..=90.0;

@@ -49,6 +49,8 @@ pub struct StepPrompt {
 pub enum StepRequest {
     Open(PathBuf),
     Add(Vec<PathBuf>),
+    /// Nuova tassellazione di uno STEP già aperto (nodo radice del file)
+    Remesh(u32),
 }
 
 #[derive(Default)]
@@ -72,6 +74,11 @@ pub struct ProjectState {
     pub pending: Option<Pending>,
     /// Finestra delle opzioni di mesh aperta per degli STEP
     pub step_prompt: Option<StepPrompt>,
+    /// Scelta dell'ultima finestra STEP, usata per gli STEP in apertura e in coda
+    /// (None: conversione con le tolleranze delle impostazioni, es. riga di comando o Ricarica)
+    pub step_choice: Option<crate::settings::StepLoad>,
+    /// Come si sta caricando lo STEP in corso, da segnare nel suo file della scena
+    pub loading_step: Option<crate::settings::StepLoad>,
     /// Uscita confermata: non intercettare più la chiusura della finestra
     pub allow_exit: bool,
     /// Riduzione delle facce: pannello, calcolo in corso, originali dei pezzi ridotti
@@ -89,6 +96,15 @@ impl ProjectState {
         self.redo.clear();
         self.last_coalesce = None;
         self.reduction.forget_geometry();
+    }
+
+    /// STEP appena letto: il file ricorda come è stato tassellato (per "Converti in mesh…") e
+    /// dichiara le unità, perché il convertitore scrive sempre in millimetri.
+    pub fn mark_loaded_step(&mut self, scene: &mut crate::scene_graph::SceneGraph) {
+        if let (Some(step), Some(file)) = (self.loading_step.take(), scene.sources.first_mut()) {
+            file.step = Some(step);
+            file.units_mm = true;
+        }
     }
 
     /// Un lavoro in background (export o riduzione) ha in mano la scena.
@@ -257,19 +273,45 @@ impl GestoreApp {
         self.project.step_prompt = Some(StepPrompt { request, options: self.settings.step });
     }
 
-    /// Conferma della finestra delle opzioni di mesh: i valori diventano quelli predefiniti e i
-    /// file si aprono (o si aggiungono) con quelle tolleranze.
-    pub fn confirm_step_prompt(&mut self) {
+    /// Conferma della finestra STEP: "Visualizza STEP" (`view`) apre con la mesh veloce,
+    /// altrimenti si converte con le tolleranze scelte, che diventano quelle predefinite.
+    pub fn confirm_step_prompt(&mut self, view: bool) {
         let Some(prompt) = self.project.step_prompt.take() else { return };
-        if self.settings.step != prompt.options {
+        if !view && self.settings.step != prompt.options {
             self.settings.step = prompt.options;
             if !cfg!(test) {
                 self.settings.save();
             }
         }
+        let choice = if view { crate::settings::StepLoad::View } else { crate::settings::StepLoad::Mesh(prompt.options) };
+        self.project.step_choice = Some(choice);
         match prompt.request {
             StepRequest::Open(path) => self.request_open_now(path),
             StepRequest::Add(paths) => self.request_add_now(paths),
+            StepRequest::Remesh(node) => self.remesh_step(node),
+        }
+    }
+
+    /// "Converti in mesh…" su uno STEP aperto: apre la finestra con le tolleranze.
+    pub fn ask_remesh_step(&mut self, node: u32) {
+        if self.ui_state.is_loading || self.project.busy() || self.project.step_prompt.is_some() {
+            return;
+        }
+        self.ask_step_options(StepRequest::Remesh(node));
+    }
+
+    /// Ritassella uno STEP aperto: il file viene chiuso (si riapre con Annulla) e la nuova
+    /// conversione si aggiunge alla scena. Le modifiche fatte su quel file non passano alla nuova.
+    fn remesh_step(&mut self, node: u32) {
+        let Some(scene) = &self.scene_graph else { return };
+        let Some(path) = scene.sources.iter().find(|s| s.node == node).and_then(|s| s.path.clone()) else { return };
+        let only_file = scene.open_files().count() == 1;
+        if only_file {
+            // Unico file: la conversione sostituisce la scena (senza chiedere di esportare)
+            self.open_wrl_async(path);
+        } else {
+            self.apply(crate::app::Action::Delete(node));
+            self.request_add_now(vec![path]);
         }
     }
 
@@ -792,7 +834,7 @@ mod tests {
 
         let chosen = StepMesh { deviation: 0.02, angle: 10.0, relative: false };
         app.project.step_prompt.as_mut().unwrap().options = chosen;
-        app.confirm_step_prompt();
+        app.confirm_step_prompt(false);
         assert!(app.project.step_prompt.is_none());
         assert_eq!(app.settings.step, chosen);
         assert!(app.ui_state.is_loading);
@@ -806,10 +848,94 @@ mod tests {
         app.project.step_prompt = None; // Annulla
         assert!(!app.ui_state.is_loading && app.project.add_queue.is_empty());
         app.request_add(files.clone());
-        app.confirm_step_prompt();
+        app.confirm_step_prompt(true);
+        assert_eq!(app.settings.step, StepMesh::default(), "Visualizza non cambia le tolleranze salvate");
+        assert_eq!(app.project.step_choice, Some(crate::settings::StepLoad::View));
         assert!(app.ui_state.is_loading && app.project.loading_adds);
         assert_eq!(app.project.loading_path.as_ref(), Some(&files[0]));
+        assert_eq!(app.project.loading_step, None, "il primo file in coda è un WRL");
         assert_eq!(app.project.add_queue, vec![files[1].clone()]);
+    }
+
+    /// La finestra STEP si disegna con i due pulsanti; il clic su "Visualizza STEP" apre il file
+    /// con la mesh veloce.
+    #[test]
+    fn the_step_window_opens_the_file_for_viewing() {
+        let mut app = GestoreApp::new_headless();
+        app.request_open(r"C:\prove\pezzo.step".into());
+        let ctx = egui::Context::default();
+        let run = |app: &mut GestoreApp, events: Vec<egui::Event>| {
+            let screen = egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(1280.0, 800.0));
+            let out = ctx.run(egui::RawInput { screen_rect: Some(screen), events, ..Default::default() }, |ctx| {
+                super::draw_step_prompt(ctx, app);
+            });
+            let mut texts = Vec::new();
+            fn walk(s: &egui::Shape, out: &mut Vec<(String, egui::Rect)>) {
+                match s {
+                    egui::Shape::Text(t) => out.push((t.galley.text().to_string(), t.galley.rect.translate(t.pos.to_vec2()))),
+                    egui::Shape::Vec(v) => v.iter().for_each(|s| walk(s, out)),
+                    _ => {}
+                }
+            }
+            out.shapes.iter().for_each(|c| walk(&c.shape, &mut texts));
+            texts
+        };
+        run(&mut app, vec![]);
+        let texts = run(&mut app, vec![]);
+        for wanted in ["Apertura STEP", "pezzo.step", "Visualizza STEP", "Converti in mesh", "Deviazione angolare:"] {
+            assert!(texts.iter().any(|(t, _)| t == wanted), "{wanted}: {:?}", texts.iter().map(|t| &t.0).collect::<Vec<_>>());
+        }
+        let at = texts.iter().find(|(t, _)| t == "Visualizza STEP").unwrap().1.center();
+        let button = |pressed| egui::Event::PointerButton { pos: at, button: egui::PointerButton::Primary, pressed, modifiers: Default::default() };
+        for events in [vec![egui::Event::PointerMoved(at)], vec![button(true)], vec![button(false)]] {
+            run(&mut app, events);
+        }
+        assert!(app.project.step_prompt.is_none());
+        assert_eq!(app.project.step_choice, Some(crate::settings::StepLoad::View));
+        assert_eq!(app.project.loading_step, Some(crate::settings::StepLoad::View));
+        assert!(app.ui_state.is_loading);
+    }
+
+    /// Uno STEP aperto con "Visualizza" si segna nella scena e si riconverte dall'albero: il file
+    /// vecchio si chiude (con Annulla) e la conversione con le tolleranze scelte si aggiunge.
+    #[test]
+    fn a_viewed_step_is_converted_from_the_tree() {
+        use crate::scene_graph::node::multi_file_tests::{FILE_A, FILE_B};
+        use crate::settings::{StepLoad, StepMesh};
+        let stp = std::path::PathBuf::from(r"C:\prove\pezzo.stp");
+        let open = |data: &[u8], name: &str, p: Option<std::path::PathBuf>| {
+            let mut s = crate::parser::parse_wrl(data);
+            s.into_file(name.into(), p);
+            s
+        };
+        let mut app = GestoreApp::new_headless();
+        let scene = open(FILE_A, "a.wrl", None);
+        app.project.on_loaded(scene.revision);
+        app.scene_graph = Some(scene);
+        // Arrivo dello STEP aperto con "Visualizza"
+        app.project.loading_step = Some(StepLoad::View);
+        let mut step_scene = open(FILE_B, "pezzo.stp", Some(stp.clone()));
+        app.project.mark_loaded_step(&mut step_scene);
+        assert_eq!(step_scene.sources[0].step, Some(StepLoad::View));
+        assert!(step_scene.sources[0].units_mm);
+        app.add_loaded_file(step_scene);
+        let node = app.scene_graph.as_ref().unwrap().sources[1].node;
+        assert!(app.ui_state.unit_suggestions.is_empty());
+
+        app.apply(Action::RemeshStep(node));
+        let fine = StepMesh { deviation: 0.02, angle: 15.0, relative: false };
+        app.project.step_prompt.as_mut().unwrap().options = fine;
+        app.confirm_step_prompt(false);
+        let scene = app.scene_graph.as_ref().unwrap();
+        assert!(scene.info[node as usize].deleted, "il file visualizzato si chiude");
+        assert_eq!(app.project.loading_path.as_ref(), Some(&stp));
+        assert!(app.project.loading_adds);
+        assert_eq!(app.project.loading_step, Some(StepLoad::Mesh(fine)));
+        assert_eq!(app.settings.step, fine);
+        // Annulla riporta il file chiuso
+        app.ui_state.is_loading = false;
+        app.undo();
+        assert!(!app.scene_graph.as_ref().unwrap().info[node as usize].deleted);
     }
 
     #[test]
@@ -904,17 +1030,27 @@ pub fn draw_unit_suggestion(ctx: &egui::Context, app: &mut GestoreApp) {
 pub fn draw_step_prompt(ctx: &egui::Context, app: &mut GestoreApp) {
     let Some(prompt) = &mut app.project.step_prompt else { return };
     use crate::settings::{StepMesh, STEP_ANGLE_RANGE, STEP_DEVIATION_RANGE};
-    let files: Vec<String> = match &prompt.request {
+    let remesh = matches!(prompt.request, StepRequest::Remesh(_));
+    let files: Vec<PathBuf> = match &prompt.request {
         StepRequest::Open(p) => vec![p.clone()],
         StepRequest::Add(v) => v.iter().filter(|p| crate::parser::external::is_step(p)).cloned().collect(),
-    }
+        StepRequest::Remesh(node) => app
+            .scene_graph
+            .as_ref()
+            .and_then(|s| s.sources.iter().find(|f| f.node == *node))
+            .and_then(|f| f.path.clone())
+            .into_iter()
+            .collect(),
+    };
+    let files: Vec<String> = files
     .iter()
     .map(|p| p.file_name().map_or_else(|| p.display().to_string(), |n| n.to_string_lossy().into_owned()))
     .collect();
-    let mut choice: Option<bool> = None; // true = apri, false = annulla
+    // 0 = visualizza, 1 = converti, 2 = annulla
+    let mut choice: Option<u8> = None;
     let modal = egui::Modal::new(egui::Id::new("opzioni_mesh_step")).show(ctx, |ui| {
-        ui.set_width(400.0);
-        ui.heading("Opzioni di mesh");
+        ui.set_width(420.0);
+        ui.heading(if remesh { "Converti in mesh" } else { "Apertura STEP" });
         ui.add_space(4.0);
         let shown = files.len().min(4);
         for f in &files[..shown] {
@@ -924,6 +1060,14 @@ pub fn draw_step_prompt(ctx: &egui::Context, app: &mut GestoreApp) {
             ui.label(egui::RichText::new(format!("e altri {} file STEP", files.len() - shown)).weak());
         }
         ui.add_space(6.0);
+        if !remesh {
+            ui.label(
+                "«Visualizza STEP» apre subito il file con una mesh veloce, solo per guardarlo: \
+                 la conversione con le tue tolleranze si fa dopo, dal menu del file nell'albero.",
+            );
+            ui.add_space(6.0);
+        }
+        ui.label(egui::RichText::new("Opzioni di mesh").strong());
         let o = &mut prompt.options;
         egui::Grid::new("griglia_mesh_step").num_columns(2).spacing([12.0, 6.0]).show(ui, |ui| {
             ui.label("Deviazione di superficie:");
@@ -949,26 +1093,38 @@ pub fn draw_step_prompt(ctx: &egui::Context, app: &mut GestoreApp) {
                 .weak(),
         );
         ui.add_space(8.0);
+        if ui.small_button("Valori predefiniti").clicked() {
+            *o = StepMesh::default();
+        }
+        ui.add_space(8.0);
         ui.horizontal(|ui| {
-            if ui.button("Apri").clicked() {
-                choice = Some(true);
+            if !remesh && ui.button("Visualizza STEP").clicked() {
+                choice = Some(0);
             }
-            if ui.button("Valori predefiniti").clicked() {
-                *o = StepMesh::default();
+            if ui.button("Converti in mesh").clicked() {
+                choice = Some(1);
             }
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 if ui.button("Annulla").clicked() {
-                    choice = Some(false);
+                    choice = Some(2);
                 }
             });
         });
+        if remesh {
+            ui.label(
+                egui::RichText::new("Il file viene riletto dallo STEP originale: colori e modifiche fatti su questo file si perdono.")
+                    .small()
+                    .weak(),
+            );
+        }
     });
     if modal.should_close() && choice.is_none() {
-        choice = Some(false); // Esc o clic fuori
+        choice = Some(2); // Esc o clic fuori
     }
     match choice {
-        Some(true) => app.confirm_step_prompt(),
-        Some(false) => app.project.step_prompt = None,
+        Some(0) => app.confirm_step_prompt(true),
+        Some(1) => app.confirm_step_prompt(false),
+        Some(_) => app.project.step_prompt = None,
         None => {}
     }
 }
