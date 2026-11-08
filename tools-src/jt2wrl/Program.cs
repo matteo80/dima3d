@@ -356,7 +356,7 @@ namespace Jt2Wrl {
         string Unique(string label) {
             var sb = new StringBuilder(label.Length + 1);
             foreach (var c in label)
-                sb.Append(char.IsLetterOrDigit(c) || c == '_' || c == '-' || c == '.' ? c : '_');
+                sb.Append((c < 128 && char.IsLetterOrDigit(c)) || c == '_' || c == '-' ? c : '_');
             var s = sb.Length == 0 ? "_" : sb.ToString();
             if (char.IsDigit(s[0]) || s[0] == '-' || s[0] == '.' || s[0] == '+') s = "_" + s;
             switch (s) {

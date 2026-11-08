@@ -1001,6 +1001,20 @@ mod bench {
             }
         }
 
+        // GESTORE_RIDUCI=n: riduce la scena a n triangoli prima del disegno
+        if let Some(n) = std::env::var("GESTORE_RIDUCI").ok().and_then(|v| v.parse().ok()) {
+            let refs: Vec<&crate::parser::ShapeInfo> = scene.shapes_data.iter().collect();
+            let t = std::time::Instant::now();
+            let params = crate::reduce::Params { target: crate::reduce::Target::Triangles(n), lock_border: false };
+            let out = crate::reduce::reduce_many(&refs, params, &std::sync::atomic::AtomicU32::new(0));
+            println!("Ridotto a {} triangoli, errore {}, in {:?}", out.triangles_after, out.max_error, t.elapsed());
+            for (i, s) in out.shapes.into_iter().enumerate() {
+                if let Some(s) = s {
+                    scene.shapes_data[i] = s;
+                }
+            }
+        }
+
         let instance = wgpu::Instance::default();
         let adapter = pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {
             power_preference: wgpu::PowerPreference::HighPerformance,
@@ -1095,6 +1109,16 @@ mod bench {
             camera::StandardView::ALL.iter().find(|x| x.1.eq_ignore_ascii_case(&v)).map(|x| x.0)
         });
         r.camera.set_standard_view(view.unwrap_or(camera::StandardView::Iso), camera::Axes::Vehicle);
+        // GESTORE_CAMERA="x,y,z,distanza[,orbita_x,orbita_y]": punto inquadrato, distanza e rotazione
+        // (per ingrandire un dettaglio, es. i riflessi di un pannello)
+        if let Ok(v) = std::env::var("GESTORE_CAMERA") {
+            let v: Vec<f32> = v.split(',').map(|x| x.trim().parse().unwrap()).collect();
+            r.camera.target = glam::Vec3::new(v[0], v[1], v[2]);
+            r.camera.distance = v[3];
+            if v.len() >= 6 {
+                r.camera.orbit(v[4], v[5]);
+            }
+        }
         r.render_frame(&device, &queue, &mut egui_renderer, 1600, 900);
         dump_or_compare(&r, &device, &queue);
 

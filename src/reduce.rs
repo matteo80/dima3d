@@ -41,8 +41,7 @@ pub struct Params {
 pub struct Outcome {
     /// Pezzo ridotto, parallelo ai pezzi richiesti (`None` se non cambia)
     pub shapes: Vec<Option<ShapeInfo>>,
-    /// Errore massimo usato, nelle unità del file. Comprende la variazione delle normali: lo
-    /// scostamento della superficie è al più questo valore.
+    /// Errore massimo usato: scostamento massimo dalla superficie originale, nelle unità del file
     pub max_error: f32,
     pub triangles_before: u64,
     pub triangles_after: u64,
@@ -55,11 +54,6 @@ pub struct Welded {
     pub indices: Vec<u32>,
     /// Vertice saldato di ogni vertice della mesh di partenza (vuoto dopo la semplificazione)
     pub from_original: Vec<u32>,
-    /// Normale media del file in ogni vertice (vuota se non si usano nella semplificazione)
-    pub normals: Vec<[f32; 3]>,
-    /// Peso delle normali rispetto alle posizioni: una differenza di normale `d` conta come uno
-    /// spostamento `d × normal_weight`
-    pub normal_weight: f32,
 }
 
 /// Unisce i vertici con la stessa identica posizione e toglie i triangoli che ne risultano
@@ -89,10 +83,16 @@ pub fn weld(vertices: &[[f32; 3]], indices: &[u32]) -> Welded {
             out.extend_from_slice(&[a, b, c]);
         }
     }
-    Welded { positions, indices: out, from_original: remap, normals: Vec::new(), normal_weight: 0.0 }
+    Welded { positions, indices: out, from_original: remap }
 }
 
 /// Triangoli semplificati finché l'errore resta sotto `max_error` (nelle unità del file).
+///
+/// Solo l'errore di forma: provato anche a far pesare le normali (riflessi più fedeli sulle
+/// superfici lucide), ma il loro contributo si somma all'errore e su una scocca da 3,3 milioni di
+/// facce ridotta a 1 milione lasciava spostare la lamiera esterna di decine di mm, con i rinforzi
+/// interni che la attraversavano a chiazze. Le opzioni di regolarizzazione dei triangoli davano
+/// striature attorno ai raccordi.
 fn simplified_indices(mesh: &Welded, max_error: f32, lock_border: bool) -> Vec<u32> {
     if mesh.positions.is_empty() || max_error <= 0.0 {
         return mesh.indices.clone();
@@ -105,48 +105,7 @@ fn simplified_indices(mesh: &Welded, max_error: f32, lock_border: bool) -> Vec<u
     if lock_border {
         options |= meshopt::SimplifyOptions::LockBorder;
     }
-    if mesh.normals.len() == mesh.positions.len() && mesh.normal_weight > 0.0 {
-        let attributes: &[f32] = bytemuck::cast_slice(&mesh.normals);
-        let weights = [mesh.normal_weight; 3];
-        let locks = vec![false; mesh.positions.len()];
-        return meshopt::simplify_with_attributes_and_locks(
-            &mesh.indices,
-            &adapter,
-            attributes,
-            &weights,
-            12,
-            &locks,
-            0,
-            max_error,
-            options,
-            None,
-        );
-    }
     meshopt::simplify(&mesh.indices, &adapter, 0, max_error, options, None)
-}
-
-/// Peso delle normali nella semplificazione, rispetto all'ingombro della scena (vedi
-/// [`Welded::normal_weight`]). Senza, le superfici lucide poco curve (cofano, tetto) restano con
-/// triangoli grandi e i riflessi si spezzano in macchie. Scelto confrontando le immagini di una
-/// scocca da 3,7 milioni di facce ridotta a 1 milione con l'originale: pixel diversi 2985 senza
-/// peso, 1782 con 0,003, 1019 con 0,01, 799 con 0,03, 1801 con 0,1 (lì la forma comincia a
-/// perdere precisione a favore dei riflessi).
-pub const NORMAL_WEIGHT: f32 = 0.03;
-
-/// Aggiunge alla mesh saldata la normale media del file in ogni vertice.
-pub fn attach_normals(welded: &mut Welded, original: &ShapeInfo, weight: f32) {
-    let corners = original.corner_normals();
-    if weight <= 0.0 || corners.len() != original.indices.len() || welded.from_original.len() != original.world_vertices.len() {
-        return;
-    }
-    let mut sum = vec![glam::Vec3::ZERO; welded.positions.len()];
-    for (&o, n) in original.indices.iter().zip(&corners) {
-        if let Some(&w) = welded.from_original.get(o as usize) {
-            sum[w as usize] += glam::Vec3::from(*n);
-        }
-    }
-    welded.normals = sum.into_iter().map(|v| v.normalize_or_zero().to_array()).collect();
-    welded.normal_weight = weight;
 }
 
 /// Semplifica finché l'errore resta sotto `max_error`; i vertici non più usati vengono tolti.
@@ -173,7 +132,7 @@ fn compact(positions: &[[f32; 3]], indices: &[u32]) -> (Welded, Vec<u32>) {
             *slot
         })
         .collect();
-    (Welded { positions: out_positions, indices: out_indices, ..Default::default() }, kept)
+    (Welded { positions: out_positions, indices: out_indices, from_original: Vec::new() }, kept)
 }
 
 /// Normali del file originale attorno a ogni vertice saldato (senza ripetizioni), in forma CSR:
@@ -214,31 +173,35 @@ impl NormalCandidates {
     }
 }
 
-/// Normale di ogni angolo dei triangoli presa dal file originale: tra le normali che il vertice
-/// aveva, quella più vicina alla faccia ridotta (così i due lati di uno spigolo vivo restano
-/// distinti). Se nessuna è entro 60° dalla faccia, quella calcolata con `crease_angle`.
+/// Scarto massimo tra la normale del file e quella ricalcolata sui triangoli ridotti perché si
+/// tenga la prima (coseno di 5°).
+const TRANSFER_COS: f32 = 0.996_2;
+
+/// Normale di ogni angolo dei triangoli: si parte da quella ricalcolata sui triangoli ridotti
+/// (spigoli vivi oltre `crease_angle`) e, se il vertice aveva nel file una normale entro 5° da
+/// questa, si tiene quella del file, cioè della superficie vera del CAD. Lo scarto piccolo evita
+/// che la normale di un vertice in mezzo a un raccordo venga stesa su un triangolo lungo della
+/// superficie vicina (striature scure a ventaglio).
 fn transferred_corner_normals(
     reduced: &Welded,
     kept: &[u32],
     candidates: &NormalCandidates,
     crease_angle: f32,
 ) -> Vec<[f32; 3]> {
-    let fallback = corner_crease_normals(&reduced.positions, &reduced.indices, crease_angle);
-    let p = |i: u32| glam::Vec3::from(reduced.positions[i as usize]);
+    let computed = corner_crease_normals(&reduced.positions, &reduced.indices, crease_angle);
     reduced
         .indices
         .iter()
-        .enumerate()
-        .map(|(c, &v)| {
-            let t = &reduced.indices[c / 3 * 3..c / 3 * 3 + 3];
-            let face = (p(t[1]) - p(t[0])).cross(p(t[2]) - p(t[0])).normalize_or_zero();
+        .zip(computed)
+        .map(|(&v, normal)| {
+            let reference = glam::Vec3::from(normal);
             candidates
                 .of(kept[v as usize])
                 .iter()
-                .map(|n| (glam::Vec3::from(*n).dot(face), *n))
+                .map(|n| (glam::Vec3::from(*n).dot(reference), *n))
                 .max_by(|a, b| a.0.total_cmp(&b.0))
-                .filter(|(dot, _)| *dot > 0.5)
-                .map_or(fallback[c], |(_, n)| n)
+                .filter(|(dot, _)| *dot > TRANSFER_COS)
+                .map_or(normal, |(_, n)| n)
         })
         .collect()
 }
@@ -340,9 +303,8 @@ fn split_by_normal(n: usize, indices: &[u32], corner: &[[f32; 3]]) -> (Vec<[f32;
 
 /// Pezzo ridotto con l'errore massimo dato; `None` se il numero di triangoli non cambia.
 ///
-/// I vertici tenuti sono punti della mesh originale: ricevono le normali che avevano nel file
-/// (la superficie vera del CAD), non quelle ricalcolate dai triangoli ridotti, più lunghi e
-/// sottili, che darebbero riflessi a chiazze sulle superfici curve.
+/// I vertici tenuti sono punti della mesh originale: dove la normale ricalcolata è vicina a quella
+/// del file, ricevono quella del file (vedi [`transferred_corner_normals`]).
 pub fn reduce_shape(original: &ShapeInfo, welded: &Welded, max_error: f32, lock_border: bool) -> Option<ShapeInfo> {
     let (mesh, kept) = compact(&welded.positions, &simplified_indices(welded, max_error, lock_border));
     if mesh.indices.len() >= original.indices.len() {
@@ -383,15 +345,7 @@ pub fn reduce_many(originals: &[&ShapeInfo], params: Params, progress: &AtomicU3
         }
     }
     let extent = if bbox.is_valid() { (bbox.max - bbox.min).length().max(1e-9) } else { 1.0 };
-    let factor = std::env::var("GESTORE_PESO_NORMALI").ok().and_then(|v| v.parse().ok()).unwrap_or(NORMAL_WEIGHT);
-    let welded: Vec<Welded> = originals
-        .par_iter()
-        .map(|s| {
-            let mut w = weld(&s.world_vertices, &s.indices);
-            attach_normals(&mut w, s, extent * factor);
-            w
-        })
-        .collect();
+    let welded: Vec<Welded> = originals.par_iter().map(|s| weld(&s.world_vertices, &s.indices)).collect();
     progress.store(50, Relaxed);
 
     let max_error = match params.target {

@@ -411,13 +411,13 @@ fn write_geometry(out: &mut Vec<u8>, pad: &str, shape: &crate::parser::ShapeInfo
     }
 }
 
-/// Identificatore VRML: niente spazi/delimitatori, non inizia con cifra/segno,
-/// non coincide con parole riservate.
+/// Identificatore VRML: solo lettere/cifre ASCII, `_` e `-` (il punto non è ammesso dalla specifica
+/// e MeshLab rifiuta il file), non inizia con cifra/segno, non coincide con parole riservate.
 pub fn sanitize_identifier(label: &str) -> String {
     let mut out: String = label
         .chars()
         .map(|c| {
-            if c.is_alphanumeric() || c == '_' || c == '-' || c == '.' {
+            if c.is_ascii_alphanumeric() || c == '_' || c == '-' {
                 c
             } else {
                 '_'
@@ -581,7 +581,9 @@ mod tests {
         assert_eq!(sanitize_identifier("Componente 1"), "Componente_1");
         assert_eq!(sanitize_identifier("1Pezzo"), "_1Pezzo");
         assert_eq!(sanitize_identifier("TRUE"), "_TRUE");
-        assert_eq!(sanitize_identifier("Part-1.v2"), "Part-1.v2");
+        assert_eq!(sanitize_identifier("Part-1.v2"), "Part-1_v2");
+        assert_eq!(sanitize_identifier("Telaio.asm"), "Telaio_asm");
+        assert_eq!(sanitize_identifier("Città"), "Citt_");
     }
 
     #[test]

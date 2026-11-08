@@ -600,13 +600,29 @@ cargo flamegraph --bin gestore-wrl -- path\to\file.wrl
   - Riduzione (`reduce.rs`): saldatura dei vertici uguali, poi meshoptimizer 1.3 (crate `meshopt` 0.7, MIT) con errore
     assoluto unico per tutta la scena, così i piani perdono molte facce e i raccordi poche (come l'ordinamento globale
     di MeshLab). Per un numero di facce si cerca l'errore per secanti in scala log con correzione "Illinois" (3–5
-    passate, entro il 2%). Le normali del file pesano nella semplificazione (`NORMAL_WEIGHT` = 0,03 × ingombro):
-    senza, sul cofano lucido i riflessi si spezzavano in macchie triangolari. Peso scelto confrontando le immagini
-    con l'originale (pixel diversi: 2985 senza peso, 1019 con 0,01, 799 con 0,03, 1801 con 0,1). I vertici tenuti
-    ricevono le normali che avevano nel file (scelte per faccia, così gli spigoli vivi restano distinti).
+    passate, entro il 2%). Conta solo l'errore di forma (vedi la correzione del 2026-11-08 sotto). Le normali dei
+    triangoli ridotti si ricalcolano con spigolo vivo a 0,5 rad; dove quella del file è entro 5° si tiene quella del
+    file (superficie vera del CAD).
   - Scocca_B ridotta a 1 milione di facce: 3,3 s, errore 0,43 mm; WRL 62 MB con normali, 30 MB senza (l'utente
     otteneva 60–70 MB con MeshLab). Riaperto: 1533 pezzi, stessi triangoli. A 500.000 facce: 31 / 15 MB. Con
     "Blocca i bordi aperti" la scocca non scende sotto ~550.000 facce (i bordi di 1533 pezzi restano tutti).
+  - **Correzione (2026-11-08, prove dell'utente su Scocca_G, JT da 3,3 M facce):**
+    - Il peso delle normali (0,03 × ingombro) si sommava all'errore: a 1 milione di facce la ricerca arrivava al
+      limite (49 mm) senza raggiungere l'obiettivo, e la lamiera esterna si spostava tanto che i rinforzi interni la
+      attraversavano a chiazze (visibili nel Gestore, FreeCAD e MeshLab). Tolto: errore 0,21 mm a 1 M facce, 2,2 s.
+    - Provati e scartati: regolarizzazione dei triangoli di meshoptimizer (striature attorno ai raccordi), errore
+      degli attributi "clamped" (sporgenze ancora a 7 mm), peso proporzionale all'errore (obiettivo irraggiungibile:
+      i raccordi non si possono ridurre), normali del file su ogni vertice (ventagli scuri dai vertici dei raccordi
+      sui triangoli lunghi). Tenuto: normale del file solo se entro 5° da quella ricalcolata.
+    - Confronto alla pari con MeshLab (pymeshlab, quadric edge collapse a 1 M facce): 43 s e 48,6 MB senza colori né
+      pezzi; Gestore 2,2 s, 30,8 MB senza normali, 67,8 MB con. Aspetto molto simile (MeshLab un po' più liscio sui
+      pannelli grandi, entrambi con qualche increspatura sui raccordi).
+    - Nomi DEF con il punto (es. `Assieme.asm` dai JT): non ammessi dalla specifica VRML; MeshLab ("invalid Node") e
+      Coin/FreeCAD ("Unable to read identifier after DEF keyword", scena vuota) rifiutavano il file. Ora
+      `sanitize_identifier` e jt2wrl tengono solo lettere/cifre ASCII, `_` e `-`. Verificato con pymeshlab e con il
+      Coin di FreeCAD 1.0 su JT convertito ed export ridotti.
+    - Test di resa: `GESTORE_CAMERA` (punto, distanza, rotazione) e `GESTORE_RIDUCI` (riduzione prima del disegno)
+      in `tempo_rendering_file_reale`.
   - `reduction.rs`: la scena va nel thread di calcolo (come l'export) con un riquadro di avanzamento; i pezzi ridotti
     prendono il posto degli originali in `shapes_data` (vista, selezione, misure ed export usano il risultato) e gli
     originali restano da parte (`stash`); ogni calcolo riparte dagli originali; "Originale" li rimette. La conversione
