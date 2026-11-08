@@ -59,6 +59,10 @@ pub fn snap(
 
 /// Una lunghezza con i decimali adatti alla grandezza della scena: un file in millimetri
 /// (scena di migliaia di unità) con 2 decimali, uno in metri con 4.
+/// Unità delle misure: il Gestore lavora in millimetri (HSF e JT sono convertiti, un file in
+/// metri aggiunto a uno in millimetri riceve la proposta di scala).
+pub const UNIT: &str = "mm";
+
 pub fn format_length(value: f32, scene_size: f32) -> String {
     let decimals = if scene_size >= 100.0 { 2 } else if scene_size >= 1.0 { 4 } else { 6 };
     format!("{value:.decimals$}")
@@ -95,8 +99,8 @@ pub fn draw(
     let fmt = |v: f32| format_length(v, scene_size);
     let (title, detail) = match (measure.result(), measure.points.len()) {
         (Some((d, delta)), _) => (
-            format!("Distanza  {}", fmt(d)),
-            format!("ΔX {}   ΔY {}   ΔZ {}", fmt(delta.x), fmt(delta.y), fmt(delta.z)),
+            format!("Distanza  {} {UNIT}", fmt(d)),
+            format!("ΔX {}   ΔY {}   ΔZ {}  ({UNIT})", fmt(delta.x), fmt(delta.y), fmt(delta.z)),
         ),
         (None, 1) => ("Clic sul secondo punto".to_string(), point_text(&measure.points[0], &fmt)),
         _ => (
@@ -107,7 +111,7 @@ pub fn draw(
     // Quota a metà del segmento
     if let ([Some(a), Some(b)], Some((d, _))) = (screen.as_slice(), measure.result()) {
         let mid = egui::pos2((a.x + b.x) / 2.0, (a.y + b.y) / 2.0) + egui::vec2(0.0, -14.0);
-        let galley = painter.layout_no_wrap(fmt(d), egui::FontId::proportional(14.0), egui::Color32::BLACK);
+        let galley = painter.layout_no_wrap(format!("{} {UNIT}", fmt(d)), egui::FontId::proportional(14.0), egui::Color32::BLACK);
         let bg = egui::Rect::from_center_size(mid, galley.size() + egui::vec2(10.0, 4.0));
         painter.rect_filled(bg, 4.0, accent);
         painter.galley(bg.center() - galley.size() / 2.0, galley, egui::Color32::BLACK);
@@ -126,7 +130,7 @@ pub fn draw(
 
 fn point_text(p: &MeasurePoint, fmt: &impl Fn(f32) -> String) -> String {
     let what = if p.vertex { "Vertice" } else { "Punto" };
-    format!("{what}  X {}   Y {}   Z {}", fmt(p.pos.x), fmt(p.pos.y), fmt(p.pos.z))
+    format!("{what}  X {}   Y {}   Z {}  ({UNIT})", fmt(p.pos.x), fmt(p.pos.y), fmt(p.pos.z))
 }
 
 #[cfg(test)]

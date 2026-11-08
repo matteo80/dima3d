@@ -1291,6 +1291,7 @@ dependencies = [
  "eframe",
  "egui",
  "egui-phosphor",
+ "flate2",
  "glam",
  "memmap2",
  "meshopt",

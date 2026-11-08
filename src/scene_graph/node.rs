@@ -174,6 +174,9 @@ pub struct SourceFile {
     pub node: u32,
     /// Fattore di scala applicato al file per portarlo nelle unità della scena (1 = come nel file)
     pub scale: f32,
+    /// Il formato dichiara le sue unità e il lettore le ha già portate in millimetri (HSF): non
+    /// serve indovinarle dalle dimensioni
+    pub units_mm: bool,
 }
 
 /// Informazioni accessorie, allineate 1:1 con `SceneGraph::nodes`.
@@ -205,6 +208,8 @@ pub struct SceneGraph {
     pub macro_components: Vec<MacroComponent>,
     /// Dati sorgente del file appena letto dal parser. `into_file` li sposta in `sources`.
     pub source_data: SourceData,
+    /// Unità del file appena letto già in millimetri (vedi `SourceFile::units_mm`)
+    pub units_mm: bool,
     /// File caricati, ognuno con la sua radice nell'albero (vuoto per una scena appena letta
     /// dal parser e non ancora trasformata con `into_file`)
     pub sources: Vec<SourceFile>,
@@ -364,6 +369,7 @@ impl SceneGraph {
             meshes: 0..self.shapes_data.len() as u32,
             node: 0,
             scale: 1.0,
+            units_mm: self.units_mm,
         }];
         self.revision += 1;
     }
@@ -469,17 +475,21 @@ impl SceneGraph {
     /// plausibile (da 1/300 a 1,5 volte la sua); in più, così com'è,
     /// deve essere fuori posto (es. sportello in millimetri lontano da una scocca in metri) o di
     /// grandezza assurda (es. scocca in metri dentro una in millimetri: 1000 volte più piccola).
+    /// Se le unità di entrambi i file sono note (es. due HSF), non c'è niente da indovinare.
     pub fn suggest_unit_scale(&self, source: usize) -> Option<f32> {
         let file = self.file_bounding_box(source);
-        let others = self
+        let (reference, others) = self
             .sources
             .iter()
             .enumerate()
             .filter(|(i, s)| *i != source && self.info.get(s.node as usize).is_some_and(|inf| !inf.deleted))
-            .map(|(i, _)| self.file_bounding_box(i))
-            .find(Aabb::is_valid)
-            .unwrap_or_else(Aabb::empty);
+            .map(|(i, _)| (i, self.file_bounding_box(i)))
+            .find(|(_, b)| b.is_valid())
+            .unwrap_or((usize::MAX, Aabb::empty()));
         if !file.is_valid() || !others.is_valid() {
+            return None;
+        }
+        if self.sources[source].units_mm && self.sources[reference].units_mm {
             return None;
         }
         let (size, reference) = (file.diagonal(), others.diagonal());
@@ -1252,6 +1262,31 @@ Shape { geometry IndexedFaceSet { coord Coordinate { point [ 0 -1000 0, 5000 -10
         scene.append(file(millimetres, "sportello.wrl"));
         scene.append(file(millimetres, "supporto.wrl"));
         assert_eq!(scene.suggest_unit_scale(2), Some(0.001));
+
+        // Unità dichiarate dal formato (HSF): due file in millimetri lontani e di grandezze
+        // diverse (supporto e parete di cabina) non sono confusi con un file in metri
+        let mm = |data: &[u8], name: &str| {
+            let mut s = crate::parser::parse_wrl(data);
+            s.units_mm = true;
+            s.into_file(name.to_string(), None);
+            s
+        };
+        let supporto = br#"#VRML V2.0 utf8
+Shape { geometry IndexedFaceSet { coord Coordinate { point [ -90 -400 0, 230 70 0, 0 0 260 ] } coordIndex [ 0, 1, 2, -1 ] } }
+"#;
+        let parete = br#"#VRML V2.0 utf8
+Shape { geometry IndexedFaceSet { coord Coordinate { point [ -30 0 -2500, 0 1500 -2500, 0 0 500 ] } coordIndex [ 0, 1, 2, -1 ] } }
+"#;
+        let mut scene = file(supporto, "supporto.wrl");
+        scene.append(file(parete, "parete.wrl"));
+        assert_eq!(scene.suggest_unit_scale(1), Some(0.001), "senza unità note la parete sembra in metri");
+        let mut scene = mm(supporto, "supporto.hsf");
+        scene.append(mm(parete, "parete.hsf"));
+        assert_eq!(scene.suggest_unit_scale(1), None);
+        // Un file con le unità note accanto a uno in metri: la proposta resta
+        let mut scene = file(metres, "scocca.wrl");
+        scene.append(mm(millimetres, "sportello.hsf"));
+        assert_eq!(scene.suggest_unit_scale(1), Some(0.001));
     }
 
     #[test]

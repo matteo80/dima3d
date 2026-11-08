@@ -114,9 +114,9 @@ pub fn draw(ui: &mut egui::Ui, app: &crate::app::GestoreApp) {
         row("Vertici", thousands(s.vertices));
         if s.bbox.is_valid() {
             let d = s.bbox.max - s.bbox.min;
-            row("Dimensioni", format!("{} × {} × {}", fmt(d.x), fmt(d.y), fmt(d.z)));
-            row("Min", format!("{}  {}  {}", fmt(s.bbox.min.x), fmt(s.bbox.min.y), fmt(s.bbox.min.z)));
-            row("Max", format!("{}  {}  {}", fmt(s.bbox.max.x), fmt(s.bbox.max.y), fmt(s.bbox.max.z)));
+            row("Dimensioni", format!("{} × {} × {} {}", fmt(d.x), fmt(d.y), fmt(d.z), super::measure::UNIT));
+            row("Min", format!("{}  {}  {} {}", fmt(s.bbox.min.x), fmt(s.bbox.min.y), fmt(s.bbox.min.z), super::measure::UNIT));
+            row("Max", format!("{}  {}  {} {}", fmt(s.bbox.max.x), fmt(s.bbox.max.y), fmt(s.bbox.max.z), super::measure::UNIT));
         }
     });
 }

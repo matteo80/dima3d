@@ -210,6 +210,17 @@ where
     let converted = if crate::parser::vrml1::is_vrml1(data) {
         progress_fn(0.0, "Conversione da VRML 1.0...".to_string());
         crate::parser::vrml1::convert(data)
+    } else if crate::parser::hsf::is_hsf(data) {
+        progress_fn(0.0, "Lettura HSF...".to_string());
+        let (shapes, warnings) = crate::parser::hsf::shapes(data);
+        let mut scene = scene_from_shapes(shapes, cluster_cfg, &mut progress_fn);
+        scene.load_warnings.extend(warnings);
+        // L'HSF dichiara le unità e il lettore le porta in millimetri
+        scene.units_mm = true;
+        // Come per lo STL: i pezzi sono `rewritten`, l'export non legge il file
+        scene.source_data = b"#VRML V2.0 utf8
+".to_vec().into();
+        return scene;
     } else if crate::parser::stl::is_stl(data) {
         // Nessun testo intermedio: i pezzi si costruiscono direttamente dai triangoli
         progress_fn(0.0, "Lettura STL...".to_string());

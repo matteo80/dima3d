@@ -248,7 +248,7 @@ impl GestoreApp {
 
     /// Finestra di scelta di uno o più file da aggiungere alla scena.
     pub fn add_dialog(&mut self) {
-        let mut dialog = rfd::FileDialog::new().add_filter("Modelli 3D (WRL, JT, STL)", &["wrl", "WRL", "vrml", "jt", "JT", "stl", "STL"]);
+        let mut dialog = rfd::FileDialog::new().add_filter("Modelli 3D (WRL, JT, STL, HSF)", &["wrl", "WRL", "vrml", "jt", "JT", "stl", "STL", "hsf", "HSF"]);
         if let Some(dir) = self.settings.recent.first().and_then(|p| p.parent()) {
             dialog = dialog.set_directory(dir);
         }
@@ -332,7 +332,7 @@ impl GestoreApp {
 
     /// Apre la finestra di scelta file.
     pub fn open_dialog(&mut self) {
-        let mut dialog = rfd::FileDialog::new().add_filter("Modelli 3D (WRL, JT, STL)", &["wrl", "WRL", "vrml", "jt", "JT", "stl", "STL"]);
+        let mut dialog = rfd::FileDialog::new().add_filter("Modelli 3D (WRL, JT, STL, HSF)", &["wrl", "WRL", "vrml", "jt", "JT", "stl", "STL", "hsf", "HSF"]);
         if let Some(dir) = self.settings.recent.first().and_then(|p| p.parent()) {
             dialog = dialog.set_directory(dir);
         }
@@ -587,13 +587,24 @@ mod tests {
                 .collect()
         };
         let all = tree_order(0..scene.shapes_data.len() as u32);
+        // Le coordinate che non vengono da un testo (HSF, STL) l'export le arrotonda a un
+        // milionesimo della diagonale (vedi `coordinate_decimals`): si accetta mezza unità
+        // dell'ultima cifra, più l'errore di `f32`
+        let bbox = scene.compute_bounding_box();
+        let extent = (bbox.max - bbox.min).length() as f64;
+        let decimals = (-(extent * 1e-6).log10()).ceil().clamp(0.0, 9.0) as i32;
+        let tol = (0.5 * 10f64.powi(-decimals) + extent * 1e-7) as f32;
+        // (l'export di un file solo ha un ingombro minore, quindi altrettante cifre o più)
+        let close = |a: &[[f32; 3]], b: &[[f32; 3]]| {
+            a.len() == b.len() && a.iter().zip(b).all(|(x, y)| (0..3).all(|k| (x[k] - y[k]).abs() <= tol))
+        };
         let same = again
             .shapes_data
             .iter()
             .zip(&all)
             .filter(|(a, &m)| {
                 let b = &scene.shapes_data[m as usize];
-                a.world_vertices == b.world_vertices && a.indices == b.indices
+                a.indices == b.indices && close(&a.world_vertices, &b.world_vertices)
             })
             .count();
         println!(
@@ -616,7 +627,7 @@ mod tests {
                 .shapes_data
                 .iter()
                 .zip(&order)
-                .filter(|(a, &m)| a.world_vertices == scene.shapes_data[m as usize].world_vertices)
+                .filter(|(a, &m)| close(&a.world_vertices, &scene.shapes_data[m as usize].world_vertices))
                 .count();
             println!("Export di {}: {} shape, vertici identici {same}/{}", src.name, single_shapes[i], order.len());
             assert_eq!(same, order.len(), "{}", src.name);
