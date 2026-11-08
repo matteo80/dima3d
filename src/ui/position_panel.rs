@@ -169,7 +169,7 @@ impl HingeMode {
 }
 
 /// Rotazione su cerniera: asse scelto nella vista e angolo.
-#[derive(Debug, Clone, Default, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Hinge {
     pub mode: HingeMode,
     /// Il clic nella vista prende i punti dell'asse invece di selezionare
@@ -179,8 +179,19 @@ pub struct Hinge {
     pub axis: Option<(Vec3, Vec3)>,
     /// Angolo applicato da quando l'asse è stato scelto (gradi)
     pub angle: f32,
+    /// Passo delle frecce e del cursore dell'angolo (gradi), separato dall'Unità della trasformazione
+    pub step: f32,
     pub error: Option<String>,
 }
+
+impl Default for Hinge {
+    fn default() -> Self {
+        Self { mode: HingeMode::default(), picking: false, points: Vec::new(), axis: None, angle: 0.0, step: 1.0, error: None }
+    }
+}
+
+/// Passi dell'angolo della cerniera
+const HINGE_STEPS: [f32; 6] = [0.1, 1.0, 5.0, 10.0, 45.0, 90.0];
 
 impl Hinge {
     /// Inizia la scelta dell'asse.
@@ -436,7 +447,7 @@ pub fn draw(ctx: &egui::Context, app: &mut GestoreApp) {
                     }
                     let range = if rotation { 180.0 } else { (panel.unit * 200.0).max(panel.value.abs()) };
                     ui.spacing_mut().slider_width = 150.0;
-                    ui.add(egui::Slider::new(&mut panel.value, -range..=range).step_by(panel.unit as f64).show_value(false));
+                    ui.add(egui::Slider::new(&mut panel.value, -range..=range).step_by(panel.unit as f64).clamping(egui::SliderClamping::Never).show_value(false));
                     if ui.small_button(icon::CARET_RIGHT).clicked() {
                         panel.value += panel.unit;
                     }
@@ -546,15 +557,34 @@ pub fn draw(ctx: &egui::Context, app: &mut GestoreApp) {
                             ui.horizontal(|ui| {
                                 ui.label("Angolo");
                                 if ui.small_button(icon::CARET_LEFT).clicked() {
-                                    h.angle -= panel.unit;
+                                    h.angle -= h.step;
                                 }
                                 ui.spacing_mut().slider_width = 150.0;
-                                ui.add(egui::Slider::new(&mut h.angle, -180.0..=180.0).step_by(panel.unit as f64).show_value(false));
+                                // Il cursore non riarrotonda i valori scritti a mano (es. 23° con passo 10)
+                                ui.add(
+                                    egui::Slider::new(&mut h.angle, -180.0..=180.0)
+                                        .step_by(h.step as f64)
+                                        .clamping(egui::SliderClamping::Never)
+                                        .show_value(false),
+                                );
                                 if ui.small_button(icon::CARET_RIGHT).clicked() {
-                                    h.angle += panel.unit;
+                                    h.angle += h.step;
                                 }
-                                ui.add(egui::DragValue::new(&mut h.angle).speed(panel.unit).max_decimals(3).suffix(" °"))
+                                ui.add(egui::DragValue::new(&mut h.angle).speed(h.step).max_decimals(3).suffix(" °"))
                                     .on_hover_text("Angolo dalla posizione in cui è stato scelto l'asse");
+                            });
+                            ui.horizontal(|ui| {
+                                ui.label("Passo");
+                                egui::ComboBox::from_id_salt("posizione_passo_cerniera")
+                                    .width(70.0)
+                                    .selected_text(format!("{} °", h.step))
+                                    .show_ui(ui, |ui| {
+                                        for v in HINGE_STEPS {
+                                            ui.selectable_value(&mut h.step, v, format!("{v} °"));
+                                        }
+                                    })
+                                    .response
+                                    .on_hover_text("Passo delle frecce e del cursore dell'angolo");
                             });
                             if h.angle != before && !nodes.is_empty() {
                                 actions.push(Action::Move { nodes: nodes.clone(), matrix: about_axis(o, d, h.angle - before) });
@@ -939,7 +969,8 @@ DEF Destinazione Group { children [
             Vec3::from(s.shapes_data[s.meshes_of(&[rif])[0] as usize].world_vertices[i])
         };
         assert!((vertex(&app, 1) - Vec3::new(100.0, 250.0, 300.0)).length() < 1e-3);
-        app.ui_state.position.unit = 90.0;
+        assert_eq!(app.ui_state.position.hinge.step, 1.0, "passo di 1° di default");
+        app.ui_state.position.hinge.step = 90.0;
         // Seconda freccia a destra: quella dell'angolo (la prima è della Trasformazione)
         ui.click(&mut app, icon::CARET_RIGHT, 1);
         assert_eq!(app.ui_state.position.hinge.angle, 90.0);
@@ -959,6 +990,13 @@ DEF Destinazione Group { children [
         assert!((vertex(&app, 1) - Vec3::new(100.0, 250.0, 300.0)).length() < 1e-3, "annullato");
         ui.run(&mut app, vec![]);
         assert_eq!(app.ui_state.position.hinge.angle, 0.0, "dopo Annulla l'angolo riparte da 0");
+
+        // Un valore scritto a mano fuori passo resta com'è (il cursore non lo riporta al passo)
+        app.ui_state.position.hinge.step = 10.0;
+        app.ui_state.position.hinge.angle = 23.0;
+        ui.run(&mut app, vec![]);
+        ui.run(&mut app, vec![]);
+        assert_eq!(app.ui_state.position.hinge.angle, 23.0);
     }
 
     #[test]
@@ -982,5 +1020,44 @@ DEF Destinazione Group { children [
             h.add_point(p);
         }
         assert!(h.axis.is_none() && h.error.is_some() && h.points.is_empty() && !h.picking);
+    }
+
+    /// Prova su matematiche vere (non nel repo): GESTORE_PROVA_CERNIERA = WRL separati da ';'.
+    /// Ogni freccia con passo 1° ruota il file di un grado attorno a un asse Z per un suo vertice.
+    #[test]
+    #[ignore]
+    fn hinge_one_degree_steps_on_real_files() {
+        let Ok(list) = std::env::var("GESTORE_PROVA_CERNIERA") else { return };
+        for path in list.split(';') {
+            let mut app = GestoreApp::new_headless();
+            let mut scene = crate::parser::parse_wrl(&std::fs::read(path).unwrap());
+            scene.into_file(path.into(), None);
+            app.project.on_loaded(scene.revision);
+            app.scene_graph = Some(scene);
+            app.ui_state.position.open = true;
+            app.ui_state.select_single(Some(0));
+            let ui = Ui { ctx: egui::Context::default() };
+            ui.run(&mut app, vec![]);
+            let mesh = app.scene_graph.as_ref().unwrap().meshes_of(&[0])[0] as usize;
+            let vertex = |app: &GestoreApp, i: usize| Vec3::from(app.scene_graph.as_ref().unwrap().shapes_data[mesh].world_vertices[i]);
+            let n = app.scene_graph.as_ref().unwrap().shapes_data[mesh].world_vertices.len();
+            let (pivot, far) = (vertex(&app, 0), vertex(&app, n - 1));
+            let h = &mut app.ui_state.position.hinge;
+            h.mode = HingeMode::PointAxis(2);
+            h.start();
+            h.add_point(pivot);
+            assert!(h.axis.is_some());
+            let mut last = far;
+            for k in 1..=25 {
+                ui.click(&mut app, icon::CARET_RIGHT, 1);
+                assert_eq!(app.ui_state.position.hinge.angle, k as f32);
+                let now = vertex(&app, n - 1);
+                let want = about_axis(pivot, Vec3::Z, k as f32).transform_point3(far);
+                assert!((now - want).length() < 1e-2 * far.distance(pivot).max(1.0), "{path} {k}°: {now:?} invece di {want:?}");
+                assert!(now != last || far.truncate() == pivot.truncate(), "{path} {k}°: non si è mosso");
+                last = now;
+            }
+            println!("{path}: 25 passi da 1° ok, {} pezzi", app.scene_graph.as_ref().unwrap().shapes_data.len());
+        }
     }
 }

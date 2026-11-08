@@ -789,10 +789,13 @@ errori passano già da stdout/stderr (`parser/jt.rs`), e ogni convertitore si ag
 - [x] **Rotazione su un asse (cerniere)** (2026-11-08, sezione della finestra Posizione): ruota l'oggetto della
       finestra (file o pezzi selezionati) attorno a un asse scelto nella vista con aggancio ai vertici come le Misure:
       «Due punti», «Due fori» (tre punti sul bordo di ognuno: l'asse unisce i centri), «Un foro» (asse per il centro,
-      perpendicolare al foro) o «Punto + asse» X/Y/Z. Angolo con cursore, frecce e valore (passo = «Unità»), un solo
-      Annulla per i passi consecutivi, «Inverti verso»; punti e asse disegnati sopra la vista, Esc annulla la scelta.
-      `placement::about_axis`, `placement::circle_through`. Da decidere con l'utente: salvare più posizioni
-      (aperto/chiuso).
+      perpendicolare al foro) o «Punto + asse» X/Y/Z. Angolo con cursore, frecce e valore (passo proprio, 1° di
+      default, scelta 0,1–90°), un solo Annulla per i passi consecutivi, «Inverti verso»; punti e asse disegnati sopra
+      la vista, Esc annulla la scelta. `placement::about_axis`, `placement::circle_through`. L'utente non vuole salvare
+      più posizioni: cambia l'angolo ed esporta.
+      Correzione 2026-11-08: il passo era quello di «Unità» e il cursore (clamping Always di egui) riportava al passo
+      anche i valori scritti a mano (23° → 20°); ora il cursore non riarrotonda. Prova su JT veri:
+      test ignorato `hinge_one_degree_steps_on_real_files` con GESTORE_PROVA_CERNIERA.
 
 ### Step 6 — WRL più leggeri (richiesta dell'utente 2026-11-07: JT da 70 MB → WRL da 600 MB)
 
