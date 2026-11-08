@@ -651,7 +651,8 @@ mod tests {
     use crate::ui::color_menu::tests::{node, TWO_PARTS};
     use crate::ui::tests::{click, frame};
 
-    /// App con un renderer vero (per il picking), se c'è una scheda video.
+    /// App con un renderer vero (per il picking), se c'è una scheda video. Chi la usa prende
+    /// prima `gpu_lock`, che deve durare più dell'app.
     fn app_with_renderer() -> Option<crate::app::GestoreApp> {
         let instance = wgpu::Instance::default();
         let adapter = pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions::default()))?;
@@ -681,6 +682,7 @@ mod tests {
     /// pipetta; senza selezione il colore va tra i miei colori.
     #[test]
     fn eyedropper_copies_the_color_of_the_clicked_piece() {
+        let _gpu = crate::renderer::gpu_lock();
         let Some(mut app) = app_with_renderer() else { return };
         let ctx = egui::Context::default();
         let texts = frame(&ctx, &mut app, vec![]);
@@ -704,6 +706,7 @@ mod tests {
     /// Il tasto "Zoom" della vista inverte il verso della rotella.
     #[test]
     fn zoom_button_inverts_the_wheel() {
+        let _gpu = crate::renderer::gpu_lock();
         let Some(mut app) = app_with_renderer() else { return };
         let ctx = egui::Context::default();
         let texts = frame(&ctx, &mut app, vec![]);

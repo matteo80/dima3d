@@ -905,17 +905,20 @@ mod tests {
     }
 }
 
+/// I test che usano la scheda video non girano mai insieme: due istanze Vulkan vive in parallelo
+/// chiudono il processo di test (accesso non valido nel driver). Ogni test che crea un
+/// `wgpu::Instance` prende il lucchetto per primo, così viene rilasciato dopo il device.
+#[cfg(test)]
+static GPU: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+#[cfg(test)]
+pub(crate) fn gpu_lock() -> std::sync::MutexGuard<'static, ()> {
+    GPU.lock().unwrap_or_else(|e| e.into_inner())
+}
+
 #[cfg(test)]
 mod bench {
     use super::*;
-
-    /// I test che usano la scheda video non girano mai insieme: due istanze Vulkan create in
-    /// parallelo hanno chiuso il processo di test una volta (accesso non valido nel driver).
-    static GPU: std::sync::Mutex<()> = std::sync::Mutex::new(());
-
-    fn gpu_lock() -> std::sync::MutexGuard<'static, ()> {
-        GPU.lock().unwrap_or_else(|e| e.into_inner())
-    }
 
     /// Legge dalla GPU i pixel RGBA dell'ultimo frame.
     fn read_pixels(r: &WgpuRenderer, device: &wgpu::Device, queue: &wgpu::Queue) -> Vec<u8> {
