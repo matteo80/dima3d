@@ -131,7 +131,9 @@ impl<'a> Stream<'a> {
         let mut dec = flate2::Decompress::new(true);
         let raw = self.raw;
         let input = &raw[self.raw_pos..];
-        let mut buf = Vec::with_capacity(input.len() * 4 + 1024);
+        // I file dei programmi di misura hanno migliaia di blocchi piccoli: la memoria cresce
+        // raddoppiando invece di riservare ogni volta il resto del file
+        let mut buf = Vec::with_capacity(1 << 16);
         loop {
             let before_in = dec.total_in() as usize;
             if buf.len() == buf.capacity() {
@@ -508,6 +510,16 @@ impl<'a> Reader<'a> {
                 s.bytes(if double { 24 } else { 12 })?;
             }
             0x10 => self.polypolyline()?,
+            b'L' => {
+                // Polilinea: un byte di opzioni (0 = float), numero di punti, poi x y z. Si salta:
+                // la scena mostra solo superfici
+                let flags = s.u8()?;
+                if flags != 0 {
+                    return Err(format!("polilinea con opzioni {flags:02x} non supportata"));
+                }
+                let n = s.len_i32("polilinea")?;
+                s.bytes(n * 12)?;
+            }
             b'&' => {
                 let from = s.len_i32("copia")?;
                 s.i32()?;
@@ -690,17 +702,40 @@ impl<'a> Reader<'a> {
         let double = s.u8()? != 0;
         let sub = s.u16()?;
         let count = s.len_i32("polilinea")?;
-        if sub & 0x02 != 0 {
+        let primitives = if sub & 0x02 != 0 {
             let n = s.len_i32("polilinea")?;
             s.bytes(n * 4)?;
+            n
         } else if sub & 0x04 == 0 {
             let mut total = 0usize;
+            let mut n = 0usize;
             while total < count {
                 total += s.len_i32("polilinea")?;
+                n += 1;
             }
-        }
+            n
+        } else {
+            1
+        };
         if sub & 0xFF00 != 0 {
-            return Err("polilinee 2D non supportate".into());
+            // Coordinate «2D»: per X, Y e Z (2 bit ciascuna, dal bit 8) 1 = sempre zero,
+            // 2 = un valore per tutti, 3 = un valore per polilinea; i punti hanno solo le altre.
+            // Visto nei file reali: XY per tutti i punti, poi una Z per polilinea
+            if sub & 0x01 != 0 {
+                return Err("polilinee 2D compresse non supportate".into());
+            }
+            let mut dims = 0;
+            let mut extra = 0;
+            for k in 0..3 {
+                match (sub >> (8 + 2 * k)) & 0x03 {
+                    0 => dims += 1,
+                    1 => {}
+                    2 => extra += 1,
+                    _ => extra += primitives,
+                }
+            }
+            s.bytes((count * dims + extra) * if double { 8 } else { 4 })?;
+            return Ok(());
         }
         if sub & 0x01 != 0 {
             s.u8()?;
@@ -808,7 +843,7 @@ impl<'a> Reader<'a> {
             }
         };
         if sub & 0x08 != 0 {
-            self.optionals(face_count)?;
+            self.optionals(points.len(), face_count)?;
         }
         let content = Content::Mesh(Mesh { points, triangles });
         match refinement {
@@ -823,7 +858,7 @@ impl<'a> Reader<'a> {
     }
 
     /// Attributi di vertici e facce: normali e regioni si saltano (le normali si ricalcolano).
-    fn optionals(&mut self, faces: usize) -> Res<()> {
+    fn optionals(&mut self, vertices: usize, faces: usize) -> Res<()> {
         let s = &mut self.s;
         loop {
             let op = s.u8()?;
@@ -835,6 +870,15 @@ impl<'a> Reader<'a> {
                     s.u8()?;
                     let n = s.len_i32("normali")?;
                     s.bytes(n)?;
+                }
+                // Normali non compresse su tutti i vertici: x y z per vertice
+                0x11 => {
+                    s.bytes(vertices * 12)?;
+                }
+                // Normali polari su tutti i vertici: due angoli per vertice (nei file esportati
+                // dai programmi di misura, dopo le facce a strisce)
+                0x13 => {
+                    s.bytes(vertices * 8)?;
                 }
                 0x33 => {
                     let scheme = s.u8()?;
@@ -1113,6 +1157,11 @@ mod tests {
     /// File costruito a mano come quelli reali: segmento con nome e colore, Shell vuota marcata,
     /// riempita in un blocco compresso dopo una pausa.
     fn sample() -> Vec<u8> {
+        sample_with(&[], &[])
+    }
+
+    /// Come `sample`, con altre geometrie nel pezzo e attributi dopo le facce della Shell.
+    fn sample_with(extra: &[u8], optionals: &[u8]) -> Vec<u8> {
         use std::io::Write;
         let mut tree = Vec::new();
         tree.push(b'(');
@@ -1127,9 +1176,10 @@ mod tests {
         tree.extend_from_slice(&[b'"', 0x01, 0x01, 0, 255, 0, 0]);
         // Shell vuota + marcatura
         tree.extend_from_slice(&[b'S', 0, 0x90, 0x02, 0x00, 0, b'q']);
+        tree.extend_from_slice(extra);
         tree.push(b')');
         // Riempimento: punti non compressi, strisce compresse a 8 bit
-        let mut geo = vec![b'S', 0, 0x06];
+        let mut geo = vec![b'S', 0, if optionals.is_empty() { 0x06 } else { 0x0e }];
         geo.extend_from_slice(&0i32.to_le_bytes());
         geo.push(0);
         geo.extend_from_slice(&4i32.to_le_bytes());
@@ -1142,6 +1192,7 @@ mod tests {
         geo.extend_from_slice(&6i32.to_le_bytes());
         geo.push(8);
         geo.extend_from_slice(&[4, 0, 1, 2, 3]);
+        geo.extend_from_slice(optionals);
         geo.extend_from_slice(&[b'z']);
         let mut z = flate2::write::ZlibEncoder::new(Vec::new(), flate2::Compression::default());
         z.write_all(&geo).unwrap();
@@ -1215,6 +1266,29 @@ mod tests {
         let (shapes, warnings) = shapes(&f);
         assert_eq!(shapes.len(), 1);
         assert_eq!(warnings.len(), 1);
+    }
+
+    /// Come nei file dei programmi di misura: normali polari dopo le facce, polilinee semplici e
+    /// polilinee «2D» con una Z per polilinea.
+    #[test]
+    fn polar_normals_and_polylines_are_skipped() {
+        let mut optionals = vec![0x13];
+        optionals.extend_from_slice(&[0u8; 4 * 8]);
+        optionals.push(0);
+        let mut extra = vec![b'L', 0];
+        extra.extend_from_slice(&2i32.to_le_bytes());
+        extra.extend_from_slice(&[0u8; 2 * 12]);
+        // Due polilinee da 2 e 3 punti: XY per punto, poi una Z per polilinea
+        extra.extend_from_slice(&[0x10, 0]);
+        extra.extend_from_slice(&0x3000u16.to_le_bytes());
+        for n in [5i32, 2, 3] {
+            extra.extend_from_slice(&n.to_le_bytes());
+        }
+        extra.extend_from_slice(&[0u8; (5 * 2 + 2) * 4]);
+        let (shapes, warnings) = shapes(&sample_with(&extra, &optionals));
+        assert!(warnings.is_empty(), "{warnings:?}");
+        assert_eq!(shapes.len(), 1);
+        assert_eq!(shapes[0].indices.len(), 6);
     }
 
     /// File veri dell'utente (non nel repository): `GESTORE_HSF_DIR` = cartella con gli .hsf.

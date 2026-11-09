@@ -10,16 +10,20 @@
 //!   percorsi. Il nome vero va nei metadati `name` (`m`), come nei file originali;
 //! - le Shell hanno punti `float` e la lista delle facce standard (`3 a b c` per triangolo);
 //! - colore e trasparenza (`"`: diffuse e transmission) sul segmento del pezzo;
-//! - le scene HSF sono in metri: le coordinate restano in millimetri e il segmento radice ha una
-//!   scala 0,001, come i pezzi in millimetri dei file originali.
+//! - le scene HSF sono in metri: le coordinate restano nelle unità della scena e il segmento
+//!   radice (`model_root`, come nei file originali) ha la scala verso i metri (0,001 se la scena
+//!   è in millimetri, nessuna se è già in metri, come una scocca aperta da un WRL in metri).
 
 use std::io::{self, BufWriter, Write};
 
 use super::writer::{compute_has_visible, ExportStats};
 use crate::scene_graph::{NodeKind, SceneGraph, SceneNode};
 
-/// Millimetri del Gestore → metri della scena HSF.
+/// Millimetri → metri della scena HSF.
 const MM_TO_METERS: f32 = 0.001;
+
+/// Opzioni del file (`I`) come nei file originali scritti da HOOPS.
+const FILE_INFO: i32 = 0x40c;
 
 struct Ctx<'a> {
     scene: &'a SceneGraph,
@@ -138,6 +142,8 @@ pub fn export_hsf(
         Some(n) => (vec![n], false),
         None => (scene.roots.clone(), files > 1),
     };
+    // Unità della scena → metri: le scocche aperte da file in metri restano in metri
+    let to_meters = crate::reduction::unit_to_mm(scene).unwrap_or(1.0) * MM_TO_METERS;
     let mut ctx = Ctx {
         scene,
         has_visible: compute_has_visible(scene),
@@ -151,7 +157,7 @@ pub fn export_hsf(
         ctx.expand(r, &mut top);
     }
 
-    // Ingombro delle parti scritte, in metri
+    // Ingombro delle parti scritte
     let mut lo = glam::Vec3::splat(f32::MAX);
     let mut hi = glam::Vec3::splat(f32::MIN);
     let mut stack = top.clone();
@@ -177,9 +183,9 @@ pub fn export_hsf(
     let mut file = BufWriter::with_capacity(1 << 20, std::fs::File::create(path)?);
     let mut head = b";; HSF V21.00 \n".to_vec();
     head.push(b'I');
-    push_i32(&mut head, 0x600);
+    push_i32(&mut head, FILE_INFO);
     head.extend_from_slice(&[b'B', 0, 0]);
-    for c in (lo * MM_TO_METERS).to_array().into_iter().chain((hi * MM_TO_METERS).to_array()) {
+    for c in (lo * to_meters).to_array().into_iter().chain((hi * to_meters).to_array()) {
         push_f32(&mut head, c);
     }
     head.push(b'Z');
@@ -187,15 +193,26 @@ pub fn export_hsf(
 
     let mut z = flate2::write::ZlibEncoder::new(file, flate2::Compression::default());
     let mut out = Vec::with_capacity(1 << 23);
-    // Segmento radice con la scala da millimetri a metri
+    // Segmento radice con la scala verso i metri, se serve
     let root_name = match node {
         Some(n) => scene.display_name(n),
         None => scene.sources.first().map(|s| s.name.clone()).unwrap_or_default(),
     };
-    ctx.open_segment(&mut out, "model", &root_name);
-    out.extend_from_slice(&[b'%', 0]);
-    for v in [MM_TO_METERS, 0.0, 0.0, 0.0, MM_TO_METERS, 0.0, 0.0, 0.0, MM_TO_METERS, 0.0, 0.0, 0.0] {
-        push_f32(&mut out, v);
+    out.extend_from_slice(&[b'(', 10]);
+    out.extend_from_slice(b"model_root");
+    if !root_name.trim().is_empty() {
+        out.push(b'm');
+        push_i32(&mut out, 1);
+        out.extend_from_slice(b"name");
+        push_i32(&mut out, root_name.len() as i32 + 1);
+        out.extend_from_slice(root_name.as_bytes());
+        out.push(0);
+    }
+    if (to_meters - 1.0).abs() > 1e-6 {
+        out.extend_from_slice(&[b'%', 0]);
+        for v in [to_meters, 0.0, 0.0, 0.0, to_meters, 0.0, 0.0, 0.0, to_meters, 0.0, 0.0, 0.0] {
+            push_f32(&mut out, v);
+        }
     }
     for n in top {
         ctx.write_node(&mut out, &mut z, n)?;
@@ -241,12 +258,32 @@ DEF Assieme Transform { translation 10 0 0 children [
             assert!(names.iter().any(|n| n == wanted), "manca {wanted}: {names:?}");
         }
         assert!(!names.iter().any(|n| n == "Nascosto"));
-        // Stesse coordinate in millimetri (passando per i metri del file)
+        // La scena misura 11 unità: è in metri, il file non ha scala e si riapre in millimetri
         let piastra = again.shapes_data.iter().find(|s| s.world_vertices.len() == 4).unwrap();
-        assert!(piastra.world_vertices.iter().any(|v| (v[0] - 11.0).abs() < 1e-4 && (v[1] - 1.0).abs() < 1e-4));
+        assert!(piastra.world_vertices.iter().any(|v| (v[0] - 11_000.0).abs() < 1e-2 && (v[1] - 1000.0).abs() < 1e-2));
         assert_eq!(piastra.indices.len(), 6);
         let c = piastra.color.unwrap();
         assert!((c[0] - 1.0).abs() < 0.01 && (c[1] - 0.5).abs() < 0.01 && (c[3] - 0.75).abs() < 0.01, "{c:?}");
+        let _ = std::fs::remove_file(path);
+    }
+
+    /// Scena in millimetri (una parte di 1,5 m): scala 0,001 sulla radice, ingombro in metri.
+    #[test]
+    fn millimeter_scene_keeps_its_size() {
+        let scene = crate::parser::parse_wrl(
+            br#"#VRML V2.0 utf8
+DEF Pezzo Shape { geometry IndexedFaceSet { coord Coordinate { point [ 0 0 0, 1500 0 0, 0 800 0 ] } coordIndex [ 0 1 2 -1 ] } }
+"#,
+        );
+        let path = std::env::temp_dir().join("gestore_wrl_test_mm.hsf");
+        export_hsf(&scene, None, &path, [0.5, 0.5, 0.5, 1.0]).unwrap();
+        let data = std::fs::read(&path).unwrap();
+        // Ingombro dopo `I` (5 byte) e `B` con i suoi 2 byte: x massima = 1,5 m
+        let max_x = f32::from_le_bytes(data[15 + 5 + 3 + 12..15 + 5 + 3 + 16].try_into().unwrap());
+        assert!((max_x - 1.5).abs() < 1e-6, "{max_x}");
+        let again = crate::parser::parse_wrl(&data);
+        let v = &again.shapes_data[0].world_vertices;
+        assert!(v.iter().any(|v| (v[0] - 1500.0).abs() < 1e-3), "{v:?}");
         let _ = std::fs::remove_file(path);
     }
 
