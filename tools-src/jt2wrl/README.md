@@ -1,8 +1,8 @@
 # jt2wrl — convertitore JT → VRML 2.0
 
-Programma separato usato dal Gestore WRL per aprire i file `.jt`: il Gestore lo avvia senza
+Programma separato usato da Dima 3D per aprire i file `.jt`: Dima 3D lo avvia senza
 finestra, legge l'avanzamento da stdout e apre il `.wrl` prodotto. Se un JT danneggiato fa
-terminare il convertitore, il Gestore resta aperto e mostra l'errore.
+terminare il convertitore, Dima 3D resta aperto e mostra l'errore.
 
 Usa [JTReader](https://github.com/svr2kos2/JTReader) (C#, licenza MIT, © svr2kos2), compilato
 direttamente dai sorgenti insieme a `Program.cs`. Supporta JT 8, 9 e 10 con geometria a triangoli

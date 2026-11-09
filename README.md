@@ -1,26 +1,35 @@
-# Gestore WRL
+# Dima 3D
 
-Applicazione desktop per Windows, scritta in Rust, per aprire, ispezionare, modificare ed esportare file
-VRML (`.wrl`) di grandi dimensioni (centinaia di MB), come le matematiche di scocche e componenti
-automobilistici.
+<img src="assets/icona_256.png" alt="Icona di Dima 3D" width="96" align="right">
+
+Applicazione desktop per Windows, scritta in Rust, per aprire, ispezionare, posizionare ed esportare
+matematiche 3D di grandi dimensioni (centinaia di MB), come le scocche e i componenti automobilistici.
+Il nome viene dalla *dima* di officina, la maschera che tiene i pezzi nella posizione giusta.
+
+> **Codice scritto interamente con l'intelligenza artificiale.** Tutto il codice di questo progetto
+> (programma, convertitori, test, script e documentazione) è stato scritto da Claude (Anthropic) con
+> Claude Code. L'autore del progetto non ha scritto codice: ha definito le richieste, provato il
+> programma sulle matematiche reali e deciso cosa correggere.
 
 ## Funzioni
 
-- Lettura veloce di VRML 2.0 e VRML 1.0 (file mappati in memoria, analisi in parallelo)
-- Apertura dei file JT 8, 9 e 10 (geometria tassellata, assiemi in più file) con il convertitore
-  `tools\jt2wrl.exe`: vedi [`tools-src/jt2wrl`](tools-src/jt2wrl/README.md)
-- Vista 3D con wgpu: antialiasing, illuminazione che segue la vista, spigoli vivi dalle normali del file,
-  sfondo uniforme o sfumato
-- Navigazione in stile OpenInventor, viste standard in coordinate veicolo, cubo di orientamento cliccabile
-- Più file nella stessa scena, con conversione delle unità (millimetri ↔ metri)
-- Albero della scena con ricerca, raggruppamento automatico dei pezzi connessi, colori, rinomina,
+- **Apertura** di WRL (VRML 2.0 e 1.0), STEP, JT 8/9/10, STL, HSF e Open Inventor (`.iv`, testo e binario),
+  anche più file nella stessa scena, con conversione delle unità (millimetri ↔ metri)
+- **STEP**: visualizzazione rapida oppure conversione in mesh con deviazione superficiale, angolare e relativa
+  regolabili (convertitore `tools\step2wrl`, basato su OpenCASCADE)
+- **JT**: assiemi in più file, con il convertitore `tools\jt2wrl.exe` (basato su JTReader)
+- **Vista 3D** con wgpu: antialiasing, illuminazione che segue la vista, spigoli vivi, sfondo uniforme o sfumato;
+  navigazione in stile OpenInventor, viste standard in coordinate veicolo, cubo di orientamento cliccabile
+- **Albero della scena** con ricerca, raggruppamento automatico dei pezzi connessi, colori, rinomina,
   nascondi/isola/elimina, Annulla/Ripeti
-- Proprietà del pezzo selezionato, misura della distanza tra due punti, piano di sezione
-- Export delle sole parti visibili, dell'insieme o di un singolo file in WRL, STL e Open Inventor (`.iv`,
-  testo o binario)
-- Apertura dei file STL (binari e di testo)
-- Riduzione delle facce con anteprima e dimensione prevista del file
-- Colori casuali per pezzo, pipetta per copiare il colore di un pezzo, colori salvati
+- **Misure** tra due punti con aggancio ai vertici; con la *calamita* i punti seguono i pezzi che si spostano
+- **Piano di sezione**, proprietà del pezzo selezionato, pipetta per i colori
+- **Posizione**: sposta e ruota file o pezzi in X Y Z / A B C, in coordinate dell'oggetto o della cabina;
+  calcolo e applicazione di offset tra oggetti o tra `CONST BASE` (es. per costruire lo skid)
+- **Cerniere**: rotazione attorno a un asse scelto nella vista (due punti, due fori, un foro, punto + asse),
+  oppure calcolato da due matematiche dello stesso pezzo in posizioni diverse; porta una misura a una quota data
+- **Riduzione delle facce** con anteprima e dimensione prevista del file
+- **Export** delle parti visibili, dell'insieme o di un singolo file in WRL, STL, Open Inventor e HSF
 
 ## Compilazione
 
@@ -28,27 +37,26 @@ Serve [Rust](https://rustup.rs) (toolchain MSVC su Windows).
 
 ```
 cargo build --release
-```
-
-L'eseguibile è `target\release\gestore-wrl.exe` e non richiede installazione: il runtime C è incluso.
-Per aprire i file JT serve anche `tools\jt2wrl.exe` accanto all'eseguibile (compilazione in
-[`tools-src/jt2wrl`](tools-src/jt2wrl/README.md)).
-
-```
 cargo test --release
 ```
 
-Per preparare lo zip da distribuire (eseguibile, convertitore JT, licenze, LEGGIMI):
+L'eseguibile è `target\release\dima3d.exe` e non richiede installazione: il runtime C è incluso.
+I convertitori si compilano a parte: [`tools-src/jt2wrl`](tools-src/jt2wrl/README.md) e
+[`tools-src/step2wrl`](tools-src/step2wrl/README.md); vanno in `tools\` accanto all'eseguibile.
+
+Per preparare lo zip da distribuire (eseguibile, convertitori, licenze, LEGGIMI):
 
 ```
 powershell -ExecutionPolicy Bypass -File pacchetto.ps1
 ```
 
-Il risultato è `dist\Gestore-WRL-<versione>.zip`: si estrae dove si vuole e si avvia `gestore-wrl.exe`.
+Il risultato è `dist\Dima3D-<versione>.zip`: si estrae dove si vuole e si avvia `dima3d.exe`.
 
 Lo stato dettagliato del progetto e la roadmap sono in [`STATO_PROGETTO.md`](STATO_PROGETTO.md).
 
 ## Licenza
 
-Distribuito con licenza MIT: vedi [`LICENSE`](LICENSE). Il convertitore JT include JTReader e
-SharpCompress, anch'essi MIT: licenze in [`licenses`](licenses).
+Distribuito con licenza MIT: vedi [`LICENSE`](LICENSE). Le licenze e le note di copyright delle librerie
+incluse sono nella cartella [`licenses`](licenses): `librerie-rust.txt` per le 203 librerie Rust del
+programma (rigenerabile con `python licenses/genera_licenze_rust.py`), più quelle dei convertitori
+(OpenCASCADE LGPL 2.1 con eccezione, JTReader e SharpCompress MIT, e le loro dipendenze).

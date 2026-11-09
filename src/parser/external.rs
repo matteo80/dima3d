@@ -84,11 +84,11 @@ pub fn converter_path(kind: Kind) -> Option<PathBuf> {
 
 /// Cartella dei WRL convertiti.
 fn work_dir() -> PathBuf {
-    std::env::temp_dir().join("gestore-wrl-jt")
+    std::env::temp_dir().join("dima3d-conversioni")
 }
 
 /// Elimina le conversioni rimaste da sessioni precedenti (quelle ancora aperte da un altro
-/// Gestore sono mappate in memoria: Windows non le lascia cancellare, e restano).
+/// Dima 3D sono mappate in memoria: Windows non le lascia cancellare, e restano).
 pub fn cleanup_old_conversions() {
     if let Ok(entries) = std::fs::read_dir(work_dir()) {
         for e in entries.flatten() {
@@ -135,7 +135,7 @@ pub fn convert_and_load(source: PathBuf, kind: Kind, cluster: crate::clusterer::
 fn convert(source: &Path, kind: Kind, sender: &Sender<LoadEvent>) -> Result<(PathBuf, Vec<String>), String> {
     let label = kind.label();
     let converter = converter_path(kind).ok_or_else(|| {
-        format!("Convertitore {label} non trovato: serve {} nella cartella del Gestore WRL", kind.locations().1[0])
+        format!("Convertitore {label} non trovato: serve {} nella cartella di Dima 3D", kind.locations().1[0])
     })?;
     let dir = work_dir();
     std::fs::create_dir_all(&dir).map_err(|e| format!("Cartella temporanea non disponibile: {e}"))?;

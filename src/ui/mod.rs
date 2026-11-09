@@ -1,3 +1,4 @@
+pub mod about;
 pub mod color_menu;
 pub mod measure;
 pub mod position_panel;
@@ -54,6 +55,8 @@ pub struct UiState {
     pub measure: Option<measure::Measure>,
     /// Pipetta attiva: il clic nella vista legge il colore di un pezzo invece di selezionare
     pub eyedropper: bool,
+    /// Finestra Info aperta
+    pub about: bool,
     /// Piano di sezione attivo
     pub section: Option<crate::renderer::Section>,
     /// Riferimento del trascinamento in corso nella viewport
@@ -88,11 +91,12 @@ impl Default for UiState {
             scroll_to_selected: false,
             is_loading: false,
             load_progress: 0.0,
-            status_message: "Pronto. Apri un file WRL per iniziare.".to_string(),
+            status_message: "Pronto. Apri un file 3D per iniziare.".to_string(),
             load_warnings: Vec::new(),
             unit_suggestions: Vec::new(),
             measure: None,
             eyedropper: false,
+            about: false,
             section: None,
             drag: None,
             zoom_anchor: None,

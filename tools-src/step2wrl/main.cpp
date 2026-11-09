@@ -1,4 +1,4 @@
-// step2wrl — convertitore STEP → VRML 2.0 per il Gestore WRL.
+// step2wrl — convertitore STEP → VRML 2.0 per Dima 3D.
 //
 // Legge lo STEP con OpenCASCADE (assieme, nomi e colori tramite XCAF), tassella la geometria esatta
 // con le tolleranze scelte (come le "Opzioni di mesh" Standard di FreeCAD: deviazione di

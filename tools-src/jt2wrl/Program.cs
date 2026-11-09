@@ -1,4 +1,4 @@
-// jt2wrl: converte un file JT (Jupiter Tessellation) in VRML 2.0 per il Gestore WRL.
+// jt2wrl: converte un file JT (Jupiter Tessellation) in VRML 2.0 per Dima 3D.
 //
 // Uso:    jt2wrl <entrata.jt> <uscita.wrl>
 // Uscita: righe "PROGRESS <0..1> <testo>" su stdout durante il lavoro, "DONE <shape> <triangoli>

@@ -57,7 +57,7 @@ struct Ascii<W: Write> {
 
 impl<W: Write> IvWriter for Ascii<W> {
     fn header(&mut self) -> io::Result<()> {
-        self.w.write_all(b"#Inventor V2.1 ascii\n# Esportato da Gestore WRL\n\n")
+        self.w.write_all(b"#Inventor V2.1 ascii\n# Esportato da Dima 3D\n\n")
     }
 
     fn begin(&mut self, class: &str, def: Option<&str>, fields: &[(&str, Value)], children: Option<u32>) -> io::Result<()> {

@@ -1,5 +1,5 @@
-# Prepara la cartella e lo zip da distribuire: dist\Gestore-WRL-<versione>.zip
-# Contiene gestore-wrl.exe, tools\jt2wrl.exe (se compilato), le licenze e un LEGGIMI.
+﻿# Prepara la cartella e lo zip da distribuire: dist\Dima3D-<versione>.zip
+# Contiene dima3d.exe, tools\jt2wrl.exe (se compilato), le licenze e un LEGGIMI.
 # Uso:  powershell -ExecutionPolicy Bypass -File pacchetto.ps1  [-SenzaCompilare]
 param([switch]$SenzaCompilare)
 
@@ -12,12 +12,12 @@ if (-not $SenzaCompilare) {
 }
 
 $version = (Select-String -Path Cargo.toml -Pattern '^version\s*=\s*"(.+)"' | Select-Object -First 1).Matches[0].Groups[1].Value
-$name = "Gestore-WRL-$version"
+$name = "Dima3D-$version"
 $dir = Join-Path 'dist' $name
 if (Test-Path $dir) { Remove-Item -Recurse -Force $dir }
 New-Item -ItemType Directory -Force (Join-Path $dir 'licenses') | Out-Null
 
-Copy-Item 'target\release\gestore-wrl.exe' $dir
+Copy-Item 'target\release\dima3d.exe' $dir
 Copy-Item 'LICENSE' (Join-Path $dir 'LICENSE.txt')
 Copy-Item 'licenses\*.txt' (Join-Path $dir 'licenses')
 
@@ -38,10 +38,12 @@ if (Test-Path (Join-Path $step 'step2wrl.exe')) {
 }
 
 $readme = @"
-Gestore WRL $version
-====================
+Dima 3D $version
+================
 
-Avvio: doppio clic su gestore-wrl.exe. Non serve installare niente: si può copiare la cartella
+Visualizza, posiziona ed esporta matematiche 3D di grandi dimensioni.
+
+Avvio: doppio clic su dima3d.exe. Non serve installare niente: si può copiare la cartella
 intera su un altro PC (Windows 10 o 11, 64 bit) o su una chiavetta.
 
 Formati
@@ -50,9 +52,14 @@ Formati
   all'eseguibile.
 - Export: WRL, STL, Open Inventor (.iv), HSF, scegliendo il tipo nella finestra Salva.
 
-Le preferenze sono salvate in %APPDATA%\Gestore-WRL\impostazioni.txt.
+Le preferenze sono salvate in %APPDATA%\Dima3D\impostazioni.txt.
 
-Licenze: LICENSE.txt (Gestore WRL) e la cartella licenses (librerie incluse).
+Il codice è stato scritto interamente con l'intelligenza artificiale (Claude, di Anthropic):
+l'autore del progetto non ha scritto codice, ha definito le richieste e provato il programma.
+Codice sorgente: https://github.com/matteo80/gestore-wrl
+
+Licenze: LICENSE.txt (Dima 3D, MIT) e la cartella licenses: librerie Rust incluse nel
+programma (librerie-rust.txt, con le note di copyright) e librerie dei convertitori.
 "@
 # Fine riga di Windows, così il Blocco note lo mostra bene
 Set-Content -Path (Join-Path $dir 'LEGGIMI.txt') -Value ($readme -replace "`r?`n", "`r`n") -Encoding UTF8 -NoNewline

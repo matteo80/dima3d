@@ -1,6 +1,6 @@
 """Genera l'icona dell'applicazione (assets/icona.ico e assets/icona_256.png), senza librerie esterne.
 
-Disegno: un cubo in assonometria su un quadrato arrotondato blu. Uso: python assets/genera_icona.py
+Disegno: una scocca vista di lato appoggiata su uno skid arancione, su un quadrato arrotondato blu. Uso: python assets/genera_icona.py
 """
 import math
 import os
@@ -10,31 +10,28 @@ import zlib
 SIZES = [16, 24, 32, 48, 64, 128, 256]
 SAMPLES = 4  # sovracampionamento per lato: bordi morbidi
 
-TOP = (0.50, 0.17)
-CENTER = (0.50, 0.50)
-LEFT_TOP = (0.21, 0.335)
-RIGHT_TOP = (0.79, 0.335)
-LEFT_BOTTOM = (0.21, 0.665)
-RIGHT_BOTTOM = (0.79, 0.665)
-BOTTOM = (0.50, 0.83)
-
-FACES = [
-    ([TOP, RIGHT_TOP, CENTER, LEFT_TOP], (233, 241, 250)),
-    ([LEFT_TOP, CENTER, BOTTOM, LEFT_BOTTOM], (150, 192, 240)),
-    ([RIGHT_TOP, RIGHT_BOTTOM, BOTTOM, CENTER], (86, 145, 220)),
+# Scocca vista di lato (senza ruote, con i passaruota) appoggiata su uno skid: la «dima» che
+# posiziona i pezzi. Coordinate da 0 a 1, y verso il basso.
+BODY = [
+    (0.12, 0.60), (0.12, 0.52), (0.17, 0.48), (0.33, 0.45), (0.43, 0.31), (0.63, 0.30),
+    (0.76, 0.44), (0.86, 0.47), (0.88, 0.52), (0.88, 0.60),
 ]
+WINDOW = [(0.45, 0.345), (0.61, 0.335), (0.71, 0.445), (0.38, 0.45)]
+ARCHES = [((0.30, 0.60), 0.085), ((0.71, 0.60), 0.085)]
+SKID = [(0.10, 0.75, 0.90, 0.80), (0.15, 0.60, 0.20, 0.76), (0.475, 0.60, 0.525, 0.76), (0.81, 0.60, 0.86, 0.76)]
+
+BODY_COLOR = (236, 243, 251)
+WINDOW_COLOR = (112, 164, 226)
+SKID_COLOR = (255, 152, 40)
 
 
 def inside_polygon(x, y, poly):
-    sign = 0
+    """Pari-dispari: va bene anche per poligoni non convessi."""
+    inside = False
     for (ax, ay), (bx, by) in zip(poly, poly[1:] + poly[:1]):
-        cross = (bx - ax) * (y - ay) - (by - ay) * (x - ax)
-        if cross != 0:
-            s = 1 if cross > 0 else -1
-            if sign and s != sign:
-                return False
-            sign = s
-    return True
+        if (ay > y) != (by > y) and x < ax + (y - ay) * (bx - ax) / (by - ay):
+            inside = not inside
+    return inside
 
 
 def inside_rounded_square(x, y, margin=0.04, radius=0.2):
@@ -47,9 +44,12 @@ def inside_rounded_square(x, y, margin=0.04, radius=0.2):
 def sample(x, y):
     if not inside_rounded_square(x, y):
         return (0, 0, 0, 0)
-    for poly, color in FACES:
-        if inside_polygon(x, y, poly):
-            return (*color, 255)
+    for x0, y0, x1, y1 in SKID:
+        if x0 <= x <= x1 and y0 <= y <= y1:
+            return (*SKID_COLOR, 255)
+    in_arch = any((x - cx) ** 2 + (y - cy) ** 2 <= r * r for (cx, cy), r in ARCHES)
+    if inside_polygon(x, y, BODY) and not in_arch:
+        return (*(WINDOW_COLOR if inside_polygon(x, y, WINDOW) else BODY_COLOR), 255)
     t = y  # sfumatura verticale dello sfondo
     return (round(35 - 12 * t), round(92 - 34 * t), round(160 - 52 * t), 255)
 

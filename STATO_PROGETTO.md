@@ -1,4 +1,4 @@
-# STATO PROGETTO — Gestore-WRL
+# STATO PROGETTO — Dima 3D (prima «Gestore WRL»)
 
 > Applicazione desktop nativa Rust per la visualizzazione, analisi e manipolazione interattiva  
 > di file VRML V2.0 (`.wrl`) di grandi dimensioni (fino a 600+ MB).  
@@ -872,6 +872,20 @@ sposta finché la distanza dal riferimento è quella misurata.
       Non fatto (non serve per ora): asse da tre coppie di punti cliccati o scritti a mano.
 - Distribuzione su un altro PC: `pacchetto.ps1` crea `dist\Gestore-WRL-<versione>` (exe, `tools\` con jt2wrl e
   step2wrl, `licenses\`, LEGGIMI) e lo zip. L'exe ha il runtime C incluso.
+
+### Step 9 — Nome, icona, Info e licenze (richiesta dell'utente 2026-11-09)
+
+- [x] Nome **Dima 3D** (la dima di officina tiene i pezzi in posizione): titolo, exe `dima3d.exe`, pacchetto
+      `Dima3D-<versione>.zip`, intestazioni dei file esportati, risorse dell'exe. Costante `APP_NAME` in
+      `main.rs`. Preferenze in `%APPDATA%\Dima3D` (copiate da `%APPDATA%\Gestore-WRL` al primo avvio).
+      Il repository GitHub resta `gestore-wrl`.
+- [x] Icona nuova: scocca vista di lato su uno skid arancione (`assets/genera_icona.py`).
+- [x] Finestra Info (pulsante in alto a destra, `ui/about.rs`): nome, versione, formati, codice scritto
+      interamente con AI, licenza MIT e link al sorgente, librerie principali, apertura della cartella licenze.
+- [x] Note di copyright delle 203 librerie Rust dell'exe: `licenses/librerie-rust.txt`, generato da
+      `licenses/genera_licenze_rust.py` (`cargo metadata`, solo dipendenze dell'exe per Windows; testi identici
+      una volta sola; per i pacchetti senza file di licenza riga di copyright con gli autori e testo standard).
+- [x] `pacchetto.ps1` salvato con BOM: PowerShell 5.1 leggeva le lettere accentate del LEGGIMI come ANSI.
 
 ### Piano di lavoro in autonomia (proposto 2026-11-07, in attesa di approvazione)
 

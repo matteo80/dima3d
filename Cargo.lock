@@ -814,6 +814,28 @@ dependencies = [
 ]
 
 [[package]]
+name = "dima3d"
+version = "0.1.0"
+dependencies = [
+ "bytemuck",
+ "eframe",
+ "egui",
+ "egui-phosphor",
+ "flate2",
+ "glam",
+ "memmap2",
+ "meshopt",
+ "pollster",
+ "rayon",
+ "rfd",
+ "rstar",
+ "tracing",
+ "tracing-subscriber",
+ "wgpu",
+ "winresource",
+]
+
+[[package]]
 name = "dispatch"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1281,28 +1303,6 @@ checksum = "85649ca51fd72272d7821adaf274ad91c288277713d9c18820d8499a7ff69e9a"
 dependencies = [
  "typenum",
  "version_check",
-]
-
-[[package]]
-name = "gestore-wrl"
-version = "0.1.0"
-dependencies = [
- "bytemuck",
- "eframe",
- "egui",
- "egui-phosphor",
- "flate2",
- "glam",
- "memmap2",
- "meshopt",
- "pollster",
- "rayon",
- "rfd",
- "rstar",
- "tracing",
- "tracing-subscriber",
- "wgpu",
- "winresource",
 ]
 
 [[package]]

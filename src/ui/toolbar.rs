@@ -206,6 +206,9 @@ Sposta e ruota un file o i pezzi selezionati (X Y Z, A B C), applica e calcola g
 
     // ── A destra: stato del documento e tema ──────────────────────────────────
     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+        if ui.button(icon_text(ui, icon::INFO, "")).on_hover_text(format!("Info su {}", crate::APP_NAME)).clicked() {
+            app.ui_state.about = !app.ui_state.about;
+        }
         let (sun_or_moon, next, hint) = match settings.theme {
             ThemeMode::Dark => (icon::SUN, ThemeMode::Light, "Passa al tema chiaro"),
             ThemeMode::Light => (icon::MOON, ThemeMode::Dark, "Passa al tema scuro"),

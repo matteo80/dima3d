@@ -13,6 +13,9 @@ mod scene_graph;
 mod settings;
 mod ui;
 
+/// Nome del programma (titolo della finestra, finestra Info, file esportati).
+pub const APP_NAME: &str = "Dima 3D";
+
 fn main() -> eframe::Result<()> {
     // Inizializza il sistema di logging/tracing
     tracing_subscriber::fmt()
@@ -22,10 +25,10 @@ fn main() -> eframe::Result<()> {
         )
         .init();
 
-    tracing::info!("Avvio Gestore WRL");
+    tracing::info!("Avvio {APP_NAME} {}", env!("CARGO_PKG_VERSION"));
 
     let mut viewport = egui::ViewportBuilder::default()
-        .with_title("Gestore WRL")
+        .with_title(APP_NAME)
         .with_inner_size([1280.0, 800.0])
         .with_min_inner_size([800.0, 600.0]);
     match eframe::icon_data::from_png_bytes(include_bytes!("../assets/icona_256.png")) {
@@ -41,7 +44,7 @@ fn main() -> eframe::Result<()> {
     };
 
     eframe::run_native(
-        "Gestore WRL",
+        APP_NAME,
         native_options,
         Box::new(|cc| Ok(Box::new(app::GestoreApp::new(cc)))),
     )

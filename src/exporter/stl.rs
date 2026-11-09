@@ -87,7 +87,7 @@ pub fn export_stl(scene: &SceneGraph, node: Option<u32>, path: &std::path::Path,
             .map(|s| triangles(s).count())
             .sum();
         let count = u32::try_from(total).map_err(|_| io::Error::other("troppi triangoli per un STL binario"))?;
-        let mut header = b"Gestore WRL - STL binario".to_vec();
+        let mut header = b"Dima 3D - STL binario".to_vec();
         header.resize(80, b' ');
         w.write_all(&header)?;
         w.write_all(&count.to_le_bytes())?;

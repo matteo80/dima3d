@@ -38,7 +38,7 @@ pub(crate) fn convert(data: &[u8]) -> Converted {
         braces,
         brackets,
         defs: None,
-        out: b"#VRML V2.0 utf8\n# Convertito da VRML 1.0 da Gestore WRL\n".to_vec(),
+        out: b"#VRML V2.0 utf8\n# Convertito da VRML 1.0 da Dima 3D\n".to_vec(),
         shapes: 0,
         counts: Counts::default(),
     };

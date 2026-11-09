@@ -1,4 +1,4 @@
-//! Preferenze utente persistenti (file di testo semplice in %APPDATA%\Gestore-WRL).
+//! Preferenze utente persistenti (file di testo semplice in %APPDATA%\Dima3D).
 
 use std::path::{Path, PathBuf};
 
@@ -154,7 +154,16 @@ pub const SENSITIVITY_RANGE: std::ops::RangeInclusive<f32> = 0.2..=3.0;
 
 fn settings_path() -> Option<PathBuf> {
     let base = std::env::var_os("APPDATA").map(PathBuf::from)?;
-    Some(base.join("Gestore-WRL").join("impostazioni.txt"))
+    let path = base.join("Dima3D").join("impostazioni.txt");
+    // Preferenze salvate con il nome precedente del programma: si portano nella cartella nuova
+    let old = base.join("Gestore-WRL").join("impostazioni.txt");
+    if !path.exists() && old.exists() {
+        if let Some(dir) = path.parent() {
+            let _ = std::fs::create_dir_all(dir);
+        }
+        let _ = std::fs::copy(&old, &path);
+    }
+    Some(path)
 }
 
 fn parse_floats<const N: usize>(s: &str) -> Option<[f32; N]> {

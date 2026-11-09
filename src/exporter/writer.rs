@@ -119,7 +119,7 @@ fn write_scene(scene: &SceneGraph, node: Option<u32>, w: &mut impl Write, option
     }
 
     writeln!(w, "#VRML V2.0 utf8")?;
-    writeln!(w, "# Esportato da Gestore WRL")?;
+    writeln!(w, "# Esportato da Dima 3D")?;
     writeln!(w, "# Shape visibili: {visible}")?;
     writeln!(w)?;
 

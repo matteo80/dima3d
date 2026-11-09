@@ -137,14 +137,14 @@ impl GestoreApp {
             .map(|n| n.to_string_lossy().into_owned())
     }
 
-    /// Aggiorna il titolo della finestra: "nome.wrl* — Gestore WRL" (con più file: "nome.wrl + 2 file").
+    /// Aggiorna il titolo della finestra: "nome.wrl* — Dima 3D" (con più file: "nome.wrl + 2 file").
     pub fn update_window_title(&mut self, ctx: &egui::Context) {
         let others = self.scene_graph.as_ref().map_or(0, |s| s.open_files().count().saturating_sub(1));
         let name = self.file_name().map(|n| if others > 0 { format!("{n} + {others} file") } else { n });
         let title = match name {
-            Some(n) if self.is_dirty() => format!("{n}* — Gestore WRL"),
-            Some(n) => format!("{n} — Gestore WRL"),
-            None => "Gestore WRL".to_string(),
+            Some(n) if self.is_dirty() => format!("{n}* — {}", crate::APP_NAME),
+            Some(n) => format!("{n} — {}", crate::APP_NAME),
+            None => crate::APP_NAME.to_string(),
         };
         if title != self.project.last_title {
             ctx.send_viewport_cmd(egui::ViewportCommand::Title(title.clone()));

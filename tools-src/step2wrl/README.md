@@ -1,8 +1,8 @@
 # step2wrl — convertitore STEP → VRML 2.0
 
-Programma separato usato dal Gestore WRL per aprire i file `.stp`/`.step`: il Gestore lo avvia
+Programma separato usato da Dima 3D per aprire i file `.stp`/`.step`: Dima 3D lo avvia
 senza finestra, legge l'avanzamento da stdout e apre il `.wrl` prodotto. Se uno STEP danneggiato
-fa terminare il convertitore, il Gestore resta aperto e mostra l'errore.
+fa terminare il convertitore, Dima 3D resta aperto e mostra l'errore.
 
 Usa [OpenCASCADE](https://github.com/Open-Cascade-SAS/OCCT) 8.0.1, la stessa libreria con cui
 FreeCAD legge gli STEP: assieme, nomi e colori (XCAF), tassellazione della geometria esatta con
@@ -43,7 +43,7 @@ intera dentro `tools` accanto a `gestore-wrl.exe` (lo fa `pacchetto.ps1`).
 
 ## Licenze
 
-`main.cpp` fa parte del Gestore WRL (licenza MIT). Le librerie sono usate come DLL non
+`main.cpp` fa parte di Dima 3D (licenza MIT). Le librerie sono usate come DLL non
 modificate, in un programma separato dal Gestore; i testi delle licenze sono nella cartella
 `licenses` del repository e del pacchetto.
 
