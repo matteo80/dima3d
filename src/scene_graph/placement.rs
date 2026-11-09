@@ -53,6 +53,31 @@ pub fn about_axis(origin: Vec3, dir: Vec3, degrees: f32) -> Mat4 {
     Mat4::from_translation(origin) * Mat4::from_axis_angle(d, degrees.to_radians()) * Mat4::from_translation(-origin)
 }
 
+/// Rotazione (gradi, la più piccola) attorno alla retta per `origin` con direzione `dir` che porta
+/// la distanza tra il punto `moving` (che ruota) e il punto fermo `fixed` a `distance`.
+/// Se non si può: `Err((minima, massima))`, le distanze raggiungibili ruotando.
+pub fn angle_for_distance(origin: Vec3, dir: Vec3, moving: Vec3, fixed: Vec3, distance: f32) -> Result<f32, (f32, f32)> {
+    let (o, u, p, q) = (origin.as_dvec3(), dir.as_dvec3().normalize_or_zero(), moving.as_dvec3(), fixed.as_dvec3());
+    // Il punto gira su una circonferenza: centro c, raggio r, d²(θ) = A + K cos θ + L sin θ
+    let c = o + u * u.dot(p - o);
+    let r = p - c;
+    let w = u.cross(r);
+    let cq = c - q;
+    let a = cq.length_squared() + r.length_squared();
+    let (k, l) = (2.0 * r.dot(cq), 2.0 * w.dot(cq));
+    let m = (k * k + l * l).sqrt();
+    let range = || (((a - m).max(0.0)).sqrt() as f32, (a + m).sqrt() as f32);
+    let cos = (f64::from(distance).powi(2) - a) / m;
+    if m < 1e-12 || !(-1.0 - 1e-5..=1.0 + 1e-5).contains(&cos) {
+        return Err(range());
+    }
+    let phi = l.atan2(k);
+    let delta = cos.clamp(-1.0, 1.0).acos();
+    let wrap = |x: f64| (x + std::f64::consts::PI).rem_euclid(std::f64::consts::TAU) - std::f64::consts::PI;
+    let best = [wrap(phi + delta), wrap(phi - delta)].into_iter().min_by(|x, y| x.abs().total_cmp(&y.abs())).unwrap_or(0.0);
+    Ok(best.to_degrees() as f32)
+}
+
 /// Circonferenza per tre punti (es. sul bordo di un foro): centro e normale del suo piano.
 /// `None` se i punti sono allineati o coincidenti.
 pub fn circle_through(a: Vec3, b: Vec3, c: Vec3) -> Option<(Vec3, Vec3)> {
@@ -556,5 +581,23 @@ DEF Destinazione Group { children [
         assert!(close(m.transform_point3(Vec3::new(2.0, 0.0, 0.0)).into(), [1.0, 1.0, 0.0]));
         assert!(close(m.transform_point3(Vec3::new(1.0, 0.0, 7.0)).into(), [1.0, 0.0, 7.0]), "i punti sull'asse restano");
         assert_eq!(about_axis(Vec3::X, Vec3::ZERO, 30.0), Mat4::IDENTITY);
+    }
+
+    /// Angolo che porta un punto che ruota alla distanza voluta da un punto fermo.
+    #[test]
+    fn angle_that_gives_a_distance() {
+        // Asse Z per l'origine; punto a (100, 0, 0), punto fermo a (0, 0, 0) + (200, 0, 50)
+        let (o, d) = (Vec3::ZERO, Vec3::Z);
+        let (p, q) = (Vec3::new(100.0, 0.0, 0.0), Vec3::new(200.0, 0.0, 50.0));
+        let now = p.distance(q);
+        let wanted = now + 30.0;
+        let deg = angle_for_distance(o, d, p, q, wanted).unwrap();
+        let moved = about_axis(o, d, deg).transform_point3(p);
+        assert!((moved.distance(q) - wanted).abs() < 1e-3, "{deg} {}", moved.distance(q));
+        assert!(angle_for_distance(o, d, p, q, now).unwrap().abs() < 0.5, "già alla distanza: non gira");
+        // Fuori portata: distanze minima e massima
+        let (min, max) = angle_for_distance(o, d, p, q, 1000.0).unwrap_err();
+        assert!((min - (100.0f32.powi(2) + 50.0f32.powi(2)).sqrt()).abs() < 1e-3);
+        assert!((max - (300.0f32.powi(2) + 50.0f32.powi(2)).sqrt()).abs() < 1e-3);
     }
 }

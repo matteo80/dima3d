@@ -16,7 +16,8 @@ use glam::{Mat4, Vec3};
 
 use super::theme::{icon, icon_text};
 use crate::app::{Action, GestoreApp};
-use crate::scene_graph::placement::{about_axis, circle_through, parse_const_base, parse_offset, Pose};
+use crate::scene_graph::motion::Motion;
+use crate::scene_graph::placement::{about_axis, angle_for_distance, circle_through, parse_const_base, parse_offset, Pose};
 
 /// Cosa si sposta.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -121,6 +122,8 @@ pub enum HingeMode {
     OneHole,
     /// Un punto e uno degli assi X, Y, Z (0, 1, 2)
     PointAxis(usize),
+    /// Lo stesso pezzo in due posizioni (due matematiche già pronte): l'asse si calcola dal moto
+    TwoPositions,
 }
 
 impl HingeMode {
@@ -131,6 +134,7 @@ impl HingeMode {
             HingeMode::TwoHoles => 6,
             HingeMode::OneHole => 3,
             HingeMode::PointAxis(_) => 1,
+            HingeMode::TwoPositions => 0,
         }
     }
 
@@ -141,6 +145,7 @@ impl HingeMode {
             HingeMode::TwoHoles => format!("Foro {}: clic sul bordo, punto {} di 3", i / 3 + 1, i % 3 + 1),
             HingeMode::OneHole => format!("Clic sul bordo del foro, punto {} di 3", i + 1),
             HingeMode::PointAxis(_) => "Clic sul punto per cui passa l'asse".to_string(),
+            HingeMode::TwoPositions => String::new(),
         }
     }
 
@@ -182,11 +187,29 @@ pub struct Hinge {
     /// Passo delle frecce e del cursore dell'angolo (gradi), separato dall'Unità della trasformazione
     pub step: f32,
     pub error: Option<String>,
+    /// «Da due posizioni»: nodi della prima e della seconda posizione e moto trovato
+    pub first: Vec<u32>,
+    pub second: Vec<u32>,
+    pub motion: Option<Motion>,
+    /// Distanza voluta tra i due punti della Misura (mm)
+    pub wanted: f32,
 }
 
 impl Default for Hinge {
     fn default() -> Self {
-        Self { mode: HingeMode::default(), picking: false, points: Vec::new(), axis: None, angle: 0.0, step: 1.0, error: None }
+        Self {
+            mode: HingeMode::default(),
+            picking: false,
+            points: Vec::new(),
+            axis: None,
+            angle: 0.0,
+            step: 1.0,
+            error: None,
+            first: Vec::new(),
+            second: Vec::new(),
+            motion: None,
+            wanted: 0.0,
+        }
     }
 }
 
@@ -243,15 +266,15 @@ pub fn draw_overlay(
     if let Some((o, d)) = hinge.axis {
         let half = scene_size.max(1.0) * 0.6;
         if let (Some(a), Some(b)) = (to_screen(o - d * half), to_screen(o + d * half)) {
-            painter.line_segment([a, b], egui::Stroke::new(2.0, accent));
+            painter.line_segment([a, b], egui::Stroke::new(2.0_f32, accent));
         }
         if let (Some(a), Some(b)) = (to_screen(o), to_screen(o + d * scene_size.max(1.0) * 0.05)) {
-            painter.arrow(a, b - a, egui::Stroke::new(3.0, accent));
+            painter.arrow(a, b - a, egui::Stroke::new(3.0_f32, accent));
         }
     }
     for p in &hinge.points {
         if let Some(s) = to_screen(*p) {
-            painter.circle(s, 4.5, accent, egui::Stroke::new(1.5, egui::Color32::BLACK));
+            painter.circle(s, 4.5, accent, egui::Stroke::new(1.5_f32, egui::Color32::BLACK));
         }
     }
     if let Some(text) = hinge.prompt() {
@@ -372,12 +395,25 @@ pub fn draw(ctx: &egui::Context, app: &mut GestoreApp) {
     let frame = nodes.first().map_or(Mat4::IDENTITY, |&n| scene.object_frame(n));
     let frame_pose = Pose::from_matrix(frame);
     let has_frame = frame != Mat4::IDENTITY;
+    // Misura tra un punto fermo e uno del pezzo che ruota: (punto che ruota, punto fermo, calamita)
+    let measured = app.ui_state.measure.as_ref().and_then(|m| {
+        let [a, b] = m.points.as_slice() else { return None };
+        let moving = scene.meshes_of(&nodes);
+        let moves = |p: &crate::ui::measure::MeasurePoint| p.anchor.is_some_and(|x| moving.binary_search(&x.mesh).is_ok());
+        match (moves(a), moves(b)) {
+            (true, false) => Some((a.pos, b.pos, m.magnet)),
+            (false, true) => Some((b.pos, a.pos, m.magnet)),
+            _ => None,
+        }
+    });
 
     let mut open = true;
     let mut actions: Vec<Action> = Vec::new();
     let mut copy: Option<String> = None;
     let mut status: Option<String> = None;
     let mut start_picking = false;
+    // Dopo «Calcola l'asse»: i pezzi della prima posizione che si muovono diventano l'oggetto da ruotare
+    let mut select_first: Option<Vec<u32>> = None;
 
     egui::Window::new(format!("{}  Posizione", icon::ARROWS_OUT_CARDINAL))
         .id(egui::Id::new("finestra_posizione"))
@@ -510,6 +546,10 @@ pub fn draw(ctx: &egui::Context, app: &mut GestoreApp) {
                                     }
                                 }
                             }
+                            ui.selectable_value(&mut h.mode, HingeMode::TwoPositions, "Da due posizioni").on_hover_text(
+                                "Lo stesso pezzo in due posizioni (es. chiuso e aperto, due matematiche già pronte): \
+                                 l'asse si calcola dal movimento, anche senza cerniere nel 3D",
+                            );
                         });
                         if h.mode != before_mode {
                             // Un asse da un punto si aggiorna subito, gli altri si rifanno
@@ -521,12 +561,93 @@ pub fn draw(ctx: &egui::Context, app: &mut GestoreApp) {
                                     h.points.clear();
                                     h.axis = None;
                                     h.picking = false;
+                                    h.motion = None;
+                                    h.error = None;
                                 }
                             }
                             h.angle = 0.0;
                         }
+                        if h.mode == HingeMode::TwoPositions {
+                            egui::Grid::new("posizione_due_posizioni").num_columns(3).spacing([8.0, 4.0]).show(ui, |ui| {
+                                for (label, slot) in [("Prima posizione", &mut h.first), ("Seconda posizione", &mut h.second)] {
+                                    ui.label(label);
+                                    let text = match slot.as_slice() {
+                                        [] => "—".to_string(),
+                                        [n] => node_label(app, Some(*n)),
+                                        many => format!("{} elementi", many.len()),
+                                    };
+                                    // Nomi lunghi (percorsi dei file) accorciati: il pulsante resta nella finestra
+                                    let short = if text.chars().count() > 24 {
+                                        format!("…{}", text.chars().rev().take(23).collect::<Vec<_>>().into_iter().rev().collect::<String>())
+                                    } else {
+                                        text.clone()
+                                    };
+                                    ui.label(egui::RichText::new(short).strong()).on_hover_text(text);
+                                    if ui
+                                        .add_enabled(!selection.is_empty(), egui::Button::new("Usa selezione").small())
+                                        .on_hover_text("Il file o i pezzi selezionati nell'albero")
+                                        .clicked()
+                                    {
+                                        *slot = selection.clone();
+                                    }
+                                    ui.end_row();
+                                }
+                            });
+                            if ui
+                                .add_enabled(!h.first.is_empty() && !h.second.is_empty(), egui::Button::new(icon_text(ui, icon::CROSSHAIR, "Calcola l'asse")))
+                                .on_hover_text("Confronta i pezzi delle due posizioni; la prima è quella che poi si ruota")
+                                .clicked()
+                            {
+                                match scene.motion_between(&h.first, &h.second) {
+                                    Ok(m) => {
+                                        h.axis = Some((m.point, m.dir));
+                                        h.angle = 0.0;
+                                        h.points.clear();
+                                        h.error = None;
+                                        status = Some(format!("Asse trovato: {:.2}° tra le due posizioni", m.angle));
+                                        // Si ruotano solo i pezzi che si muovono: le parti fisse restano
+                                        let mut moving: Vec<u32> = if m.fixed + m.other + m.unmatched == 0 {
+                                            h.first.clone()
+                                        } else {
+                                            m.moving_meshes.iter().filter_map(|&x| scene.mesh_to_node.get(x as usize).copied()).collect()
+                                        };
+                                        moving.sort_unstable();
+                                        moving.dedup();
+                                        h.motion = Some(m);
+                                        select_first = Some(moving);
+                                    }
+                                    Err(e) => {
+                                        h.axis = None;
+                                        h.motion = None;
+                                        h.error = Some(e);
+                                    }
+                                }
+                            }
+                            if let Some(m) = &h.motion {
+                                let mut lines = vec![
+                                    format!("Angolo tra le posizioni {:.2}°", m.angle),
+                                    format!("Pezzi che ruotano {}, fermi {}", m.moving, m.fixed),
+                                    format!("Scarto {:.3} mm, scorrimento lungo l'asse {:.3} mm", m.rms, m.slide.abs()),
+                                ];
+                                if m.other > 0 {
+                                    lines.push(format!("{} pezzi si muovono in un altro modo (es. pistoni): esclusi", m.other));
+                                }
+                                if m.unmatched > 0 {
+                                    lines.push(format!("{} pezzi senza corrispondente: esclusi", m.unmatched));
+                                }
+                                ui.label(egui::RichText::new(lines.join("\n")).small());
+                                if m.slide.abs() > 1.0 {
+                                    ui.colored_label(
+                                        egui::Color32::from_rgb(230, 160, 40),
+                                        "Non è una rotazione pura: il pezzo scorre anche lungo l'asse",
+                                    );
+                                }
+                            }
+                        }
                         ui.horizontal(|ui| {
-                            if h.picking {
+                            if h.mode == HingeMode::TwoPositions {
+                                // L'asse si calcola dalle due posizioni, non dai clic
+                            } else if h.picking {
                                 if ui.button("Annulla scelta").clicked() {
                                     h.picking = false;
                                     h.points.clear();
@@ -573,6 +694,45 @@ pub fn draw(ctx: &egui::Context, app: &mut GestoreApp) {
                                 ui.add(egui::DragValue::new(&mut h.angle).speed(h.step).max_decimals(3).suffix(" °"))
                                     .on_hover_text("Angolo dalla posizione in cui è stato scelto l'asse");
                             });
+                            // Quota presa con il metro: l'angolo che porta la Misura a quella distanza
+                            if let Some((moving, fixed, magnet)) = measured {
+                                if h.wanted <= 0.0 {
+                                    h.wanted = (moving.distance(fixed) * 10.0).round() / 10.0;
+                                }
+                                ui.horizontal(|ui| {
+                                    ui.label("Distanza");
+                                    ui.add(egui::DragValue::new(&mut h.wanted).speed(0.1).range(0.0..=f32::MAX).max_decimals(2).suffix(" mm"))
+                                        .on_hover_text("Distanza voluta tra i due punti della Misura (es. presa con il metro in cabina)");
+                                    if ui
+                                        .add_enabled(magnet, egui::Button::new("Porta a questa distanza"))
+                                        .on_hover_text("Ruota il pezzo dell'angolo più piccolo che dà questa distanza")
+                                        .on_disabled_hover_text("Accendi la calamita della Misura: il punto deve seguire il pezzo")
+                                        .clicked()
+                                        && !nodes.is_empty()
+                                    {
+                                        match angle_for_distance(o, d, moving, fixed, h.wanted) {
+                                            Ok(delta) => {
+                                                // Lo spostamento lo fa il controllo dell'angolo qui sotto
+                                                h.angle += delta;
+                                                h.error = None;
+                                                status = Some(format!("Ruotato di {delta:.2}°: distanza {:.2} mm", h.wanted));
+                                            }
+                                            Err((min, max)) => {
+                                                h.error = Some(format!("Distanza non raggiungibile ruotando su questo asse: da {min:.1} a {max:.1} mm"));
+                                            }
+                                        }
+                                    }
+                                });
+                                if !magnet {
+                                    ui.label(egui::RichText::new("Accendi la calamita della Misura per portare la distanza").small().weak());
+                                }
+                            } else if app.ui_state.measure.is_some() {
+                                ui.label(
+                                    egui::RichText::new("Misura con un punto fermo e uno sul pezzo che ruota: qui si porta la distanza a una quota")
+                                        .small()
+                                        .weak(),
+                                );
+                            }
                             ui.horizontal(|ui| {
                                 ui.label("Passo");
                                 egui::ComboBox::from_id_salt("posizione_passo_cerniera")
@@ -589,10 +749,24 @@ pub fn draw(ctx: &egui::Context, app: &mut GestoreApp) {
                             if h.angle != before && !nodes.is_empty() {
                                 actions.push(Action::Move { nodes: nodes.clone(), matrix: about_axis(o, d, h.angle - before) });
                             }
-                            if ui.small_button("Inverti verso").on_hover_text("L'angolo positivo gira dall'altra parte").clicked() {
-                                h.axis = Some((o, -d));
-                                h.angle = -h.angle;
-                            }
+                            ui.horizontal(|ui| {
+                                if ui.small_button("Inverti verso").on_hover_text("L'angolo positivo gira dall'altra parte").clicked() {
+                                    h.axis = Some((o, -d));
+                                    h.angle = -h.angle;
+                                }
+                                if let Some(m) = h.motion.as_ref().filter(|_| h.mode == HingeMode::TwoPositions) {
+                                    let target = if d.dot(m.dir) >= 0.0 { m.angle } else { -m.angle };
+                                    if ui
+                                        .small_button(format!("Vai alla seconda posizione ({target:.2}°)"))
+                                        .on_hover_text("Ruota la prima posizione fino a sovrapporla alla seconda")
+                                        .clicked()
+                                        && !nodes.is_empty()
+                                    {
+                                        actions.push(Action::Move { nodes: nodes.clone(), matrix: about_axis(o, d, target - h.angle) });
+                                        h.angle = target;
+                                    }
+                                }
+                            });
                         }
                     });
 
@@ -748,10 +922,20 @@ pub fn draw(ctx: &egui::Context, app: &mut GestoreApp) {
     if !open {
         panel.hinge.picking = false;
     }
+    if let Some(first) = select_first {
+        let file = match first.as_slice() {
+            [n] => files.iter().any(|(f, _)| f == n).then_some(*n),
+            _ => None,
+        };
+        app.ui_state.select_single(first.first().copied());
+        app.ui_state.selected_extra.extend(first.iter().skip(1).copied());
+        panel.last_selection = app.ui_state.selected_nodes();
+        panel.target = Some(file.map_or(Target::Selection, Target::File));
+    }
     app.ui_state.position = panel;
     if start_picking {
-        // Un solo strumento alla volta sui clic nella vista
-        app.ui_state.measure = None;
+        // La pipetta si spegne; la misura resta (con la calamita serve mentre si ruota) ma i clic
+        // vanno alla scelta dell'asse finché non è finita
         app.ui_state.eyedropper = false;
     }
     for a in actions {
@@ -1058,6 +1242,130 @@ DEF Destinazione Group { children [
                 last = now;
             }
             println!("{path}: 25 passi da 1° ok, {} pezzi", app.scene_graph.as_ref().unwrap().shapes_data.len());
+        }
+    }
+
+    /// «Da due posizioni»: sportello chiuso e aperto (85° attorno a un asse noto) in due file;
+    /// l'asse trovato porta il file chiuso sopra quello aperto, con un solo Annulla.
+    #[test]
+    fn hinge_axis_from_two_positions() {
+        let point = Vec3::new(1000.0, -500.0, 950.0);
+        let dir = Vec3::new(0.0, 0.3, 1.0).normalize();
+        let scene = crate::scene_graph::motion::tests::scene_with(about_axis(point, dir, 85.0));
+        let mut app = GestoreApp::new_headless();
+        app.project.on_loaded(scene.revision);
+        let files: Vec<u32> = scene.open_files().map(|f| f.node).collect();
+        app.scene_graph = Some(scene);
+        app.ui_state.position.open = true;
+        let ui = Ui { ctx: egui::Context::default() };
+        ui.run(&mut app, vec![]);
+        ui.click(&mut app, "Da due posizioni", 0);
+        app.ui_state.select_single(Some(files[0]));
+        ui.click(&mut app, "Usa selezione", 0);
+        app.ui_state.select_single(Some(files[1]));
+        ui.click(&mut app, "Usa selezione", 1);
+        ui.click(&mut app, "Calcola l'asse", 0);
+        let h = &app.ui_state.position.hinge;
+        let m = h.motion.clone().unwrap_or_else(|| panic!("{:?}", h.error));
+        assert!((m.angle - 85.0).abs() < 0.01, "{m:?}");
+        // Si ruota solo lo sportello della prima posizione: la cerniera fissa resta
+        let first_door = {
+            let s = app.scene_graph.as_ref().unwrap();
+            s.mesh_to_node[s.meshes_of(&[files[0]])[1] as usize]
+        };
+        assert_eq!(app.ui_state.position.target, Some(Target::Selection));
+        assert_eq!(app.ui_state.selected_nodes(), vec![first_door]);
+
+        let door = |app: &GestoreApp, file: usize| {
+            let s = app.scene_graph.as_ref().unwrap();
+            s.meshes_of(&[files[file]]).iter().map(|&m| s.shapes_data[m as usize].world_vertices.clone()).collect::<Vec<_>>()
+        };
+        let closed = door(&app, 0);
+        ui.click(&mut app, "Vai alla seconda posizione (85.00°)", 0);
+        assert_eq!(app.ui_state.position.hinge.angle, m.angle);
+        let (now, open) = (door(&app, 0), door(&app, 1));
+        let worst = now.iter().flatten().zip(open.iter().flatten()).map(|(a, b)| Vec3::from(*a).distance(Vec3::from(*b))).fold(0.0, f32::max);
+        assert!(worst < 0.05, "scarto {worst}");
+        app.undo();
+        let back = door(&app, 0).iter().flatten().zip(closed.iter().flatten()).map(|(a, b)| Vec3::from(*a).distance(Vec3::from(*b))).fold(0.0, f32::max);
+        assert!(back < 0.01, "Annulla riporta lo sportello chiuso: {back}");
+        assert_eq!(door(&app, 0)[0], closed[0], "la cerniera fissa non si è mossa");
+    }
+
+    /// Misura con calamita tra un punto fermo e un vertice del pezzo: «Porta a questa distanza»
+    /// gira il pezzo sulla cerniera finché la distanza è quella scritta.
+    #[test]
+    fn hinge_brings_the_measure_to_a_distance() {
+        let mut app = app();
+        let ui = Ui { ctx: egui::Context::default() };
+        let rif = node(&app, "Riferimento", 0);
+        app.ui_state.select_single(Some(rif));
+        ui.run(&mut app, vec![]);
+        let h = &mut app.ui_state.position.hinge;
+        h.mode = HingeMode::PointAxis(2);
+        h.start();
+        h.add_point(Vec3::new(100.0, 200.0, 300.0));
+        let mesh = app.scene_graph.as_ref().unwrap().meshes_of(&[rif])[0];
+        let vertex = |app: &GestoreApp| Vec3::from(app.scene_graph.as_ref().unwrap().shapes_data[mesh as usize].world_vertices[1]);
+        let fixed = Vec3::new(100.0, 400.0, 300.0);
+        let point = crate::ui::measure::MeasurePoint::free(vertex(&app), true);
+        let point = crate::ui::measure::Measure::anchored(app.scene_graph.as_ref().unwrap(), mesh, point);
+        app.ui_state.measure = Some(crate::ui::measure::Measure { points: vec![point, crate::ui::measure::MeasurePoint::free(fixed, false)], magnet: false });
+        let texts = ui.run(&mut app, vec![]);
+        assert!(texts.iter().any(|(t, _)| t.starts_with("Accendi la calamita")), "senza calamita il comando è spento");
+        app.ui_state.measure.as_mut().unwrap().magnet = true;
+        ui.run(&mut app, vec![]);
+        assert_eq!(app.ui_state.position.hinge.wanted, 150.0, "parte dalla distanza attuale");
+        app.ui_state.position.hinge.wanted = 200.0;
+        ui.click(&mut app, "Porta a questa distanza", 0);
+        assert!((vertex(&app).distance(fixed) - 200.0).abs() < 1e-2, "{:?}", vertex(&app));
+        assert_eq!(app.project.undo.len(), 1);
+        // Irraggiungibile: messaggio con le distanze possibili, nessuno spostamento
+        app.ui_state.position.hinge.wanted = 1000.0;
+        ui.click(&mut app, "Porta a questa distanza", 0);
+        let e = app.ui_state.position.hinge.error.clone().unwrap_or_default();
+        assert!(e.contains("da 150.0 a 250.0 mm"), "{e}");
+    }
+
+    /// Come sopra sulle matematiche vere (non nel repo): GESTORE_PROVA_ASSE = «chiuso|aperto;…».
+    #[test]
+    #[ignore]
+    fn hinge_axis_from_two_positions_on_real_files() {
+        let Ok(list) = std::env::var("GESTORE_PROVA_ASSE") else { return };
+        for pair in list.split(';') {
+            let (a, b) = pair.split_once('|').unwrap();
+            let mut scene = crate::parser::parse_wrl(&std::fs::read(a).unwrap());
+            scene.into_file(a.into(), None);
+            let mut other = crate::parser::parse_wrl(&std::fs::read(b).unwrap());
+            other.into_file(b.into(), None);
+            scene.append(other);
+            let mut app = GestoreApp::new_headless();
+            app.project.on_loaded(scene.revision);
+            let files: Vec<u32> = scene.open_files().map(|f| f.node).collect();
+            app.scene_graph = Some(scene);
+            app.ui_state.position.open = true;
+            let ui = Ui { ctx: egui::Context::default() };
+            ui.run(&mut app, vec![]);
+            ui.click(&mut app, "Da due posizioni", 0);
+            app.ui_state.select_single(Some(files[0]));
+            ui.click(&mut app, "Usa selezione", 0);
+            app.ui_state.select_single(Some(files[1]));
+            ui.click(&mut app, "Usa selezione", 1);
+            ui.click(&mut app, "Calcola l'asse", 0);
+            let m = app.ui_state.position.hinge.motion.clone().expect("asse");
+            let texts = ui.run(&mut app, vec![]);
+            let go = texts.iter().find(|(t, _)| t.starts_with("Vai alla seconda posizione")).expect("pulsante").0.clone();
+            ui.click(&mut app, &go, 0);
+            let s = app.scene_graph.as_ref().unwrap();
+            let (ma, mb) = (s.meshes_of(&[files[0]]), s.meshes_of(&[files[1]]));
+            let worst = ma
+                .iter()
+                .zip(&mb)
+                .flat_map(|(x, y)| s.shapes_data[*x as usize].world_vertices.iter().zip(&s.shapes_data[*y as usize].world_vertices))
+                .map(|(p, q)| Vec3::from(*p).distance(Vec3::from(*q)))
+                .fold(0.0, f32::max);
+            println!("{go}: {} pezzi ruotati, {} fermi; dopo la rotazione scarto massimo dalla seconda posizione {worst:.4} mm", m.moving, m.fixed);
+            assert!(worst < 0.05);
         }
     }
 }

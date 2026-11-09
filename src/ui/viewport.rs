@@ -199,11 +199,11 @@ pub fn draw_viewport(ui: &mut egui::Ui, app: &mut crate::app::GestoreApp) {
             if let (Some(scene), Some(pos)) = (&app.scene_graph, response.interact_pointer_pos()) {
                 renderer.sync_with_scene(scene, &app.ui_state.selected_nodes());
                 let (origin, dir) = pointer_ray(&renderer.camera, rect, pos);
-                if let Some((_, t, triangle)) = pick(scene, &renderer.visibility, section, (origin, dir)) {
+                if let Some((mesh, t, triangle)) = pick(scene, &renderer.visibility, section, (origin, dir)) {
                     let camera = &renderer.camera;
                     let point = super::measure::snap(triangle, origin + dir * t, |v| to_screen(camera, rect, v), pos);
                     if let Some(m) = &mut app.ui_state.measure {
-                        m.add_point(point);
+                        m.add_point(super::measure::Measure::anchored(scene, mesh, point));
                     }
                 }
             }
@@ -352,9 +352,10 @@ pub fn draw_viewport(ui: &mut egui::Ui, app: &mut crate::app::GestoreApp) {
     }
 
     // Misura in corso: punti, segmento e quota
-    if let (Some(renderer), Some(m), Some(scene)) = (&app.renderer, &app.ui_state.measure, &app.scene_graph) {
+    if let (Some(renderer), Some(m), Some(scene)) = (&app.renderer, &mut app.ui_state.measure, &app.scene_graph) {
         let camera = &renderer.camera;
         let size = scene.compute_bounding_box().diagonal();
+        m.follow(scene);
         super::measure::draw(ui, rect, m, |v| to_screen(camera, rect, v), size);
         ui.ctx().set_cursor_icon(egui::CursorIcon::Crosshair);
     }
@@ -777,5 +778,54 @@ mod tests {
         let hinge = &app.ui_state.position.hinge;
         assert!(!hinge.picking);
         assert!(hinge.axis.is_some() || hinge.error.is_some(), "{hinge:?}");
+    }
+
+    /// Calamita: il punto preso sul pezzo rosso segue il pezzo spostato (e Annulla lo riporta),
+    /// il punto libero resta; a calamita spenta il punto non si muove.
+    #[test]
+    fn magnet_keeps_measure_points_on_moved_pieces() {
+        let _gpu = crate::renderer::gpu_lock();
+        let Some(mut app) = app_with_renderer() else { return };
+        let ctx = egui::Context::default();
+        let texts = frame(&ctx, &mut app, vec![]);
+        let center = viewport_center(&texts);
+        app.ui_state.measure = Some(Default::default());
+        click(&ctx, &mut app, center);
+        let red = node(app.scene_graph.as_ref().unwrap(), "R1");
+        let pos = |app: &crate::app::GestoreApp, i: usize| app.ui_state.measure.as_ref().unwrap().points[i].pos;
+        let m = app.ui_state.measure.as_mut().unwrap();
+        assert_eq!(m.points.len(), 1);
+        assert!(m.points[0].anchor.is_some(), "punto legato al pezzo");
+        let fixed = glam::Vec3::new(-50.0, 0.0, 0.0);
+        m.points.push(super::super::measure::MeasurePoint::free(fixed, false));
+        let start = pos(&app, 0);
+
+        let texts = frame(&ctx, &mut app, vec![]);
+        let (_, at) = texts.iter().find(|(t, _)| t.contains("Calamita")).expect("pulsante Calamita");
+        click(&ctx, &mut app, *at + egui::vec2(12.0, 8.0));
+        assert!(app.ui_state.measure.as_ref().unwrap().magnet, "calamita accesa");
+        assert_eq!(app.ui_state.measure.as_ref().unwrap().points.len(), 2, "il clic sul pulsante non prende punti");
+
+        let shift = glam::Vec3::new(100.0, 0.0, 0.0);
+        app.apply(crate::app::Action::Move { nodes: vec![red], matrix: glam::Mat4::from_translation(shift) });
+        frame(&ctx, &mut app, vec![]);
+        assert!((pos(&app, 0) - (start + shift)).length() < 1e-3, "{:?}", pos(&app, 0));
+        assert_eq!(pos(&app, 1), fixed);
+        let (d, _) = app.ui_state.measure.as_ref().unwrap().result().unwrap();
+        assert!((d - (start + shift).distance(fixed)).abs() < 1e-3);
+        app.undo();
+        frame(&ctx, &mut app, vec![]);
+        assert!((pos(&app, 0) - start).length() < 1e-3, "Annulla riporta il punto");
+
+        // Calamita spenta: il punto resta fermo
+        app.ui_state.measure.as_mut().unwrap().magnet = false;
+        app.apply(crate::app::Action::Move { nodes: vec![red], matrix: glam::Mat4::from_translation(shift) });
+        frame(&ctx, &mut app, vec![]);
+        assert!((pos(&app, 0) - start).length() < 1e-3);
+        // Riaccesa: parte da dove si vede e segue il movimento successivo
+        app.ui_state.measure.as_mut().unwrap().magnet = true;
+        app.apply(crate::app::Action::Move { nodes: vec![red], matrix: glam::Mat4::from_translation(shift) });
+        frame(&ctx, &mut app, vec![]);
+        assert!((pos(&app, 0) - (start + shift)).length() < 1e-3, "{:?}", pos(&app, 0));
     }
 }

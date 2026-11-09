@@ -838,39 +838,38 @@ gzip escluso: i programmi dell'utente non leggono i WRL compressi (risposta dell
 Uso reale: in cabina si prendono riferimenti sulla scocca con il metro e si riportano sul 3D; un pezzo si ruota o
 sposta finché la distanza dal riferimento è quella misurata.
 
-- [ ] **8.1 Punti della Misura «incollati» al pezzo (pulsante calamita)**
-      - `MeasurePoint` ricorda il pezzo colpito (`mesh`) e il punto nelle coordinate del pezzo prima del suo
-        piazzamento (`inv(placements[mesh]) * pos`); con la calamita accesa, a ogni spostamento/rotazione (finestra
-        Posizione, cerniera, Annulla/Ripeti) il punto si ricalcola con il piazzamento nuovo. Un punto su un pezzo
-        fermo (la scocca) non cambia: la distanza e ΔX ΔY ΔZ si aggiornano mentre si gira il pezzo.
-      - Pulsante calamita nella barra della Misura (acceso di default? da chiedere); calamita spenta = punti fissi
-        nello spazio, come oggi.
-      - La misura resta visibile mentre si usa la finestra Posizione (oggi il clic della cerniera e quello della
-        Misura si escludono: la misura deve restare disegnata anche quando lo strumento non è attivo).
-      - Più misure contemporanee (es. due riferimenti sulla scocca), con elenco e cancellazione: da chiedere.
-      - Nel pannello della cerniera: «porta la distanza a … mm» (cerca l'angolo che dà la distanza voluta, per
-        bisezione). Seconda fase, dopo la calamita.
-      - Test: punto su un pezzo ruotato di 90° con la cerniera segue il pezzo; punto sulla scocca resta; Annulla
-        riporta la distanza di prima.
-- [ ] **8.2 Asse di rotazione da due posizioni (pezzi senza cerniere nel 3D)**
-      Dato lo stesso pezzo in due posizioni (es. chiuso e aperto), il moto rigido tra le due è una rotazione attorno a
-      un asse (teorema di Chasles: in generale rotazione + traslazione lungo l'asse, che per una cerniera vera è ~0 e
-      serve da controllo di qualità). Dalla matrice relativa `M = inv(P1)·P2`: direzione = autovettore di R con
-      autovalore 1, angolo da traccia, punto dell'asse risolvendo `(I − R)·p = t` ai minimi quadrati sul piano
-      perpendicolare all'asse.
-      Due modi per dare le posizioni:
-      - **Due oggetti**: due file o due selezioni con la stessa geometria (es. stessa matematica caricata due volte e
-        messa nelle due posizioni, o due matematiche esportate dal CAD). Il moto si ricava con la stessa funzione
-        di «Calcola offset tra oggetti»; se i vertici non corrispondono uno a uno, si usa il metodo a punti.
-      - **Tre coppie di punti** (o più): clic su tre punti del pezzo nella prima posizione e sugli stessi tre nella
-        seconda (aggancio ai vertici), adattamento ai minimi quadrati (Kabsch) con errore residuo mostrato in mm.
-        Utile anche con punti misurati in cabina scritti a mano.
-      Risultato: asse (punto, direzione), angolo tra le posizioni, scostamento lungo l'asse (se > 1 mm: avviso «non è
-      una rotazione pura»). Il pulsante «Usa come cerniera» mette l'asse nella sezione Cerniere: si gira il pezzo da
-      0° all'angolo trovato, o oltre.
-      Test: pezzo ruotato di un angolo noto attorno a un asse noto → asse e angolo ritrovati; rumore di 0,1 mm sui
-      punti → errore piccolo; traslazione pura → messaggio «nessuna rotazione».
-- Ordine: 8.1 poi 8.2 (indipendenti; 8.2 riusa la cerniera). Ogni blocco: test, prova su JT reali, exe ricompilato.
+- [x] **8.1 Punti della Misura «incollati» al pezzo (pulsante calamita)** (fatto 2026-11-09)
+      - Scelte dell'utente: calamita da accendere ogni volta; basta una misura (un punto sulla scocca, uno sul pezzo).
+      - `MeasurePoint::anchor` (`ui/measure.rs`): pezzo colpito, sua identità (`source_start`, `source_end`: se la
+        scena cambia il punto si stacca) e punto nelle coordinate del pezzo prima del piazzamento
+        (`inv(placement) * pos`). `Measure::follow` a ogni fotogramma: calamita accesa → il punto va dove lo porta il
+        piazzamento attuale (finestra Posizione, cerniera, Annulla/Ripeti); spenta → resta fermo e si aggiorna solo
+        la posizione nel pezzo, così riaccendendola parte da dove si vede.
+      - Pulsante «Calamita» nel riquadro della Misura in basso; anello attorno ai punti incollati.
+      - La scelta dell'asse della cerniera non chiude più la Misura: i clic vanno all'asse finché non è scelto.
+      - Cerniera, «Distanza … mm» + «Porta a questa distanza»: con una Misura tra un punto fermo e uno del pezzo
+        che ruota, calcola in forma chiusa l'angolo più piccolo che dà la distanza
+        (`placement::angle_for_distance`: il punto gira su una circonferenza, d²(θ) = A + K cos θ + L sin θ);
+        se non si può, dice le distanze minima e massima raggiungibili.
+      - Test: `magnet_keeps_measure_points_on_moved_pieces` (vista con scheda video: segue, Annulla, spenta,
+        riaccesa), `angle_that_gives_a_distance`, `hinge_brings_the_measure_to_a_distance`.
+- [x] **8.2 Asse di rotazione da due posizioni (pezzi senza cerniere nel 3D)** (fatto 2026-11-09)
+      Le matematiche di prova (chiuso/aperto) hanno le coordinate già applicate ai vertici, senza Transform: il moto
+      si ricava dai vertici, non dai Transform. `scene_graph/motion.rs`:
+      - coppie di pezzi tra le due posizioni (stesso ordine, altrimenti stesso nome; stesso numero di vertici);
+      - per ogni coppia moto rigido ai minimi quadrati (quaternioni di Horn, autovettore 4×4 con Jacobi, f64, fino
+        a 4000 vertici per pezzo); pezzi fermi scartati; pezzi mossi raggruppati per moto (pistoni a gas e simili
+        finiscono in un altro gruppo), si tiene il gruppo con più vertici;
+      - asse dal moto (Chasles): direzione, angolo, scorrimento lungo l'asse (avviso se > 1 mm), punto dell'asse
+        vicino ai pezzi mossi; scarto medio dei vertici.
+      Finestra Posizione, cerniera, modo «Da due posizioni»: Prima/Seconda posizione con «Usa selezione», «Calcola
+      l'asse» (seleziona i pezzi della prima posizione che si muovono: le parti fisse restano), riepilogo (angolo,
+      pezzi che ruotano/fermi, scarto, scorrimento) e «Vai alla seconda posizione (…°)».
+      Prove sulle matematiche vere (test ignorati `axis_from_real_files`,
+      `hinge_axis_from_two_positions_on_real_files` con GESTORE_PROVA_ASSE = «chiuso|aperto;…»): sportellino 34,00°
+      (12 pezzi ruotano, 10 fermi), portellone 85,00° (346 ruotano, 362 fermi); dopo «Vai alla seconda posizione»
+      scarto massimo dalla matematica aperta 0,002 mm; calcolo in 3–4 ms.
+      Non fatto (non serve per ora): asse da tre coppie di punti cliccati o scritti a mano.
 - Distribuzione su un altro PC: `pacchetto.ps1` crea `dist\Gestore-WRL-<versione>` (exe, `tools\` con jt2wrl e
   step2wrl, `licenses\`, LEGGIMI) e lo zip. L'exe ha il runtime C incluso.
 

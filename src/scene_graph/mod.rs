@@ -1,6 +1,7 @@
 pub mod bbox;
 pub mod builder;
 pub mod node;
+pub mod motion;
 pub mod placement;
 
 pub use bbox::Aabb;
