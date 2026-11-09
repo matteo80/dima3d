@@ -28,8 +28,34 @@ Il nome viene dalla *dima* di officina, la maschera che tiene i pezzi nella posi
   calcolo e applicazione di offset tra oggetti o tra `CONST BASE` (es. per costruire lo skid)
 - **Cerniere**: rotazione attorno a un asse scelto nella vista (due punti, due fori, un foro, punto + asse),
   oppure calcolato da due matematiche dello stesso pezzo in posizioni diverse; porta una misura a una quota data
+- **Cerniere a 4 perni** (cofani): dai quattro perni il cofano si apre dell'angolo scelto e le bielle seguono,
+  con il fine corsa del meccanismo (vedi sotto)
+- **Progetto** (`.dima3d`): salva quali modelli sono aperti e le modifiche (posizioni, colori, nomi, pezzi
+  nascosti o eliminati, vista); all'apertura rilegge i modelli originali e riapplica le modifiche
 - **Riduzione delle facce** con anteprima e dimensione prevista del file
 - **Export** delle parti visibili, dell'insieme o di un singolo file in WRL, STL, Open Inventor e HSF
+
+### Cerniera a 4 perni: come si scelgono i perni
+
+Finestra **Posizione** → *Rotazione su cerniera* → **4 perni (cofano)**.
+
+- **Cerniera fissa**: la piastra avvitata alla scocca, con due perni.
+- **Cerniera mobile**: il braccio avvitato al cofano, con due perni.
+- Ogni **biella** unisce un perno fisso a un perno mobile.
+
+1. Parti dalla posizione della matematica (di solito cofano chiuso) e premi *Scegli i 4 perni nella vista*.
+2. Su ogni perno clicca **3 punti sul bordo del cerchio, lontani tra loro a formare un triangolo** (non vicini
+   e non in fila): dai 3 punti si trova il centro del perno.
+3. **L'ordine conta**: prima **F1** e **F2** sulla cerniera fissa, poi **M1** e **M2** sulla cerniera mobile.
+   M1 è in cima alla biella che parte da F1, M2 in cima a quella che parte da F2.
+4. Con *Usa selezione* indica la **parte che si apre** (cofano + braccio) e, se vuoi che si muovano, le due bielle.
+5. Scrivi l'**angolo di apertura del cofano**: le bielle si mettono da sole nella posizione giusta.
+   Oltre il fine corsa il cofano si ferma dove arriva il meccanismo e viene segnalato.
+
+Se i perni mobili sono stati cliccati al contrario le bielle risultano incrociate: Dima 3D lo segnala e
+*Scambia i perni mobili* lo corregge. Se il cofano si apre dalla parte sbagliata, *Inverti verso*.
+Basta una cerniera: il cofano si muove tutto; le bielle dell'altro lato si possono selezionare insieme a
+quelle di questo lato se le due cerniere sono allineate. Annulla/Ripeti tengono il conto dell'angolo.
 
 ## Compilazione
 

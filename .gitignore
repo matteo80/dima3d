@@ -31,3 +31,5 @@ Thumbs.db
 /dist/
 tools-src/step2wrl/obj/
 __pycache__/
+/foto/
+*.dima3d

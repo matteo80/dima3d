@@ -3,7 +3,7 @@ use crate::app::Action;
 use crate::settings::{RotationMode, ThemeMode};
 
 /// Sotto questa larghezza di finestra i pulsanti mostrano solo l'icona.
-const FULL_LABELS_WIDTH: f32 = 1250.0;
+const FULL_LABELS_WIDTH: f32 = 1400.0;
 
 /// Pulsante con icona: il testo sparisce nelle finestre strette e resta nel suggerimento.
 fn tool(ui: &mut egui::Ui, enabled: bool, compact: bool, icon: &str, label: &str, hint: &str) -> bool {
@@ -62,10 +62,52 @@ pub fn draw_toolbar(ui: &mut egui::Ui, app: &mut crate::app::GestoreApp) {
     if let Some(p) = open_path {
         app.request_open(p);
     }
+    // Progetto: i modelli aperti e le modifiche della scena (posizioni, colori, nomi…)
+    let mut project_action: Option<u8> = None;
+    ui.add_enabled_ui(!loading, |ui| {
+        let text = icon_text(ui, icon::FLOPPY_DISK, if compact { "" } else { "Progetto" });
+        ui.menu_button(text, |ui| {
+            if ui.button("Apri progetto…").on_hover_text("Riapre i modelli di un progetto .dima3d e le sue modifiche").clicked() {
+                project_action = Some(0);
+                ui.close_menu();
+            }
+            if ui.add_enabled(has_scene, egui::Button::new("Salva progetto").shortcut_text("Ctrl+S")).clicked() {
+                project_action = Some(1);
+                ui.close_menu();
+            }
+            if ui.add_enabled(has_scene, egui::Button::new("Salva progetto con nome…").shortcut_text("Ctrl+Maiusc+S")).clicked() {
+                project_action = Some(2);
+                ui.close_menu();
+            }
+            ui.separator();
+            ui.label(
+                egui::RichText::new(
+                    "Il progetto (.dima3d) ricorda quali modelli sono aperti e le modifiche: posizioni, \
+                     colori, nomi, pezzi nascosti o eliminati e la vista. La geometria non c'è: all'apertura \
+                     si rileggono i modelli originali, quindi non vanno spostati o modificati (se mancano, \
+                     Dima 3D chiede dove sono). La riduzione delle facce non viene salvata.",
+                )
+                .small()
+                .weak(),
+            );
+        })
+        .response
+        .on_hover_text("Progetto: salva e riapri la scena con le modifiche  [Ctrl+S]");
+    });
+    match project_action {
+        Some(0) => app.open_project_dialog(),
+        Some(1) => {
+            app.save_project();
+        }
+        Some(2) => {
+            app.save_project_as();
+        }
+        _ => {}
+    }
     if tool(ui, has_scene && !loading, compact, icon::FILE_PLUS, "Aggiungi", "Aggiunge uno o più file (WRL, STEP, JT, STL, HSF, IV) alla scena aperta, anche trascinandoli sulla finestra") {
         app.add_dialog();
     }
-    if tool(ui, has_scene, compact, icon::EXPORT, "Esporta", "Salva solo le parti visibili in un nuovo file WRL, STL o IV  [Ctrl+S]") {
+    if tool(ui, has_scene, compact, icon::EXPORT, "Esporta", "Salva solo le parti visibili in un nuovo file WRL, STL, IV o HSF  [Ctrl+E]") {
         app.export_dialog(None);
     }
     let mut export_settings = app.settings.clone();
@@ -96,7 +138,10 @@ pub fn draw_toolbar(ui: &mut egui::Ui, app: &mut crate::app::GestoreApp) {
         ui.label(egui::RichText::new("HSF (scegli .hsf nella finestra Salva)").strong());
         ui.label(
             egui::RichText::new(
-                "Le normali seguono l'opzione «Scrivi le normali». Con le normali i pezzi hanno gli spigoli                  vivi calcolati qui (vertici sdoppiati sugli spigoli) e il file è più grande. Senza, il                  visualizzatore le ricalcola sui vertici uniti: il file è più piccolo ma l'ombreggiatura                  può sfumare sugli spigoli.",
+                "Le normali seguono l'opzione «Scrivi le normali». Con le normali i pezzi hanno gli spigoli \
+                 vivi calcolati qui (vertici sdoppiati sugli spigoli) e il file è più grande. Senza, il \
+                 visualizzatore le ricalcola sui vertici uniti: il file è più piccolo ma l'ombreggiatura \
+                 può sfumare sugli spigoli.",
             )
             .weak(),
         );

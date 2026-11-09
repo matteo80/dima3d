@@ -192,6 +192,8 @@ pub struct NodeInfo {
     /// Colore impostato dall'utente (RGBA sRGB), ereditato da tutto il sotto-albero.
     /// `None` = colore originale del file.
     pub color: Option<[f32; 4]>,
+    /// Nome cambiato dall'utente (va salvato nel progetto)
+    pub renamed: bool,
 }
 
 // ─── SceneGraph ───────────────────────────────────────────────────────────────
@@ -296,7 +298,7 @@ impl SceneGraph {
                 ),
             };
             scene.nodes.push(node);
-            scene.info.push(NodeInfo { parent: b.parent, kind, shape_count: 0, deleted: false, color: None });
+            scene.info.push(NodeInfo { parent: b.parent, kind, shape_count: 0, deleted: false, color: None, renamed: false });
         }
         scene.roots = tree.roots;
 
@@ -373,7 +375,7 @@ impl SceneGraph {
         }
         self.info.insert(
             0,
-            NodeInfo { parent: NO_PARENT, kind: NodeKind::File, shape_count, deleted: false, color: None },
+            NodeInfo { parent: NO_PARENT, kind: NodeKind::File, shape_count, deleted: false, color: None, renamed: false },
         );
         self.roots = vec![0];
         self.sources = vec![SourceFile {
@@ -610,7 +612,7 @@ impl SceneGraph {
         };
         let shape_count = u32::from(kind == NodeKind::Shape);
         self.nodes.push(node);
-        self.info.push(NodeInfo { parent: NO_PARENT, kind, shape_count, deleted: false, color: None });
+        self.info.push(NodeInfo { parent: NO_PARENT, kind, shape_count, deleted: false, color: None, renamed: false });
         idx
     }
 
@@ -805,6 +807,9 @@ impl SceneGraph {
                 SceneNode::Group { name, .. }
                 | SceneNode::Transform { name, .. }
                 | SceneNode::Shape { name, .. } => *name = value,
+            }
+            if let Some(info) = self.info.get_mut(node_idx as usize) {
+                info.renamed = true;
             }
             self.revision += 1;
         }

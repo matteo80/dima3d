@@ -16,6 +16,7 @@ use glam::{Mat4, Vec3};
 
 use super::theme::{icon, icon_text};
 use crate::app::{Action, GestoreApp};
+use crate::scene_graph::linkage::FourBar;
 use crate::scene_graph::motion::Motion;
 use crate::scene_graph::placement::{about_axis, angle_for_distance, circle_through, parse_const_base, parse_offset, Pose};
 
@@ -71,6 +72,8 @@ pub struct PositionPanel {
     pub error: Option<String>,
     /// Rotazione su cerniera
     pub hinge: Hinge,
+    /// Guida illustrata della cerniera a 4 perni aperta
+    pub guide: bool,
 }
 
 impl Default for PositionPanel {
@@ -95,6 +98,7 @@ impl Default for PositionPanel {
             result: None,
             error: None,
             hinge: Hinge::default(),
+            guide: false,
         }
     }
 }
@@ -124,6 +128,162 @@ pub enum HingeMode {
     PointAxis(usize),
     /// Lo stesso pezzo in due posizioni (due matematiche già pronte): l'asse si calcola dal moto
     TwoPositions,
+    /// Cerniera a quattro perni (cofano): due perni sulla cerniera fissa, due sulla mobile
+    FourBar,
+}
+
+/// Nomi dei quattro perni, nell'ordine in cui si cliccano.
+const PIN_NAMES: [&str; 4] = [
+    "F1 (cerniera fissa, perno 1)",
+    "F2 (cerniera fissa, perno 2)",
+    "M1 (cerniera mobile, sulla biella di F1)",
+    "M2 (cerniera mobile, sulla biella di F2)",
+];
+
+/// Promemoria nella finestra Posizione; la spiegazione completa è nella guida illustrata.
+const FOUR_BAR_HINT: &str = "Ordine: F1 e F2 sulla cerniera fissa, poi M1 e M2 sulla mobile \
+(M1 sulla stessa biella di F1). Su ogni perno 3 punti sul bordo, a triangolo.";
+
+/// Passi della guida illustrata.
+const FOUR_BAR_STEPS: [&str; 6] = [
+    "Parti dalla posizione della matematica (di solito cofano chiuso) e premi «Scegli i 4 perni nella vista».",
+    "Su ogni perno clicca 3 punti sul bordo del cerchio, lontani tra loro in modo da formare un triangolo \
+     (non vicini e non in fila): dai 3 punti si trova il centro del perno.",
+    "Ordine dei perni: prima F1 e F2 sulla cerniera fissa (quella avvitata alla scocca), poi M1 e M2 sulla \
+     cerniera mobile (il braccio avvitato al cofano). M1 è in cima alla biella che parte da F1, M2 in cima \
+     a quella che parte da F2.",
+    "Con «Usa selezione» indica la parte che si apre (cofano + braccio) e, se vuoi che si muovano, le due bielle.",
+    "Scrivi l'angolo di apertura del cofano o usa le frecce: le bielle si mettono da sole. Se si apre dalla \
+     parte sbagliata premi «Inverti verso»; oltre il fine corsa il cofano si ferma dove arriva il meccanismo.",
+    "Nella vista compaiono F1 F2 M1 M2 e le linee delle bielle: se le bielle risultano incrociate hai \
+     invertito M1 e M2, premi «Scambia i perni mobili».",
+];
+
+/// Disegno del meccanismo come si vede di lato: piastra fissa, bielle, braccio e cofano, con i
+/// perni numerati nell'ordine dei clic.
+fn draw_mechanism(ui: &mut egui::Ui) {
+    // Disegnato su 330 × 230 e ridotto alla larghezza della finestra (mai ingrandito: la finestra
+    // si allargherebbe a ogni disegno)
+    let k = ((ui.available_width() - 2.0) / 330.0).clamp(0.5, 1.0);
+    let (rect, _) = ui.allocate_exact_size(egui::vec2(330.0, 230.0) * k, egui::Sense::hover());
+    let painter = ui.painter_at(rect);
+    let p = |x: f32, y: f32| rect.min + egui::vec2(x, y) * k;
+    let text = ui.visuals().text_color();
+    let label = |pos: egui::Pos2, anchor: egui::Align2, t: &str, color: egui::Color32| {
+        painter.text(pos, anchor, t, egui::FontId::proportional(12.0 * k.min(1.0).max(0.8)), color);
+    };
+    let w = |x: f32| x * k;
+    let (fixed, link1, link2, arm, hood) = (
+        egui::Color32::from_rgb(220, 0, 220),
+        egui::Color32::from_rgb(235, 220, 40),
+        egui::Color32::from_rgb(40, 190, 60),
+        egui::Color32::from_rgb(40, 70, 230),
+        egui::Color32::from_rgb(200, 100, 20),
+    );
+    // Cofano e braccio
+    painter.line_segment([p(20.0, 30.0), p(320.0, 105.0)], egui::Stroke::new(w(7.0), hood));
+    label(p(250.0, 75.0), egui::Align2::RIGHT_BOTTOM, "cofano", text);
+    let (m1, m2) = (p(95.0, 72.0), p(185.0, 95.0));
+    painter.line_segment([p(70.0, 66.0), p(215.0, 103.0)], egui::Stroke::new(w(14.0), arm));
+    label(p(222.0, 118.0), egui::Align2::LEFT_TOP, "cerniera mobile\n(braccio sul cofano)", text);
+    // Piastra fissa
+    let plate = vec![p(60.0, 190.0), p(220.0, 190.0), p(210.0, 222.0), p(70.0, 222.0)];
+    painter.add(egui::Shape::convex_polygon(plate, fixed, egui::Stroke::NONE));
+    label(p(225.0, 205.0), egui::Align2::LEFT_CENTER, "cerniera fissa\n(sulla scocca)", text);
+    let (f1, f2) = (p(85.0, 195.0), p(180.0, 195.0));
+    // Bielle
+    painter.line_segment([f1, m1], egui::Stroke::new(w(12.0), link1));
+    painter.line_segment([f2, m2], egui::Stroke::new(w(12.0), link2));
+    label(p(70.0, 140.0), egui::Align2::RIGHT_CENTER, "biella 1", text);
+    label(p(196.0, 150.0), egui::Align2::LEFT_CENTER, "biella 2", text);
+    // Perni, con l'ordine dei clic
+    for (c, name) in [(f1, "1  F1"), (f2, "2  F2"), (m1, "3  M1"), (m2, "4  M2")] {
+        painter.circle(c, w(7.0), egui::Color32::from_gray(150), egui::Stroke::new(1.5_f32, egui::Color32::BLACK));
+        let pos = c + egui::vec2(-12.0, -8.0) * k;
+        painter.text(pos, egui::Align2::RIGHT_BOTTOM, name, egui::FontId::proportional(14.0), egui::Color32::from_rgb(255, 140, 30));
+    }
+}
+
+/// Disegno dei 3 clic su un perno: a triangolo sì, vicini o in fila no.
+fn draw_three_points(ui: &mut egui::Ui) {
+    let k = ((ui.available_width() - 2.0) / 330.0).clamp(0.6, 1.0);
+    let (rect, _) = ui.allocate_exact_size(egui::vec2(330.0 * k, 130.0), egui::Sense::hover());
+    let painter = ui.painter_at(rect);
+    let text = ui.visuals().text_color();
+    let accent = egui::Color32::from_rgb(255, 140, 30);
+    let (good, bad) = (egui::Color32::from_rgb(60, 190, 90), egui::Color32::from_rgb(230, 70, 60));
+    let r = 34.0;
+    for (i, ok) in [(0, true), (1, false)] {
+        let c = rect.min + egui::vec2((85.0 + 165.0 * i as f32) * k, 50.0);
+        painter.circle(c, r, egui::Color32::from_gray(150), egui::Stroke::new(1.5_f32, egui::Color32::BLACK));
+        let angles: [f32; 3] = if ok { [-90.0, 30.0, 150.0] } else { [-20.0, 0.0, 20.0] };
+        let pts: Vec<egui::Pos2> = angles.iter().map(|a| c + egui::vec2(a.to_radians().cos(), a.to_radians().sin()) * r).collect();
+        if ok {
+            painter.add(egui::Shape::closed_line(pts.clone(), egui::Stroke::new(1.5_f32, good)));
+            painter.circle_stroke(c, 3.0, egui::Stroke::new(1.5_f32, good));
+        }
+        for (i, q) in pts.iter().enumerate() {
+            painter.circle(*q, 4.5, accent, egui::Stroke::new(1.0_f32, egui::Color32::BLACK));
+            painter.text(*q + (*q - c).normalized() * 11.0, egui::Align2::CENTER_CENTER, format!("{}", i + 1), egui::FontId::proportional(12.0), text);
+        }
+        let (caption, color) = if ok { ("Sì: 3 punti lontani, a triangolo", good) } else { ("No: punti vicini o in fila", bad) };
+        painter.text(c + egui::vec2(0.0, r + 22.0), egui::Align2::CENTER_CENTER, caption, egui::FontId::proportional(12.0), color);
+        if !ok {
+            let d = r * 0.8;
+            for (a, b) in [(egui::vec2(-d, -d), egui::vec2(d, d)), (egui::vec2(-d, d), egui::vec2(d, -d))] {
+                painter.line_segment([c + a, c + b], egui::Stroke::new(3.0_f32, bad));
+            }
+        }
+    }
+}
+
+/// Finestra con la guida illustrata della cerniera a 4 perni.
+fn draw_four_bar_guide(ctx: &egui::Context, open: &mut bool) {
+    // A sinistra della finestra Posizione, per non coprirla
+    let guide_pos = ctx
+        .memory(|m| m.area_rect(egui::Id::new("finestra_posizione")))
+        .map_or(ctx.screen_rect().right_top() + egui::vec2(-650.0, 60.0), |r| egui::pos2((r.left() - 370.0).max(0.0), r.top()));
+    egui::Window::new(format!("{}  Guida 4 perni", icon::INFO))
+        .id(egui::Id::new("guida_quattro_perni"))
+        .open(open)
+        .resizable([true, false])
+        .min_width(220.0)
+        .default_width(320.0)
+        .collapsible(true)
+        .constrain(true)
+        .default_height((ctx.screen_rect().height() - 120.0).max(150.0))
+        .default_pos(guide_pos)
+        .show(ctx, |ui| {
+            egui::ScrollArea::vertical().max_height((ctx.screen_rect().height() - 120.0).max(150.0)).show(ui, |ui| {
+                ui.set_min_width(ui.available_width());
+                draw_mechanism(ui);
+                ui.add_space(6.0);
+                draw_three_points(ui);
+                ui.add_space(6.0);
+                for (i, step) in FOUR_BAR_STEPS.iter().enumerate() {
+                    ui.label(format!("{}. {step}", i + 1));
+                    ui.add_space(3.0);
+                }
+                ui.label(
+                    egui::RichText::new(
+                        "Basta una cerniera: il cofano si muove tutto. Le bielle dell'altro lato si possono \
+                         selezionare insieme a quelle di questo lato se le due cerniere sono allineate.",
+                    )
+                    .small()
+                    .weak(),
+                );
+            });
+        });
+}
+
+/// Il meccanismo dai 12 punti cliccati (3 sul bordo di ogni perno).
+fn build_four_bar(p: &[Vec3]) -> Result<FourBar, String> {
+    let mut pins = [(Vec3::ZERO, Vec3::Z); 4];
+    for (k, pin) in pins.iter_mut().enumerate() {
+        let [a, b, c] = p.get(k * 3..k * 3 + 3).and_then(|s| <[Vec3; 3]>::try_from(s).ok()).ok_or("Punti mancanti")?;
+        *pin = circle_through(a, b, c).ok_or_else(|| format!("{}: i tre punti sono in fila, cliccali lontani a triangolo sul bordo", PIN_NAMES[k]))?;
+    }
+    FourBar::from_pins(pins)
 }
 
 impl HingeMode {
@@ -135,6 +295,7 @@ impl HingeMode {
             HingeMode::OneHole => 3,
             HingeMode::PointAxis(_) => 1,
             HingeMode::TwoPositions => 0,
+            HingeMode::FourBar => 12,
         }
     }
 
@@ -146,6 +307,7 @@ impl HingeMode {
             HingeMode::OneHole => format!("Clic sul bordo del foro, punto {} di 3", i + 1),
             HingeMode::PointAxis(_) => "Clic sul punto per cui passa l'asse".to_string(),
             HingeMode::TwoPositions => String::new(),
+            HingeMode::FourBar => format!("perno {} di 4, {}: punto {} di 3 sul bordo (a triangolo)", (i / 3).min(3) + 1, PIN_NAMES[(i / 3).min(3)], i % 3 + 1),
         }
     }
 
@@ -193,6 +355,13 @@ pub struct Hinge {
     pub motion: Option<Motion>,
     /// Distanza voluta tra i due punti della Misura (mm)
     pub wanted: f32,
+    /// «4 perni»: meccanismo, parte che si apre, bielle 1 e 2
+    pub four: Option<FourBar>,
+    pub arm: Vec<u32>,
+    pub links: [Vec<u32>; 2],
+    /// Un pezzo della parte che si apre e la sua posizione con il meccanismo a 0°: dopo Annulla o
+    /// altre modifiche si ritrova a che angolo è il meccanismo
+    pub arm_ref: Option<(u32, Mat4)>,
 }
 
 impl Default for Hinge {
@@ -209,6 +378,10 @@ impl Default for Hinge {
             second: Vec::new(),
             motion: None,
             wanted: 0.0,
+            four: None,
+            arm: Vec::new(),
+            links: [Vec::new(), Vec::new()],
+            arm_ref: None,
         }
     }
 }
@@ -224,6 +397,8 @@ impl Hinge {
         self.axis = None;
         self.angle = 0.0;
         self.error = None;
+        self.four = None;
+        self.arm_ref = None;
     }
 
     /// Punto cliccato nella vista; all'ultimo calcola l'asse.
@@ -234,6 +409,19 @@ impl Hinge {
         self.points.push(p);
         if self.points.len() >= self.mode.points() {
             self.picking = false;
+            if self.mode == HingeMode::FourBar {
+                match build_four_bar(&self.points) {
+                    Ok(four) => {
+                        self.four = Some(four);
+                        self.error = None;
+                    }
+                    Err(e) => {
+                        self.error = Some(e);
+                        self.points.clear();
+                    }
+                }
+                return;
+            }
             match self.mode.axis(&self.points) {
                 Ok(axis) => {
                     self.axis = Some(axis);
@@ -272,16 +460,46 @@ pub fn draw_overlay(
             painter.arrow(a, b - a, egui::Stroke::new(3.0_f32, accent));
         }
     }
+    // «4 perni»: bielle e braccio nella posizione attuale, oppure i perni già cliccati
+    let label_pin = |pos: Vec3, name: &str| {
+        if let Some(s) = to_screen(pos) {
+            painter.circle(s, 6.0, egui::Color32::TRANSPARENT, egui::Stroke::new(2.0_f32, accent));
+            painter.text(s + egui::vec2(8.0, -8.0), egui::Align2::LEFT_BOTTOM, name, egui::FontId::proportional(14.0), accent);
+        }
+    };
+    let names = ["F1", "F2", "M1", "M2"];
+    if let Some(four) = hinge.four.as_ref().filter(|_| hinge.mode == HingeMode::FourBar) {
+        let pins = four.pins(&four.state);
+        let link = egui::Color32::from_rgb(255, 200, 40);
+        let arm = egui::Color32::from_rgb(60, 200, 255);
+        for (a, b, color) in [(0, 2, link), (1, 3, link), (2, 3, arm)] {
+            if let (Some(p), Some(q)) = (to_screen(pins[a]), to_screen(pins[b])) {
+                painter.line_segment([p, q], egui::Stroke::new(2.5_f32, color));
+            }
+        }
+        for (p, name) in pins.iter().zip(names) {
+            label_pin(*p, name);
+        }
+        return;
+    }
+    if hinge.mode == HingeMode::FourBar {
+        for (k, c) in hinge.points.chunks_exact(3).enumerate() {
+            if let Some((center, _)) = circle_through(c[0], c[1], c[2]) {
+                label_pin(center, names[k.min(3)]);
+            }
+        }
+    }
     for p in &hinge.points {
         if let Some(s) = to_screen(*p) {
             painter.circle(s, 4.5, accent, egui::Stroke::new(1.5_f32, egui::Color32::BLACK));
         }
     }
     if let Some(text) = hinge.prompt() {
+        let what = if hinge.mode == HingeMode::FourBar { "Perni della cerniera" } else { "Asse della cerniera" };
         painter.text(
             rect.center_bottom() - egui::vec2(0.0, 40.0),
             egui::Align2::CENTER_CENTER,
-            format!("Asse della cerniera: {text}  ·  Esc per annullare"),
+            format!("{what}: {text}  ·  Esc per annullare"),
             egui::FontId::proportional(15.0),
             accent,
         );
@@ -326,21 +544,77 @@ fn node_label(app: &GestoreApp, node: Option<u32>) -> String {
     }
 }
 
-fn pose_grid(ui: &mut egui::Ui, id: &str, pose: &Pose) {
-    egui::Grid::new(id).num_columns(6).spacing([10.0, 2.0]).show(ui, |ui| {
-        for (k, v) in [pose.xyz.x, pose.xyz.y, pose.xyz.z].iter().enumerate() {
-            ui.label(egui::RichText::new(AXES[k].0).color(AXES[k].1).strong());
-            ui.monospace(format!("{:+.3}", v + 0.0));
+/// Sezione richiudibile; `open` si aggiorna quando si apre o si chiude (resta nelle impostazioni).
+fn section<R>(ui: &mut egui::Ui, id: &str, title: &str, open: &mut bool, body: impl FnOnce(&mut egui::Ui) -> R) {
+    let r = egui::CollapsingHeader::new(egui::RichText::new(title).strong()).id_salt(id).default_open(*open).show(ui, body);
+    if r.header_response.clicked() {
+        *open = !*open;
+    }
+}
+
+/// Frecce, cursore e campo dell'angolo (gradi).
+fn angle_row(ui: &mut egui::Ui, angle: &mut f32, step: f32, hint: &str) {
+    let slider = (ui.available_width() - 175.0).clamp(40.0, 200.0);
+    ui.horizontal_wrapped(|ui| {
+        ui.label("Angolo");
+        if ui.small_button(icon::CARET_LEFT).clicked() {
+            *angle -= step;
         }
-        ui.label("mm");
-        ui.end_row();
-        for (k, v) in [pose.abc.x, pose.abc.y, pose.abc.z].iter().enumerate() {
-            ui.label(egui::RichText::new(AXES[k + 3].0).color(AXES[k + 3].1).strong());
-            ui.monospace(format!("{:+.3}", v + 0.0));
+        ui.spacing_mut().slider_width = slider;
+        // Il cursore non riarrotonda i valori scritti a mano (es. 23° con passo 10)
+        ui.add(egui::Slider::new(angle, -180.0..=180.0).step_by(step as f64).clamping(egui::SliderClamping::Never).show_value(false));
+        if ui.small_button(icon::CARET_RIGHT).clicked() {
+            *angle += step;
         }
-        ui.label("°");
-        ui.end_row();
+        ui.add(egui::DragValue::new(angle).speed(step).max_decimals(3).suffix(" °")).on_hover_text(hint);
     });
+}
+
+/// Scelta del passo dell'angolo.
+fn step_row(ui: &mut egui::Ui, step: &mut f32) {
+    ui.horizontal_wrapped(|ui| {
+        ui.label("Passo");
+        egui::ComboBox::from_id_salt("posizione_passo_cerniera")
+            .width(70.0)
+            .selected_text(format!("{} °", step))
+            .show_ui(ui, |ui| {
+                for v in HINGE_STEPS {
+                    ui.selectable_value(step, v, format!("{v} °"));
+                }
+            })
+            .response
+            .on_hover_text("Passo delle frecce e del cursore dell'angolo");
+    });
+}
+
+/// Nome di un gruppo di nodi scelto con «Usa selezione», accorciato per la finestra, e intero.
+fn slot_text(app: &GestoreApp, slot: &[u32]) -> (String, String) {
+    let text = match slot {
+        [] => "—".to_string(),
+        [n] => node_label(app, Some(*n)),
+        many => format!("{} elementi", many.len()),
+    };
+    // Nomi lunghi (percorsi dei file) accorciati: il pulsante resta nella finestra
+    let short = if text.chars().count() > 24 {
+        format!("…{}", text.chars().rev().take(23).collect::<Vec<_>>().into_iter().rev().collect::<String>())
+    } else {
+        text.clone()
+    };
+    (short, text)
+}
+
+fn pose_grid(ui: &mut egui::Ui, _id: &str, pose: &Pose) {
+    // Righe che vanno a capo: la finestra si può stringere
+    for (first, values, unit) in [(0, [pose.xyz.x, pose.xyz.y, pose.xyz.z], "mm"), (3, [pose.abc.x, pose.abc.y, pose.abc.z], "°")] {
+        ui.horizontal_wrapped(|ui| {
+            for (k, v) in values.iter().enumerate() {
+                ui.label(egui::RichText::new(AXES[first + k].0).color(AXES[first + k].1).strong());
+                ui.monospace(format!("{:+.3}", v + 0.0));
+                ui.add_space(4.0);
+            }
+            ui.label(unit);
+        });
+    }
 }
 
 /// Testo dell'offset come lo scrivono gli script (si può incollare in «Applica offset»).
@@ -382,9 +656,43 @@ pub fn draw(ctx: &egui::Context, app: &mut GestoreApp) {
     }
     let target = panel.target;
     let key = target.map(|t| (t, panel.axis, panel.world));
+    {
+        // «4 perni»: posizione di riferimento della parte che si apre, presa con il meccanismo a 0°
+        let h = &mut panel.hinge;
+        if let Some(four) = &h.four {
+            if h.arm_ref.is_none() {
+                // Posizione che avrebbe a 0°: quella attuale riportata indietro dal meccanismo
+                let back = four.transforms(&four.state)[0].inverse();
+                h.arm_ref = scene.meshes_of(&h.arm).first().map(|&m| (m, back * scene.placement(m)));
+            }
+        }
+    }
     if revision != panel.revision {
-        // Modifica fatta altrove (Annulla, altri comandi): l'angolo riparte da 0
-        panel.hinge.angle = 0.0;
+        let h = &mut panel.hinge;
+        if let (Some(four), HingeMode::FourBar) = (h.four.as_mut(), h.mode) {
+            // Annulla o altre modifiche: l'angolo si ricava dalla posizione della parte che si apre
+            if let Some((mesh, start)) = h.arm_ref {
+                match four.state_from_arm(scene.placement(mesh) * start.inverse()) {
+                    Some(s) => {
+                        four.state = s;
+                        h.angle = s.phi.to_degrees() as f32;
+                        if four.at_start() {
+                            h.angle = 0.0;
+                        }
+                    }
+                    None => {
+                        h.four = None;
+                        h.arm_ref = None;
+                        h.points.clear();
+                        h.angle = 0.0;
+                        h.error = Some("La parte che si apre è stata spostata in un altro modo: scegli di nuovo i perni".to_string());
+                    }
+                }
+            }
+        } else {
+            // Modifica fatta altrove (Annulla, altri comandi): l'angolo riparte da 0
+            h.angle = 0.0;
+        }
     }
     if key != panel.key || revision != panel.revision {
         panel.value = 0.0;
@@ -414,24 +722,37 @@ pub fn draw(ctx: &egui::Context, app: &mut GestoreApp) {
     let mut start_picking = false;
     // Dopo «Calcola l'asse»: i pezzi della prima posizione che si muovono diventano l'oggetto da ruotare
     let mut select_first: Option<Vec<u32>> = None;
+    let mut sections = app.settings.position_sections;
+    // Su schermi bassi la finestra non deve uscire: il contenuto scorre
+    let max_height = (ctx.screen_rect().height() - 120.0).max(150.0);
 
     egui::Window::new(format!("{}  Posizione", icon::ARROWS_OUT_CARDINAL))
         .id(egui::Id::new("finestra_posizione"))
         .open(&mut open)
-        .resizable(false)
+        // Si allarga e si stringe trascinando il bordo; il testo va a capo. L'altezza segue il
+        // contenuto, fino a quella dello schermo (poi scorre)
+        .resizable([true, false])
+        .min_width(220.0)
+        .default_width(270.0)
         .collapsible(true)
-        .default_pos(ctx.screen_rect().right_top() + egui::vec2(-400.0, 60.0))
+        .constrain(true)
+        // Lo spazio per lo scorrimento è alto quanto lo schermo (altrimenti egui lo ferma a 420)
+        .default_height(max_height)
+        .default_pos(ctx.screen_rect().right_top() + egui::vec2(-300.0, 60.0))
         .show(ctx, |ui| {
-            ui.set_width(340.0);
+            // Il contenuto prende la larghezza della finestra, non di più: con auto_shrink spento la
+            // barra di scorrimento allargava la finestra a ogni disegno fino al bordo dello schermo
+            egui::ScrollArea::vertical().max_height(max_height).show(ui, |ui| {
+            ui.set_min_width(ui.available_width());
             ui.add_enabled_ui(!busy, |ui| {
                 // ── Oggetto ────────────────────────────────────────────────────
-                ui.label(egui::RichText::new("Oggetto").strong());
+                section(ui, "posizione_sez_oggetto", "Oggetto", &mut sections[0], |ui| {
                 let label = match target {
                     Some(Target::File(n)) => files.iter().find(|(f, _)| *f == n).map(|(_, s)| s.clone()).unwrap_or_default(),
                     Some(Target::Selection) => format!("Pezzi selezionati ({})", selection.len()),
                     None => "—".to_string(),
                 };
-                egui::ComboBox::from_id_salt("posizione_oggetto").width(330.0).selected_text(label).show_ui(ui, |ui| {
+                egui::ComboBox::from_id_salt("posizione_oggetto").width((ui.available_width() - 40.0).max(80.0)).selected_text(label).show_ui(ui, |ui| {
                     for (n, name) in &files {
                         ui.selectable_value(&mut panel.target, Some(Target::File(*n)), name);
                     }
@@ -445,7 +766,7 @@ pub fn draw(ctx: &egui::Context, app: &mut GestoreApp) {
                 });
 
                 ui.add_space(4.0);
-                ui.horizontal(|ui| {
+                ui.horizontal_wrapped(|ui| {
                     ui.label(egui::RichText::new("Coordinate dell'oggetto").strong());
                     if ui.small_button(icon::COPY).on_hover_text("Copia X Y Z A B C").clicked() {
                         copy = Some(frame_pose.to_text());
@@ -461,11 +782,11 @@ pub fn draw(ctx: &egui::Context, app: &mut GestoreApp) {
                     .small()
                     .weak(),
                 );
+                });
 
                 // ── Trasformazione ─────────────────────────────────────────────
-                ui.separator();
-                ui.label(egui::RichText::new("Trasformazione").strong());
-                ui.horizontal(|ui| {
+                section(ui, "posizione_sez_trasformazione", "Trasformazione", &mut sections[1], |ui| {
+                ui.horizontal_wrapped(|ui| {
                     for (k, (name, color, hint)) in AXES.iter().enumerate() {
                         let text = egui::RichText::new(*name).color(*color).strong().size(16.0);
                         if ui.add(egui::Button::new(text).selected(panel.axis == k).min_size(egui::vec2(36.0, 26.0))).on_hover_text(*hint).clicked() {
@@ -476,13 +797,14 @@ pub fn draw(ctx: &egui::Context, app: &mut GestoreApp) {
                 let rotation = panel.axis >= 3;
                 let suffix = if rotation { " °" } else { " mm" };
                 let before = panel.value;
-                ui.horizontal(|ui| {
+                let slider = (ui.available_width() - 185.0).clamp(40.0, 200.0);
+                ui.horizontal_wrapped(|ui| {
                     ui.label("Modifica");
                     if ui.small_button(icon::CARET_LEFT).clicked() {
                         panel.value -= panel.unit;
                     }
                     let range = if rotation { 180.0 } else { (panel.unit * 200.0).max(panel.value.abs()) };
-                    ui.spacing_mut().slider_width = 150.0;
+                    ui.spacing_mut().slider_width = slider;
                     ui.add(egui::Slider::new(&mut panel.value, -range..=range).step_by(panel.unit as f64).clamping(egui::SliderClamping::Never).show_value(false));
                     if ui.small_button(icon::CARET_RIGHT).clicked() {
                         panel.value += panel.unit;
@@ -490,7 +812,7 @@ pub fn draw(ctx: &egui::Context, app: &mut GestoreApp) {
                     ui.add(egui::DragValue::new(&mut panel.value).speed(panel.unit).max_decimals(3).suffix(suffix))
                         .on_hover_text("Trascina, oppure fai doppio clic e scrivi il valore");
                 });
-                ui.horizontal(|ui| {
+                ui.horizontal_wrapped(|ui| {
                     ui.label("Unità");
                     egui::ComboBox::from_id_salt("posizione_unita")
                         .width(70.0)
@@ -518,13 +840,10 @@ pub fn draw(ctx: &egui::Context, app: &mut GestoreApp) {
                 {
                     actions.push(Action::ResetPosition(nodes.clone()));
                 }
+                });
 
                 // ── Rotazione su un asse (cerniere) ─────────────────────────────
-                ui.separator();
-                egui::CollapsingHeader::new(egui::RichText::new("Rotazione su un asse (cerniere)").strong())
-                    .id_salt("posizione_cerniera")
-                    .default_open(true)
-                    .show(ui, |ui| {
+                section(ui, "posizione_cerniera", "Rotazione su cerniera", &mut sections[2], |ui| {
                         let h = &mut panel.hinge;
                         let before_mode = h.mode;
                         ui.horizontal_wrapped(|ui| {
@@ -550,6 +869,10 @@ pub fn draw(ctx: &egui::Context, app: &mut GestoreApp) {
                                 "Lo stesso pezzo in due posizioni (es. chiuso e aperto, due matematiche già pronte): \
                                  l'asse si calcola dal movimento, anche senza cerniere nel 3D",
                             );
+                            ui.selectable_value(&mut h.mode, HingeMode::FourBar, "4 perni (cofano)").on_hover_text(
+                                "Cerniera con due bielle: due perni sulla cerniera fissa e due sulla mobile. \
+                                 Il cofano non gira su un asse fisso: le bielle si calcolano in automatico",
+                            );
                         });
                         if h.mode != before_mode {
                             // Un asse da un punto si aggiorna subito, gli altri si rifanno
@@ -563,6 +886,8 @@ pub fn draw(ctx: &egui::Context, app: &mut GestoreApp) {
                                     h.picking = false;
                                     h.motion = None;
                                     h.error = None;
+                                    h.four = None;
+                                    h.arm_ref = None;
                                 }
                             }
                             h.angle = 0.0;
@@ -644,7 +969,70 @@ pub fn draw(ctx: &egui::Context, app: &mut GestoreApp) {
                                 }
                             }
                         }
-                        ui.horizontal(|ui| {
+                        if h.mode == HingeMode::FourBar {
+                            ui.label(egui::RichText::new(FOUR_BAR_HINT).small());
+                            if ui
+                                .add(egui::Button::new(icon_text(ui, icon::INFO, "Guida illustrata")).small().selected(panel.guide))
+                                .on_hover_text("Disegni e passi: quali perni cliccare e in che ordine")
+                                .clicked()
+                            {
+                                panel.guide = !panel.guide;
+                            }
+                            // Le parti si cambiano solo a 0°: si muovono dalla posizione dei perni cliccati
+                            // Spostamento dei pezzi di ogni parte dalla posizione dei perni cliccati a quella
+                            // attuale: un pezzo tolto torna chiuso, uno aggiunto si porta all'apertura attuale
+                            let current = h.four.as_ref().map(|f| f.transforms(&f.state));
+                            let mut slot_moves: Vec<Action> = Vec::new();
+                            let mut arm_changed = false;
+                            let [link1, link2] = &mut h.links;
+                            {
+                                for (k, (label, hint, slot)) in [
+                                    ("Parte che si apre", "Cofano e braccio della cerniera mobile (con i suoi perni)", &mut h.arm),
+                                    ("Biella 1", "Biella tra perno fisso 1 e perno mobile 1 (facoltativa)", link1),
+                                    ("Biella 2", "Biella tra perno fisso 2 e perno mobile 2 (facoltativa)", link2),
+                                ]
+                                .into_iter()
+                                .enumerate()
+                                {
+                                    ui.horizontal_wrapped(|ui| {
+                                        ui.label(label).on_hover_text(hint);
+                                        let (short, full) = slot_text(app, slot);
+                                        ui.label(egui::RichText::new(short).strong()).on_hover_text(full);
+                                        let mut replace: Option<Vec<u32>> = None;
+                                        if ui
+                                            .add_enabled(!selection.is_empty(), egui::Button::new("Usa selezione").small())
+                                            .on_hover_text("Il file o i pezzi selezionati nell'albero (al posto di quelli indicati prima)")
+                                            .on_disabled_hover_text("Seleziona prima i pezzi nell'albero o nella vista")
+                                            .clicked()
+                                        {
+                                            replace = Some(selection.clone());
+                                        }
+                                        if ui.add_enabled(!slot.is_empty(), egui::Button::new("×").small()).on_hover_text("Togli (i pezzi tornano chiusi)").clicked() {
+                                            replace = Some(Vec::new());
+                                        }
+                                        if let Some(new) = replace {
+                                            if let Some(t) = current.filter(|_| h.four.as_ref().is_some_and(|f| !f.at_start())) {
+                                                if !slot.is_empty() {
+                                                    slot_moves.push(Action::Move { nodes: slot.clone(), matrix: t[k].inverse() });
+                                                }
+                                                if !new.is_empty() {
+                                                    slot_moves.push(Action::Move { nodes: new.clone(), matrix: t[k] });
+                                                }
+                                            }
+                                            *slot = new;
+                                            arm_changed |= k == 0;
+                                        }
+                                    });
+                                }
+                            }
+                            if arm_changed {
+                                h.arm_ref = None;
+                            }
+                            if !slot_moves.is_empty() {
+                                actions.push(Action::Batch(slot_moves));
+                            }
+                        }
+                        ui.horizontal_wrapped(|ui| {
                             if h.mode == HingeMode::TwoPositions {
                                 // L'asse si calcola dalle due posizioni, non dai clic
                             } else if h.picking {
@@ -653,6 +1041,17 @@ pub fn draw(ctx: &egui::Context, app: &mut GestoreApp) {
                                     h.points.clear();
                                 }
                                 ui.label(egui::RichText::new(h.prompt().unwrap_or_default()).italics());
+                            } else if h.mode == HingeMode::FourBar {
+                                let text = if h.four.is_some() { "Scegli di nuovo i perni" } else { "Scegli i 4 perni nella vista" };
+                                if ui
+                                    .add_enabled(h.four.as_ref().is_none_or(FourBar::at_start), egui::Button::new(icon_text(ui, icon::CROSSHAIR, text)))
+                                    .on_hover_text("3 clic sul bordo di ogni perno: prima i 2 della cerniera fissa, poi i 2 della mobile")
+                                    .on_disabled_hover_text("Riporta prima il cofano a 0°")
+                                    .clicked()
+                                {
+                                    h.start();
+                                    start_picking = true;
+                                }
                             } else if ui
                                 .button(icon_text(ui, icon::CROSSHAIR, if h.axis.is_some() { "Scegli un altro asse" } else { "Scegli l'asse nella vista" }))
                                 .on_hover_text("Clic sui pezzi nella vista (si aggancia ai vertici vicini, come le Misure)")
@@ -665,6 +1064,90 @@ pub fn draw(ctx: &egui::Context, app: &mut GestoreApp) {
                         if let Some(e) = &h.error {
                             ui.colored_label(egui::Color32::from_rgb(230, 90, 80), e);
                         }
+                        if let (HingeMode::FourBar, Some(four)) = (h.mode, h.four.as_mut()) {
+                            let warn = egui::Color32::from_rgb(230, 160, 40);
+                            let [l1, l2, l3] = four.lengths();
+                            ui.label(
+                                egui::RichText::new(format!("Biella 1 {l1:.1} mm  ·  biella 2 {l2:.1} mm  ·  tra i perni mobili {l3:.1} mm"))
+                                    .small()
+                                    .weak(),
+                            );
+                            if four.skew_deg > 1.0 {
+                                ui.colored_label(warn, format!("I perni non sono del tutto paralleli (scarto {:.1}°): si usa la direzione media", four.skew_deg));
+                            }
+                            let at_zero = four.at_start();
+                            if four.crossed() {
+                                ui.colored_label(
+                                    warn,
+                                    "Le bielle risultano incrociate: di solito vuol dire che i perni mobili sono stati cliccati \
+                                     nell'ordine sbagliato. Se nel pezzo non si incrociano, premi «Scambia i perni mobili».",
+                                );
+                            }
+                            if ui
+                                .add_enabled(at_zero, egui::Button::new("Scambia i perni mobili").small())
+                                .on_hover_text("Il mobile 1 diventa il mobile 2: per correggere l'abbinamento perno fisso ↔ perno mobile")
+                                .on_disabled_hover_text("Riporta prima il cofano a 0°")
+                                .clicked()
+                            {
+                                let mut p = h.points.clone();
+                                if p.len() == 12 {
+                                    p[6..12].rotate_left(3);
+                                    match build_four_bar(&p) {
+                                        Ok(f) => {
+                                            *four = f;
+                                            h.points = p;
+                                            h.error = None;
+                                        }
+                                        Err(e) => h.error = Some(e),
+                                    }
+                                }
+                            }
+                            if h.arm.is_empty() {
+                                ui.colored_label(warn, "Indica la parte che si apre (cofano + braccio) per poterla ruotare");
+                            }
+                            let before = h.angle;
+                            angle_row(ui, &mut h.angle, h.step, "Apertura del cofano dalla posizione in cui sono stati scelti i perni");
+                            step_row(ui, &mut h.step);
+                            ui.horizontal_wrapped(|ui| {
+                                if ui.small_button("Inverti verso").on_hover_text("L'angolo positivo apre dall'altra parte").clicked() {
+                                    four.flip();
+                                    h.angle = -h.angle;
+                                }
+                                if ui.add_enabled(!at_zero, egui::Button::new("Torna a 0°").small()).on_hover_text("Riporta il cofano dov'era quando hai scelto i perni").clicked() {
+                                    h.angle = 0.0;
+                                }
+                            });
+                            if h.angle != before && !h.arm.is_empty() {
+                                let s = match four.solve(h.angle) {
+                                    Ok(s) => {
+                                        h.error = None;
+                                        s
+                                    }
+                                    Err(s) => {
+                                        h.error = Some(format!(
+                                            "Fine corsa: il meccanismo arriva a {:.2}°",
+                                            s.phi.to_degrees()
+                                        ));
+                                        s
+                                    }
+                                };
+                                let (old, new) = (four.transforms(&four.state), four.transforms(&s));
+                                let moves: Vec<Action> = [&h.arm, &h.links[0], &h.links[1]]
+                                    .into_iter()
+                                    .zip(old.iter().zip(new.iter()))
+                                    .filter(|(nodes, _)| !nodes.is_empty())
+                                    .map(|(nodes, (o, n))| Action::Move { nodes: nodes.clone(), matrix: *n * o.inverse() })
+                                    .collect();
+                                actions.push(Action::Batch(moves));
+                                four.state = s;
+                                h.angle = s.phi.to_degrees() as f32;
+                                if four.at_start() || h.angle.abs() < 1e-4 {
+                                    h.angle = 0.0;
+                                }
+                            } else if h.angle != before {
+                                h.angle = before;
+                            }
+                        }
                         if let Some((o, d)) = h.axis {
                             ui.label(
                                 egui::RichText::new(format!(
@@ -675,31 +1158,13 @@ pub fn draw(ctx: &egui::Context, app: &mut GestoreApp) {
                                 .weak(),
                             );
                             let before = h.angle;
-                            ui.horizontal(|ui| {
-                                ui.label("Angolo");
-                                if ui.small_button(icon::CARET_LEFT).clicked() {
-                                    h.angle -= h.step;
-                                }
-                                ui.spacing_mut().slider_width = 150.0;
-                                // Il cursore non riarrotonda i valori scritti a mano (es. 23° con passo 10)
-                                ui.add(
-                                    egui::Slider::new(&mut h.angle, -180.0..=180.0)
-                                        .step_by(h.step as f64)
-                                        .clamping(egui::SliderClamping::Never)
-                                        .show_value(false),
-                                );
-                                if ui.small_button(icon::CARET_RIGHT).clicked() {
-                                    h.angle += h.step;
-                                }
-                                ui.add(egui::DragValue::new(&mut h.angle).speed(h.step).max_decimals(3).suffix(" °"))
-                                    .on_hover_text("Angolo dalla posizione in cui è stato scelto l'asse");
-                            });
+                            angle_row(ui, &mut h.angle, h.step, "Angolo dalla posizione in cui è stato scelto l'asse");
                             // Quota presa con il metro: l'angolo che porta la Misura a quella distanza
                             if let Some((moving, fixed, magnet)) = measured {
                                 if h.wanted <= 0.0 {
                                     h.wanted = (moving.distance(fixed) * 10.0).round() / 10.0;
                                 }
-                                ui.horizontal(|ui| {
+                                ui.horizontal_wrapped(|ui| {
                                     ui.label("Distanza");
                                     ui.add(egui::DragValue::new(&mut h.wanted).speed(0.1).range(0.0..=f32::MAX).max_decimals(2).suffix(" mm"))
                                         .on_hover_text("Distanza voluta tra i due punti della Misura (es. presa con il metro in cabina)");
@@ -733,23 +1198,11 @@ pub fn draw(ctx: &egui::Context, app: &mut GestoreApp) {
                                         .weak(),
                                 );
                             }
-                            ui.horizontal(|ui| {
-                                ui.label("Passo");
-                                egui::ComboBox::from_id_salt("posizione_passo_cerniera")
-                                    .width(70.0)
-                                    .selected_text(format!("{} °", h.step))
-                                    .show_ui(ui, |ui| {
-                                        for v in HINGE_STEPS {
-                                            ui.selectable_value(&mut h.step, v, format!("{v} °"));
-                                        }
-                                    })
-                                    .response
-                                    .on_hover_text("Passo delle frecce e del cursore dell'angolo");
-                            });
+                            step_row(ui, &mut h.step);
                             if h.angle != before && !nodes.is_empty() {
                                 actions.push(Action::Move { nodes: nodes.clone(), matrix: about_axis(o, d, h.angle - before) });
                             }
-                            ui.horizontal(|ui| {
+                            ui.horizontal_wrapped(|ui| {
                                 if ui.small_button("Inverti verso").on_hover_text("L'angolo positivo gira dall'altra parte").clicked() {
                                     h.axis = Some((o, -d));
                                     h.angle = -h.angle;
@@ -771,22 +1224,19 @@ pub fn draw(ctx: &egui::Context, app: &mut GestoreApp) {
                     });
 
                 // ── Applica offset ─────────────────────────────────────────────
-                ui.separator();
-                egui::CollapsingHeader::new(egui::RichText::new("Applica offset").strong())
-                    .id_salt("posizione_offset")
-                    .default_open(true)
-                    .show(ui, |ui| {
-                        egui::Grid::new("posizione_offset_campi").num_columns(6).spacing([6.0, 4.0]).show(ui, |ui| {
+                section(ui, "posizione_offset", "Applica offset", &mut sections[3], |ui| {
+                        // Righe che vanno a capo: la finestra si può stringere
+                        ui.horizontal_wrapped(|ui| {
                             for k in 0..3 {
                                 ui.label(egui::RichText::new(AXES[k].0).color(AXES[k].1).strong());
                                 ui.add(egui::DragValue::new(&mut panel.offset.xyz[k]).speed(0.1).max_decimals(3).suffix(" mm"));
                             }
-                            ui.end_row();
+                        });
+                        ui.horizontal_wrapped(|ui| {
                             for k in 0..3 {
                                 ui.label(egui::RichText::new(AXES[k + 3].0).color(AXES[k + 3].1).strong());
                                 ui.add(egui::DragValue::new(&mut panel.offset.abc[k]).speed(0.1).max_decimals(3).suffix(" °"));
                             }
-                            ui.end_row();
                         });
                         ui.label(
                             egui::RichText::new(if panel.world {
@@ -801,7 +1251,7 @@ pub fn draw(ctx: &egui::Context, app: &mut GestoreApp) {
                             .add(
                                 egui::TextEdit::multiline(&mut panel.pasted)
                                     .desired_rows(1)
-                                    .desired_width(330.0)
+                                    .desired_width(f32::INFINITY)
                                     .hint_text(format!("{}  Incolla qui (Ctrl+V) il risultato dello script", icon::CLIPBOARD_TEXT)),
                             )
                             .on_hover_text("Il testo copiato dagli script, oppure sei numeri X Y Z A B C");
@@ -816,7 +1266,7 @@ pub fn draw(ctx: &egui::Context, app: &mut GestoreApp) {
                                 None => panel.error = Some("Nel testo incollato non c'è un offset X Y Z A B C".to_string()),
                             }
                         }
-                        ui.horizontal(|ui| {
+                        ui.horizontal_wrapped(|ui| {
                             if ui.button("Applica").on_hover_text("Sposta l'oggetto di questo offset").clicked() && !nodes.is_empty() {
                                 actions.push(Action::Move { nodes: nodes.clone(), matrix: in_frame(panel.offset.matrix(), frame, panel.world) });
                             }
@@ -827,11 +1277,8 @@ pub fn draw(ctx: &egui::Context, app: &mut GestoreApp) {
                     });
 
                 // ── Calcola offset ─────────────────────────────────────────────
-                egui::CollapsingHeader::new(egui::RichText::new("Calcola offset").strong())
-                    .id_salt("posizione_calcolo")
-                    .default_open(false)
-                    .show(ui, |ui| {
-                        ui.horizontal(|ui| {
+                section(ui, "posizione_calcolo", "Calcola offset", &mut sections[4], |ui| {
+                        ui.horizontal_wrapped(|ui| {
                             ui.selectable_value(&mut panel.calc, CalcMode::Objects, "Tra due oggetti")
                                 .on_hover_text("Come WRLOffsetCalculator: due oggetti della scena, dalle loro coordinate");
                             ui.selectable_value(&mut panel.calc, CalcMode::Bases, "Tra due CONST BASE")
@@ -868,7 +1315,7 @@ pub fn draw(ctx: &egui::Context, app: &mut GestoreApp) {
                             CalcMode::Bases => {
                                 for (label, text) in [("Origine", &mut panel.base_a), ("Destinazione", &mut panel.base_b)] {
                                     ui.label(label);
-                                    ui.add(egui::TextEdit::singleline(text).desired_width(330.0).font(egui::TextStyle::Monospace).hint_text("CONST BASE NOME = X Y Z A B C"));
+                                    ui.add(egui::TextEdit::singleline(text).desired_width(f32::INFINITY).font(egui::TextStyle::Monospace).hint_text("CONST BASE NOME = X Y Z A B C"));
                                 }
                                 if ui.button("Calcola").clicked() {
                                     calc_result = Some(match (parse_const_base(&panel.base_a), parse_const_base(&panel.base_b)) {
@@ -895,7 +1342,7 @@ pub fn draw(ctx: &egui::Context, app: &mut GestoreApp) {
                             ui.add_space(4.0);
                             ui.label(egui::RichText::new("Scostamento").strong());
                             pose_grid(ui, "posizione_risultato", &p);
-                            ui.horizontal(|ui| {
+                            ui.horizontal_wrapped(|ui| {
                                 if ui.button(icon_text(ui, icon::COPY, "Copia")).clicked() {
                                     copy = Some(offset_text("Offset", &p));
                                 }
@@ -909,7 +1356,16 @@ pub fn draw(ctx: &egui::Context, app: &mut GestoreApp) {
                     ui.colored_label(egui::Color32::from_rgb(230, 90, 80), e);
                 }
             });
+            });
         });
+    if panel.guide {
+        draw_four_bar_guide(ctx, &mut panel.guide);
+    }
+    if sections != app.settings.position_sections {
+        let mut s = app.settings.clone();
+        s.position_sections = sections;
+        app.apply_settings(s);
+    }
 
     if let Some(text) = copy {
         ctx.copy_text(text);
@@ -1017,6 +1473,8 @@ DEF Destinazione Group { children [
 
         /// Clic sull'`nth` testo uguale a `label`.
         fn click(&self, app: &mut GestoreApp, label: &str, nth: usize) {
+            // Un disegno in più: dopo un cambiamento la finestra (ridimensionabile) si assesta
+            self.run(app, vec![]);
             let texts = self.run(app, vec![]);
             let at = texts
                 .iter()
@@ -1181,6 +1639,133 @@ DEF Destinazione Group { children [
         ui.run(&mut app, vec![]);
         ui.run(&mut app, vec![]);
         assert_eq!(app.ui_state.position.hinge.angle, 23.0);
+    }
+
+    /// Cerniera a 4 perni nel piano XZ (perni lungo Y): F1 (0,0), F2 (50,0), M1 (-10,80),
+    /// M2 (45,70). Braccio e bielle hanno un vertice su ogni perno.
+    const COFANO: &[u8] = br#"#VRML V2.0 utf8
+DEF Braccio Group { children [ Shape { geometry IndexedFaceSet { coord Coordinate { point [ -10 0 80, 45 0 70, 20 0 120 ] } coordIndex [ 0 1 2 -1 ] } } ] }
+DEF Biella1 Group { children [ Shape { geometry IndexedFaceSet { coord Coordinate { point [ 0 0 0, -10 0 80, -5 5 40 ] } coordIndex [ 0 1 2 -1 ] } } ] }
+DEF Biella2 Group { children [ Shape { geometry IndexedFaceSet { coord Coordinate { point [ 50 0 0, 45 0 70, 47 5 35 ] } coordIndex [ 0 1 2 -1 ] } } ] }
+DEF Piastra Group { children [ Shape { geometry IndexedFaceSet { coord Coordinate { point [ 0 0 0, 50 0 0, 25 0 -20 ] } coordIndex [ 0 1 2 -1 ] } } ] }
+"#;
+
+    /// Si scelgono i perni, la parte che si apre e le bielle; la freccia dell'angolo apre il
+    /// cofano tenendo uniti i perni, con un solo Annulla; dopo Annulla l'angolo torna a 0.
+    #[test]
+    fn four_pin_hinge_opens_the_hood_with_its_links() {
+        let mut app = GestoreApp::new_headless();
+        let mut scene = crate::parser::parse_wrl(COFANO);
+        scene.into_file("cofano.wrl".into(), None);
+        app.project.on_loaded(scene.revision);
+        app.scene_graph = Some(scene);
+        app.ui_state.position.open = true;
+        let ui = Ui { ctx: egui::Context::default() };
+        let [arm, l1, l2, plate] = ["Braccio", "Biella1", "Biella2", "Piastra"].map(|n| node(&app, n, 0));
+        let wid = |ui: &Ui| ui.ctx.memory(|m| m.area_rect(egui::Id::new("finestra_posizione"))).map(|r| r.width());
+        ui.run(&mut app, vec![]);
+        ui.click(&mut app, "4 perni (cofano)", 0);
+        let texts = ui.run(&mut app, vec![]);
+        assert!(texts.iter().any(|(t, _)| t.contains("Su ogni perno 3 punti sul bordo, a triangolo")), "promemoria visibile");
+        // La finestra resta stretta e alta quanto il contenuto, non quanto lo schermo
+        let window = ui.ctx.memory(|m| m.area_rect(egui::Id::new("finestra_posizione"))).expect("finestra");
+        assert!(window.width() < 300.0 && window.height() < 900.0, "{window:?}");
+        ui.click(&mut app, "Guida illustrata", 0);
+        let texts = ui.run(&mut app, vec![]);
+        for wanted in ["1  F1", "4  M2", "cerniera fissa
+(sulla scocca)", "Sì: 3 punti lontani, a triangolo"] {
+            assert!(texts.iter().any(|(t, _)| t == wanted), "{wanted}: {:?}", texts.iter().map(|t| &t.0).collect::<Vec<_>>());
+        }
+        let (guide, window) = ui.ctx.memory(|m| (m.area_rect(egui::Id::new("guida_quattro_perni")), m.area_rect(egui::Id::new("finestra_posizione"))));
+        assert!(!guide.unwrap().intersects(window.unwrap()), "la guida si apre accanto alla finestra, non sopra: {guide:?} {window:?}");
+        assert!(guide.unwrap().width() < 360.0, "{guide:?}");
+        ui.click(&mut app, "Guida illustrata", 0);
+        assert!(!app.ui_state.position.guide);
+        for (k, n) in [arm, l1, l2].into_iter().enumerate() {
+            app.ui_state.select_single(Some(n));
+            ui.click(&mut app, "Usa selezione", k);
+        }
+        assert_eq!(app.ui_state.position.hinge.arm, vec![arm]);
+        assert_eq!(app.ui_state.position.hinge.links, [vec![l1], vec![l2]]);
+        ui.click(&mut app, "Scegli i 4 perni nella vista", 0);
+        let texts = ui.run(&mut app, vec![]);
+        assert!(texts.iter().any(|(t, _)| t.contains("perno 1 di 4, F1 (cerniera fissa, perno 1): punto 1 di 3 sul bordo (a triangolo)")));
+        assert!(wid(&ui).unwrap() < 300.0, "il testo del clic va a capo: la finestra resta stretta");
+        for (x, z) in [(0.0, 0.0), (50.0, 0.0), (-10.0, 80.0), (45.0, 70.0)] {
+            for (dx, dz) in [(3.0, 0.0), (0.0, 3.0), (-3.0, 0.0)] {
+                app.ui_state.position.hinge.add_point(Vec3::new(x + dx, 0.0, z + dz));
+            }
+        }
+        assert!(app.ui_state.position.hinge.four.is_some(), "{:?}", app.ui_state.position.hinge.error);
+        ui.run(&mut app, vec![]);
+
+        let vertex = |app: &GestoreApp, n: u32, i: usize| {
+            let s = app.scene_graph.as_ref().unwrap();
+            Vec3::from(s.shapes_data[s.meshes_of(&[n])[0] as usize].world_vertices[i])
+        };
+        app.ui_state.position.hinge.step = 10.0;
+        // Con questi clic il verso positivo chiude il cofano, già quasi a fine corsa: si inverte
+        ui.click(&mut app, "Inverti verso", 0);
+        // Seconda freccia a destra: quella dell'angolo (la prima è della Trasformazione)
+        ui.click(&mut app, icon::CARET_RIGHT, 1);
+        ui.click(&mut app, icon::CARET_RIGHT, 1);
+        assert!((app.ui_state.position.hinge.angle - 20.0).abs() < 1e-3, "{}", app.ui_state.position.hinge.angle);
+        let (m1, m2) = (vertex(&app, arm, 0), vertex(&app, arm, 1));
+        assert!(m1.distance(Vec3::new(-10.0, 0.0, 80.0)) > 5.0, "il braccio si è mosso");
+        assert!(m1.distance(vertex(&app, l1, 1)) < 1e-2 && m2.distance(vertex(&app, l2, 1)) < 1e-2, "perni mobili uniti alle bielle");
+        assert!(vertex(&app, l1, 0).distance(Vec3::ZERO) < 1e-3 && vertex(&app, l2, 0).distance(Vec3::new(50.0, 0.0, 0.0)) < 1e-3, "perni fissi fermi");
+        assert!((m1.distance(Vec3::ZERO) - 80.6226).abs() < 1e-2 && (m2.distance(Vec3::new(50.0, 0.0, 0.0)) - 70.1783).abs() < 1e-2);
+        assert!((m1.distance(m2) - 55.9017).abs() < 1e-2);
+        assert_eq!(vertex(&app, plate, 2), Vec3::new(25.0, 0.0, -20.0), "la piastra non si muove");
+        assert_eq!(app.project.undo.len(), 1, "i passi dell'angolo sono un solo Annulla");
+
+        // Il braccio ruota di 20° attorno a Y (verso dato dal primo perno)
+        let turn = (m2 - m1).normalize().dot(Vec3::new(55.0, 0.0, -10.0).normalize()).acos().to_degrees();
+        assert!((turn - 20.0).abs() < 1e-2, "{turn}");
+
+        app.undo();
+        ui.run(&mut app, vec![]);
+        assert!(vertex(&app, arm, 0).distance(Vec3::new(-10.0, 0.0, 80.0)) < 1e-3, "annullato");
+        assert_eq!(app.ui_state.position.hinge.angle, 0.0, "dopo Annulla l'angolo segue la posizione");
+        assert!(app.ui_state.position.hinge.four.is_some(), "i perni restano");
+        app.redo();
+        ui.run(&mut app, vec![]);
+        assert!((app.ui_state.position.hinge.angle - 20.0).abs() < 1e-3, "dopo Ripeti di nuovo 20°");
+
+        // Oltre il fine corsa il cofano si ferma dove arriva il meccanismo
+        app.ui_state.position.hinge.step = 25.0;
+        ui.click(&mut app, icon::CARET_LEFT, 1);
+        let h = &app.ui_state.position.hinge;
+        assert!((h.angle + 0.956).abs() < 1e-2, "{}", h.angle);
+        assert!(h.error.as_deref().is_some_and(|e| e.starts_with("Fine corsa")), "{:?}", h.error);
+        assert!(vertex(&app, arm, 0).distance(vertex(&app, l1, 1)) < 1e-2);
+
+        // Parte sbagliata a cofano aperto: si cambia lo stesso. La piastra messa per errore come
+        // biella 1 si muove con lei e, tolta, torna al suo posto; la biella giusta torna unita al braccio
+        app.ui_state.position.hinge.step = 10.0;
+        ui.click(&mut app, icon::CARET_RIGHT, 1);
+        ui.click(&mut app, icon::CARET_RIGHT, 1);
+        let plate_start = vertex(&app, plate, 2);
+        app.ui_state.select_single(Some(plate));
+        ui.click(&mut app, "Usa selezione", 1);
+        assert_eq!(app.ui_state.position.hinge.links[0], vec![plate]);
+        assert!(vertex(&app, plate, 2).distance(plate_start) > 1.0, "la piastra segue la biella 1");
+        assert!(vertex(&app, l1, 0).distance(Vec3::ZERO) < 1e-3 && vertex(&app, l1, 1).distance(Vec3::new(-10.0, 0.0, 80.0)) < 1e-3, "la biella tolta torna chiusa");
+        app.ui_state.select_single(Some(l1));
+        ui.click(&mut app, "Usa selezione", 1);
+        assert_eq!(app.ui_state.position.hinge.links[0], vec![l1]);
+        assert!(vertex(&app, plate, 2).distance(plate_start) < 1e-3, "la piastra torna al suo posto");
+        assert!(vertex(&app, arm, 0).distance(vertex(&app, l1, 1)) < 1e-2, "biella di nuovo unita al braccio");
+        ui.click(&mut app, "×", 1);
+        assert!(app.ui_state.position.hinge.links[0].is_empty());
+        assert!(vertex(&app, l1, 1).distance(Vec3::new(-10.0, 0.0, 80.0)) < 1e-3);
+
+        // Tornato a 0° (anche se il calcolo dà «-0,000°») si possono scegliere di nuovo i perni
+        ui.click(&mut app, "Torna a 0°", 0);
+        assert!(app.ui_state.position.hinge.four.as_ref().unwrap().at_start());
+        assert_eq!(app.ui_state.position.hinge.angle, 0.0);
+        ui.click(&mut app, "Scegli di nuovo i perni", 0);
+        assert!(app.ui_state.position.hinge.picking);
     }
 
     #[test]

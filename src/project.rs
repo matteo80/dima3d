@@ -23,6 +23,22 @@ pub enum Pending {
     Exit,
     /// Riapre i file aperti (es. per applicare nuovi parametri di raggruppamento)
     Reload(Vec<PathBuf>),
+    /// Apre un progetto Dima 3D
+    OpenProject(PathBuf),
+}
+
+/// Progetto in apertura: i modelli si caricano uno alla volta, poi si riapplicano le modifiche.
+#[derive(Debug, Clone)]
+pub struct Restore {
+    pub path: PathBuf,
+    pub file: crate::project_file::ProjectFile,
+    /// Avvisi da mostrare alla fine (es. modelli cambiati dopo il salvataggio)
+    pub warnings: Vec<String>,
+}
+
+/// Il percorso è un progetto Dima 3D.
+pub fn is_project(path: &std::path::Path) -> bool {
+    path.extension().is_some_and(|e| e.eq_ignore_ascii_case(crate::project_file::EXTENSION))
 }
 
 /// Export in corso in un thread separato: la scena è stata affidata al thread e torna con il
@@ -85,11 +101,21 @@ pub struct ProjectState {
     pub reduction: crate::reduction::Reduction,
     /// Ultimo titolo impostato sulla finestra
     last_title: String,
+    /// Progetto aperto o salvato: «Salva progetto» lo riscrive
+    pub project_path: Option<PathBuf>,
+    /// Progetto in apertura
+    pub restore: Option<Restore>,
+    /// Raggruppamento con cui sono stati aperti i modelli (va nel progetto)
+    pub loaded_cluster: Option<crate::clusterer::ClusterConfig>,
 }
 
 impl ProjectState {
     pub fn on_loaded(&mut self, revision: u64) {
         self.current_path = self.loading_path.take();
+        if self.restore.is_none() {
+            // Aperto un modello, non un progetto: «Salva progetto» chiederà il nome
+            self.project_path = None;
+        }
         self.loading_adds = false;
         self.saved_revision = revision;
         self.undo.clear();
@@ -224,6 +250,10 @@ impl GestoreApp {
         if self.ui_state.is_loading || self.project.busy() || self.project.step_prompt.is_some() {
             return;
         }
+        if is_project(&path) {
+            self.request_open_project(path);
+            return;
+        }
         if crate::parser::external::is_step(&path) {
             self.ask_step_options(StepRequest::Open(path));
             return;
@@ -246,6 +276,13 @@ impl GestoreApp {
     /// Si caricano uno alla volta; quelli in più attendono in coda.
     pub fn request_add(&mut self, paths: Vec<PathBuf>) {
         if self.project.busy() || self.project.step_prompt.is_some() {
+            return;
+        }
+        // Un progetto trascinato sulla finestra si apre (sostituisce la scena)
+        if let Some(project) = paths.iter().find(|p| is_project(p)) {
+            if !self.ui_state.is_loading {
+                self.request_open_project(project.clone());
+            }
             return;
         }
         if paths.iter().any(|p| crate::parser::external::is_step(p)) {
@@ -438,7 +475,9 @@ impl GestoreApp {
 
     /// Apre la finestra di scelta file.
     pub fn open_dialog(&mut self) {
-        let mut dialog = rfd::FileDialog::new().add_filter("Modelli 3D (WRL, JT, STEP, STL, HSF, IV)", &["wrl", "WRL", "vrml", "jt", "JT", "stp", "STP", "step", "STEP", "stl", "STL", "hsf", "HSF", "iv", "IV"]);
+        let mut dialog = rfd::FileDialog::new()
+            .add_filter("Modelli 3D e progetti (WRL, JT, STEP, STL, HSF, IV, DIMA3D)", &["wrl", "WRL", "vrml", "jt", "JT", "stp", "STP", "step", "STEP", "stl", "STL", "hsf", "HSF", "iv", "IV", "dima3d"])
+            .add_filter("Progetto Dima 3D", &["dima3d"]);
         if let Some(dir) = self.settings.recent.first().and_then(|p| p.parent()) {
             dialog = dialog.set_directory(dir);
         }
@@ -500,8 +539,212 @@ impl GestoreApp {
                 ctx.send_viewport_cmd(egui::ViewportCommand::Close);
             }
             Pending::Reload(paths) => self.reload(paths),
+            Pending::OpenProject(path) => self.open_project_now(path),
         }
     }
+
+    // ── Progetto (.dima3d) ───────────────────────────────────────────────────
+
+    /// Apre un progetto, chiedendo conferma se ci sono modifiche non salvate.
+    pub fn request_open_project(&mut self, path: PathBuf) {
+        if self.ui_state.is_loading || self.project.busy() {
+            return;
+        }
+        if self.is_dirty() {
+            self.project.pending = Some(Pending::OpenProject(path));
+        } else {
+            self.open_project_now(path);
+        }
+    }
+
+    /// Finestra di scelta di un progetto da aprire.
+    pub fn open_project_dialog(&mut self) {
+        let mut dialog = rfd::FileDialog::new().add_filter("Progetto Dima 3D", &[crate::project_file::EXTENSION]);
+        if let Some(dir) = self.project.project_path.as_ref().or(self.settings.recent.first()).and_then(|p| p.parent()) {
+            dialog = dialog.set_directory(dir);
+        }
+        if let Some(path) = dialog.pick_file() {
+            self.request_open_project(path);
+        }
+    }
+
+    /// Legge il progetto e comincia a riaprire i suoi modelli; le modifiche si riapplicano in
+    /// `finish_restore`, quando sono tutti caricati.
+    fn open_project_now(&mut self, path: PathBuf) {
+        let name = path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+        let parsed = std::fs::read_to_string(&path)
+            .map_err(|e| e.to_string())
+            .and_then(|t| crate::project_file::ProjectFile::from_text(&t, &path));
+        let mut file = match parsed {
+            Ok(f) => f,
+            Err(e) => {
+                self.ui_state.status_message = format!("Progetto non aperto ({name}): {e}");
+                return;
+            }
+        };
+        if file.files.is_empty() {
+            self.ui_state.status_message = format!("Il progetto {name} non contiene modelli");
+            return;
+        }
+        let mut warnings = Vec::new();
+        for f in &mut file.files {
+            if !f.path.exists() {
+                // Modello spostato: si chiede dove si trova
+                match locate_missing(&f.path) {
+                    Some(p) => f.path = p,
+                    None => {
+                        self.ui_state.status_message =
+                            format!("Progetto non aperto: non trovo {}", f.path.display());
+                        return;
+                    }
+                }
+            }
+            let (size, modified) = crate::project_file::file_stamp(&f.path);
+            if (f.size, f.modified) != (0, 0) && (size, modified) != (f.size, f.modified) {
+                let file_name = f.path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+                warnings.push(format!(
+                    "{file_name} è cambiato dopo il salvataggio del progetto: controlla posizioni, colori e nomi"
+                ));
+            }
+        }
+        let paths: Vec<PathBuf> = file.files.iter().map(|f| f.path.clone()).collect();
+        self.project.restore = Some(Restore { path, file, warnings });
+        self.project.step_choice = None;
+        self.ui_state.unit_suggestions.clear();
+        self.reload(paths);
+    }
+
+    /// Progetto in apertura: quando tutti i modelli sono caricati riapplica le modifiche.
+    pub fn finish_restore(&mut self) {
+        if self.project.restore.is_none() || self.ui_state.is_loading || self.load_rx.is_some() || !self.project.add_queue.is_empty() {
+            return;
+        }
+        let Some(restore) = self.project.restore.take() else { return };
+        let name = restore.path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+        let mut warnings = restore.warnings;
+        if self.scene_graph.is_none() {
+            self.ui_state.status_message = format!("Progetto {name}: nessun modello si è aperto");
+            self.ui_state.load_warnings.extend(warnings);
+            return;
+        }
+        // Le unità le decide il progetto: niente proposte di conversione
+        self.ui_state.unit_suggestions.clear();
+        let mut skipped = 0;
+        for entry in &restore.file.files {
+            let Some(scene) = &self.scene_graph else { break };
+            let Some(source) = scene.sources.iter().position(|s| s.path.as_deref() == Some(entry.path.as_path())) else {
+                warnings.push(format!("{} non si è aperto: le sue modifiche non sono state applicate", entry.path.display()));
+                continue;
+            };
+            let (node, current) = (scene.sources[source].node, scene.sources[source].scale);
+            if entry.scale > 0.0 && current > 0.0 && (entry.scale / current - 1.0).abs() > 1e-6 {
+                self.scale_file(node, entry.scale / current);
+            }
+            if let Some(scene) = &mut self.scene_graph {
+                skipped += crate::project_file::ProjectFile::apply_entry(entry, scene, source);
+            }
+        }
+        if skipped > 0 {
+            warnings.push(format!("{skipped} modifiche del progetto non trovano più il loro pezzo (modello cambiato?)"));
+        }
+        self.sync_moved_geometry();
+        if let (Some(view), Some(r)) = (restore.file.camera, &mut self.renderer) {
+            r.camera.target = view.target;
+            r.camera.distance = view.distance;
+            r.camera.orientation = view.orientation;
+            r.camera.animation = None;
+        }
+        self.project.loaded_cluster = Some(restore.file.cluster);
+        if let Some(scene) = &self.scene_graph {
+            self.project.saved_revision = scene.revision;
+        }
+        self.project.undo.clear();
+        self.project.redo.clear();
+        self.ui_state.expanded.clear();
+        self.ui_state.select_single(None);
+        self.ui_state.load_warnings.extend(warnings);
+        let files = restore.file.files.len();
+        self.ui_state.status_message = format!("Progetto aperto: {name} ({files} modelli)");
+        let mut s = self.settings.clone();
+        s.add_recent(&restore.path);
+        self.apply_settings(s);
+        self.project.project_path = Some(restore.path);
+    }
+
+    /// «Salva progetto»: riscrive quello aperto, altrimenti chiede dove salvarlo.
+    pub fn save_project(&mut self) -> bool {
+        match self.project.project_path.clone() {
+            Some(path) => self.write_project(&path),
+            None => self.save_project_as(),
+        }
+    }
+
+    /// «Salva progetto con nome…».
+    pub fn save_project_as(&mut self) -> bool {
+        if self.scene_graph.is_none() {
+            return false;
+        }
+        let stem = self
+            .project
+            .project_path
+            .as_ref()
+            .or(self.project.current_path.as_ref())
+            .and_then(|p| p.file_stem())
+            .map_or_else(|| "progetto".to_string(), |s| s.to_string_lossy().into_owned());
+        let mut dialog = rfd::FileDialog::new()
+            .add_filter("Progetto Dima 3D", &[crate::project_file::EXTENSION])
+            .set_file_name(format!("{stem}.{}", crate::project_file::EXTENSION));
+        if let Some(dir) = self.project.project_path.as_ref().or(self.project.current_path.as_ref()).and_then(|p| p.parent()) {
+            dialog = dialog.set_directory(dir);
+        }
+        let Some(mut path) = dialog.save_file() else { return false };
+        if !is_project(&path) {
+            path.set_extension(crate::project_file::EXTENSION);
+        }
+        self.write_project(&path)
+    }
+
+    /// Scrive il progetto in `path`. Ritorna true se è andato a buon fine.
+    pub fn write_project(&mut self, path: &std::path::Path) -> bool {
+        let Some(scene) = &self.scene_graph else { return false };
+        let camera = self.renderer.as_ref().map(|r| crate::project_file::CameraView {
+            target: r.camera.target,
+            distance: r.camera.distance,
+            orientation: r.camera.orientation,
+        });
+        let cluster = self.project.loaded_cluster.unwrap_or(self.settings.cluster);
+        let file = crate::project_file::ProjectFile::capture(scene, cluster, camera);
+        let unsaved = scene.open_files().filter(|f| f.path.is_none()).count();
+        let revision = scene.revision;
+        if let Err(e) = std::fs::write(path, file.to_text(path)) {
+            self.ui_state.status_message = format!("Progetto non salvato: {e}");
+            return false;
+        }
+        self.project.project_path = Some(path.to_path_buf());
+        self.project.saved_revision = revision;
+        let mut s = self.settings.clone();
+        s.add_recent(path);
+        self.apply_settings(s);
+        self.ui_state.status_message = format!("Progetto salvato: {}", path.display());
+        if unsaved > 0 {
+            self.ui_state.status_message.push_str(&format!("  ·  {unsaved} modelli senza file non sono nel progetto"));
+        }
+        true
+    }
+}
+
+/// Un modello del progetto non c'è più dove era: si chiede all'utente dove si trova.
+fn locate_missing(path: &std::path::Path) -> Option<PathBuf> {
+    if cfg!(test) {
+        return None;
+    }
+    let name = path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+    let mut dialog = rfd::FileDialog::new().set_title(format!("Dov'è {name}? (non è più nella cartella del progetto)")).set_file_name(&name);
+    if let Some(ext) = path.extension() {
+        let ext = ext.to_string_lossy().into_owned();
+        dialog = dialog.add_filter(name.as_str(), &[ext.as_str()]);
+    }
+    dialog.pick_file()
 }
 
 #[cfg(test)]
@@ -782,6 +1025,107 @@ mod tests {
 
     /// "Ricarica i file aperti": il primo si riapre, gli altri seguono in coda; con modifiche
     /// non esportate prima si chiede conferma.
+    /// Carica i file in coda (e riapplica il progetto) come farebbe la finestra.
+    fn pump(app: &mut GestoreApp) {
+        use std::time::{Duration, Instant};
+        let ctx = egui::Context::default();
+        let start = Instant::now();
+        while app.load_rx.is_some() || app.project.restore.is_some() || !app.project.add_queue.is_empty() {
+            app.poll_loading(&ctx);
+            assert!(start.elapsed() < Duration::from_secs(30), "caricamento troppo lungo");
+            std::thread::sleep(Duration::from_millis(5));
+        }
+    }
+
+    /// Stato confrontabile della scena: per ogni nodo visibilità, eliminazione, colore e nome;
+    /// i vertici di ogni mesh.
+    fn state(app: &GestoreApp) -> (Vec<(bool, bool, Option<[f32; 4]>, String)>, Vec<Vec<[f32; 3]>>) {
+        let s = app.scene_graph.as_ref().unwrap();
+        let nodes = (0..s.nodes.len() as u32)
+            .map(|n| (s.nodes[n as usize].is_visible(), s.info[n as usize].deleted, s.info[n as usize].color, s.display_name(n)))
+            .collect();
+        (nodes, s.shapes_data.iter().map(|d| d.world_vertices.clone()).collect())
+    }
+
+    /// Progetto salvato con file spostati, scalati, nascosti, colorati, rinominati ed eliminati:
+    /// riaperto in un'altra finestra torna identico, con i percorsi relativi alla sua cartella.
+    #[test]
+    fn project_saves_and_restores_every_edit() {
+        use crate::scene_graph::node::multi_file_tests::{FILE_A, FILE_B};
+        let dir = std::env::temp_dir().join("dima3d_prova_progetto");
+        let models = dir.join("modelli");
+        std::fs::create_dir_all(&models).unwrap();
+        let (pa, pb) = (models.join("telaio.wrl"), models.join("sportello.wrl"));
+        std::fs::write(&pa, FILE_A).unwrap();
+        std::fs::write(&pb, FILE_B).unwrap();
+        let project = dir.join("prova.dima3d");
+
+        let mut app = GestoreApp::new_headless();
+        app.request_add(vec![pa.clone(), pb.clone()]);
+        pump(&mut app);
+        let (root_a, root_b) = {
+            let s = app.scene_graph.as_ref().unwrap();
+            assert_eq!(s.open_files().count(), 2);
+            (s.sources[0].node, s.sources[1].node)
+        };
+        assert!(app.ui_state.expanded.is_empty(), "all'apertura l'albero resta chiuso");
+        let child = |app: &GestoreApp, root: u32, i: usize| {
+            let s = app.scene_graph.as_ref().unwrap();
+            let first = s.nodes[root as usize].children()[0];
+            s.nodes[first as usize].children()[i]
+        };
+        app.scale_file(root_a, 1000.0);
+        app.apply(Action::Hide(child(&app, root_a, 0)));
+        app.apply(Action::SetColor(child(&app, root_b, 0), Some([0.2, 0.4, 0.6, 1.0])));
+        app.apply(Action::Rename(child(&app, root_b, 1), "Pannello rinominato".into()));
+        app.apply(Action::Rename(root_a, String::new()));
+        app.apply(Action::Delete(child(&app, root_a, 1)));
+        app.apply(Action::Move { nodes: vec![root_b], matrix: glam::Mat4::from_rotation_z(0.5) * glam::Mat4::from_translation(glam::Vec3::new(10.0, -3.0, 2.5)) });
+        assert!(app.is_dirty());
+        assert!(app.write_project(&project));
+        assert!(!app.is_dirty(), "salvato il progetto non ci sono modifiche in sospeso");
+        let text = std::fs::read_to_string(&project).unwrap();
+        assert!(text.contains(r"percorso = modelli\telaio.wrl") || text.contains("percorso = modelli/telaio.wrl"), "{text}");
+        assert!(text.contains("nome = 1 Pannello rinominato") || text.contains("Pannello rinominato"), "{text}");
+        let expected = state(&app);
+
+        let mut other = GestoreApp::new_headless();
+        other.request_open(project.clone());
+        assert!(other.project.restore.is_some());
+        pump(&mut other);
+        assert_eq!(other.project.project_path.as_ref(), Some(&project));
+        assert!(!other.is_dirty());
+        assert!(other.ui_state.load_warnings.is_empty(), "{:?}", other.ui_state.load_warnings);
+        let got = state(&other);
+        assert_eq!(got.0, expected.0, "nodi");
+        assert_eq!(got.1.len(), expected.1.len());
+        for (a, b) in got.1.iter().zip(&expected.1) {
+            for (x, y) in a.iter().zip(b) {
+                assert!(glam::Vec3::from(*x).distance(glam::Vec3::from(*y)) < 1e-3, "{x:?} invece di {y:?}");
+            }
+        }
+        assert_eq!(other.scene_graph.as_ref().unwrap().sources[0].scale, 1000.0);
+        assert!(other.project.undo.is_empty(), "il progetto riaperto è il punto di partenza");
+
+        // Un modello cambiato dopo il salvataggio: si apre lo stesso, con un avviso (le scene
+        // aperte tengono i file mappati in memoria: si chiudono prima)
+        drop((app, other));
+        std::fs::write(&pb, [FILE_B, b"\n# modificato\n"].concat()).unwrap();
+        let mut third = GestoreApp::new_headless();
+        third.request_open(project.clone());
+        pump(&mut third);
+        assert!(third.ui_state.load_warnings.iter().any(|w| w.contains("sportello.wrl è cambiato")), "{:?}", third.ui_state.load_warnings);
+
+        // Un modello sparito: il progetto non si apre (nei test non si chiede dove sia)
+        drop(third);
+        std::fs::remove_file(&pa).unwrap();
+        let mut fourth = GestoreApp::new_headless();
+        fourth.request_open(project.clone());
+        assert!(fourth.project.restore.is_none() && fourth.scene_graph.is_none());
+        assert!(fourth.ui_state.status_message.contains("non trovo"), "{}", fourth.ui_state.status_message);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
     #[test]
     fn reload_reopens_the_open_files_in_order() {
         use crate::scene_graph::node::multi_file_tests::{FILE_A, FILE_B};
@@ -978,6 +1322,32 @@ mod tests {
         assert_eq!(app.project.undo.len(), 2);
         app.undo();
         assert_eq!(at(&app), [start[0], start[1], start[2] + 30.0]);
+    }
+
+    #[test]
+    fn confirm_dialog_buttons_do_not_overlap() {
+        let mut app = app_with_example();
+        app.project.pending = Some(super::Pending::Exit);
+        let ctx = egui::Context::default();
+        let screen = egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(1280.0, 800.0));
+        let mut texts = Vec::new();
+        for _ in 0..3 {
+            let out = ctx.run(egui::RawInput { screen_rect: Some(screen), ..Default::default() }, |ctx| super::draw_confirm_dialog(ctx, &mut app));
+            texts.clear();
+            for c in &out.shapes {
+                if let egui::epaint::Shape::Text(t) = &c.shape {
+                    texts.push((t.galley.text().to_string(), t.galley.rect.translate(t.pos.to_vec2()), c.clip_rect));
+                }
+            }
+        }
+        let buttons: Vec<_> = texts.iter().filter(|(t, ..)| ["Salva progetto", "Esporta…", "Continua senza salvare", "Annulla"].iter().any(|b| t.ends_with(b))).collect();
+        assert_eq!(buttons.len(), 4, "{:?}", texts.iter().map(|t| &t.0).collect::<Vec<_>>());
+        for (i, a) in buttons.iter().enumerate() {
+            assert!(a.2.contains_rect(a.1), "{} tagliato", a.0);
+            for b in &buttons[i + 1..] {
+                assert!(!a.1.intersects(b.1), "{} e {} si sovrappongono", a.0, b.0);
+            }
+        }
     }
 
     #[test]
@@ -1179,30 +1549,33 @@ pub fn draw_confirm_dialog(ctx: &egui::Context, app: &mut GestoreApp) {
         Pending::Open(_) => "aprire un altro file",
         Pending::Exit => "uscire",
         Pending::Reload(_) => "ricaricare i file",
+        Pending::OpenProject(_) => "aprire un altro progetto",
     };
 
-    let mut choice: Option<u8> = None; // 0 = esporta, 1 = continua, 2 = annulla
+    let mut choice: Option<u8> = None; // 0 = esporta, 1 = continua, 2 = annulla, 3 = salva progetto
     let modal = egui::Modal::new(egui::Id::new("conferma_modifiche")).show(ctx, |ui| {
-        ui.set_width(380.0);
-        ui.heading("Modifiche non esportate");
+        ui.set_width(400.0);
+        ui.heading("Modifiche non salvate");
         ui.add_space(6.0);
         ui.label(format!(
-            "Hai modificato la scena (visibilità, eliminazioni, colori o nomi) e non l'hai ancora esportata.\n\
-             Vuoi esportarla prima di {what}?"
+            "Hai modificato la scena (posizioni, visibilità, eliminazioni, colori o nomi) e non l'hai ancora \
+             salvata come progetto né esportata.\nVuoi salvarla prima di {what}?"
         ));
         ui.add_space(10.0);
-        ui.horizontal(|ui| {
+        // I pulsanti vanno a capo invece di sovrapporsi
+        ui.horizontal_wrapped(|ui| {
+            if ui.button(crate::ui::theme::icon_text(ui, crate::ui::theme::icon::FLOPPY_DISK, "Salva progetto")).clicked() {
+                choice = Some(3);
+            }
             if ui.button(crate::ui::theme::icon_text(ui, crate::ui::theme::icon::EXPORT, "Esporta…")).clicked() {
                 choice = Some(0);
             }
-            if ui.button("Continua senza esportare").clicked() {
+            if ui.button("Continua senza salvare").clicked() {
                 choice = Some(1);
             }
-            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                if ui.button("Annulla").clicked() {
-                    choice = Some(2);
-                }
-            });
+            if ui.button("Annulla").clicked() {
+                choice = Some(2);
+            }
         });
     });
     if modal.should_close() && choice.is_none() {
@@ -1221,6 +1594,12 @@ pub fn draw_confirm_dialog(ctx: &egui::Context, app: &mut GestoreApp) {
             app.run_pending(ctx, pending);
         }
         Some(2) => app.project.pending = None,
+        Some(3) => {
+            if app.save_project() {
+                app.project.pending = None;
+                app.run_pending(ctx, pending);
+            }
+        }
         _ => {}
     }
 }

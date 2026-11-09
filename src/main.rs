@@ -6,6 +6,7 @@ mod clusterer;
 mod exporter;
 mod parser;
 mod project;
+mod project_file;
 mod reduce;
 mod reduction;
 mod renderer;

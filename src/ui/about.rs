@@ -147,6 +147,32 @@ mod tests {
         }
     }
 
+    /// Con o senza le scritte la barra sta nella finestra: il pulsante Info (l'ultimo) si vede
+    /// appena sopra e appena sotto la larghezza in cui le scritte spariscono.
+    #[test]
+    fn toolbar_fits_the_window() {
+        for width in [1100.0, 1399.0, 1400.0, 1500.0] {
+            let mut app = GestoreApp::new_headless();
+            let ctx = egui::Context::default();
+            let screen = egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(width, 800.0));
+            let mut info = None;
+            for _ in 0..2 {
+                let out = ctx.run(egui::RawInput { screen_rect: Some(screen), ..Default::default() }, |ctx| {
+                    crate::ui::draw_main_layout(ctx, &mut app);
+                });
+                for c in &out.shapes {
+                    if let egui::epaint::Shape::Text(t) = &c.shape {
+                        if t.galley.text().starts_with(icon::INFO) {
+                            info = Some(t.pos.x + t.galley.rect.width());
+                        }
+                    }
+                }
+            }
+            let right = info.unwrap_or_else(|| panic!("pulsante Info non disegnato a {width}"));
+            assert!(right < width, "a {width} px il pulsante Info finisce a {right}");
+        }
+    }
+
     /// Il pulsante Info apre la finestra con nome, versione e la nota sul codice scritto con AI;
     /// «Chiudi» la chiude.
     #[test]

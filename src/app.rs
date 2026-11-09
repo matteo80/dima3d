@@ -184,12 +184,17 @@ impl GestoreApp {
         self.ui_state.status_message = format!("Apertura: {}", path.display());
         self.load_rx = Some(rx);
 
-        let step = self.project.step_choice.unwrap_or(crate::settings::StepLoad::Mesh(self.settings.step));
+        // Progetto in apertura: raggruppamento e tassellazione degli STEP di quando è stato salvato
+        let restore = self.project.restore.as_ref();
+        let saved_step = restore.and_then(|r| r.file.files.iter().find(|f| f.path == path)).and_then(|f| f.step);
+        let cluster = restore.map_or(self.settings.cluster, |r| r.file.cluster);
+        self.project.loaded_cluster = Some(cluster);
+        let step = saved_step.or(self.project.step_choice).unwrap_or(crate::settings::StepLoad::Mesh(self.settings.step));
         self.project.loading_step = parser::external::is_step(&path).then_some(step);
         if let Some(kind) = parser::external::Kind::of(&path, step.mesh()) {
-            parser::external::convert_and_load(path, kind, self.settings.cluster, tx);
+            parser::external::convert_and_load(path, kind, cluster, tx);
         } else {
-            parser::load_wrl_async_with(path, self.settings.cluster, tx);
+            parser::load_wrl_async_with(path, cluster, tx);
         }
     }
 
@@ -241,6 +246,7 @@ impl GestoreApp {
                 Action::Move { nodes, .. } => nodes.first().map(|n| n | 0x8000_0000),
                 Action::Batch(list) => match list.first() {
                     Some(Action::SetColor(n, _)) => Some(*n),
+                    Some(Action::Move { nodes, .. }) => nodes.first().map(|n| n | 0x8000_0000),
                     _ => None,
                 },
                 _ => None,
@@ -487,18 +493,27 @@ impl GestoreApp {
         if ctx.wants_keyboard_input() || self.project.pending.is_some() || self.project.busy() {
             return;
         }
-        let (open, save) = ctx.input(|inp| {
+        let (open, save, save_as, export) = ctx.input(|inp| {
             let cmd = inp.modifiers.command;
-            (cmd && inp.key_pressed(egui::Key::O), cmd && inp.key_pressed(egui::Key::S))
+            let s = cmd && inp.key_pressed(egui::Key::S);
+            (cmd && inp.key_pressed(egui::Key::O), s && !inp.modifiers.shift, s && inp.modifiers.shift, cmd && inp.key_pressed(egui::Key::E))
         });
         if open {
             self.open_dialog();
             return;
         }
-        if self.scene_graph.is_none() {
+        if self.scene_graph.is_none() || self.ui_state.is_loading {
             return;
         }
         if save {
+            self.save_project();
+            return;
+        }
+        if save_as {
+            self.save_project_as();
+            return;
+        }
+        if export {
             self.export_dialog(None);
             return;
         }
@@ -606,16 +621,6 @@ impl GestoreApp {
     }
 }
 
-/// Apre nell'albero la radice di un file e, se contiene un solo elemento (tipico involucro
-/// dell'assieme), anche quello.
-fn expand_file_root(ui_state: &mut ui::UiState, scene: &scene_graph::SceneGraph, root: Option<u32>) {
-    let Some(root) = root else { return };
-    ui_state.expanded.insert(root);
-    if let [only] = scene.nodes[root as usize].children() {
-        ui_state.expanded.insert(*only);
-    }
-}
-
 impl GestoreApp {
     /// Unisce alla scena aperta un file appena letto (`scene` è già passata da `into_file`).
     pub fn add_loaded_file(&mut self, scene: scene_graph::SceneGraph) {
@@ -657,7 +662,6 @@ impl GestoreApp {
             }
         }
         self.ui_state.load_warnings.extend(warnings);
-        let root = current.roots.iter().copied().find(|&r| r >= first_node);
         let added = current.sources.len() - 1;
         if let Some(factor) = current.suggest_unit_scale(added) {
             self.ui_state.unit_suggestions.push(ui::UnitSuggestion {
@@ -666,7 +670,6 @@ impl GestoreApp {
                 file: name.clone(),
             });
         }
-        expand_file_root(&mut self.ui_state, current, root);
         let files = current.open_files().count();
         self.ui_state.status_message =
             format!("Aggiunto: {name} ({new_shapes} shape)  ·  {files} file aperti");
@@ -711,21 +714,9 @@ impl GestoreApp {
     }
 }
 
-/// Avviso quando l'inquadratura lascia fuori pezzi molto lontani dal gruppo principale.
-fn far_parts_message(count: usize) -> String {
-    let parts = if count == 1 { "1 pezzo molto lontano".to_string() } else { format!("{count} pezzi molto lontani") };
-    format!("{parts} dal gruppo principale fuori inquadratura: seleziona la radice nell'albero e premi F per vederli")
-}
-
-impl Default for GestoreApp {
-    fn default() -> Self {
-        Self::new_headless()
-    }
-}
-
-impl eframe::App for GestoreApp {
-    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        // Polling non bloccante degli eventi di caricamento dal worker thread
+impl GestoreApp {
+    /// Polling non bloccante degli eventi di caricamento dal worker thread.
+    pub fn poll_loading(&mut self, ctx: &egui::Context) {
         if let Some(rx) = &self.load_rx {
             let mut finished = false;
             while let Ok(mut event) = rx.try_recv() {
@@ -792,7 +783,6 @@ impl eframe::App for GestoreApp {
                         self.ui_state.select_single(None);
                         self.ui_state.renaming = None;
                         self.ui_state.expanded.clear();
-                        expand_file_root(&mut self.ui_state, &scene, scene.roots.first().copied());
                         self.load_state = LoadState::Ready;
                         self.project.on_loaded(scene.revision);
                         if let Some(p) = self.project.current_path.clone() {
@@ -819,11 +809,31 @@ impl eframe::App for GestoreApp {
             if finished {
                 self.load_rx = None;
                 self.start_next_add();
+                self.finish_restore();
             } else {
                 // Richiedi repaint continuo durante il caricamento per animare la progress bar
                 ctx.request_repaint();
             }
         }
+
+    }
+}
+
+/// Avviso quando l'inquadratura lascia fuori pezzi molto lontani dal gruppo principale.
+fn far_parts_message(count: usize) -> String {
+    let parts = if count == 1 { "1 pezzo molto lontano".to_string() } else { format!("{count} pezzi molto lontani") };
+    format!("{parts} dal gruppo principale fuori inquadratura: seleziona la radice nell'albero e premi F per vederli")
+}
+
+impl Default for GestoreApp {
+    fn default() -> Self {
+        Self::new_headless()
+    }
+}
+
+impl eframe::App for GestoreApp {
+    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        self.poll_loading(ctx);
 
         // Export o riduzione in corso: a fine lavoro la scena torna al suo posto
         if self.project.export_job.is_some() {

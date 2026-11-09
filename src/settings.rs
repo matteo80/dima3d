@@ -119,7 +119,13 @@ pub struct Settings {
     pub saved_colors: Vec<[f32; 3]>,
     /// Tassellazione all'apertura degli STEP
     pub step: StepMesh,
+    /// Sezioni aperte della finestra Posizione: Oggetto, Trasformazione, Cerniere, Applica
+    /// offset, Calcola offset
+    pub position_sections: [bool; POSITION_SECTIONS],
 }
+
+/// Sezioni richiudibili della finestra Posizione
+pub const POSITION_SECTIONS: usize = 5;
 
 impl Default for Settings {
     fn default() -> Self {
@@ -140,6 +146,7 @@ impl Default for Settings {
             invert_zoom: false,
             saved_colors: Vec::new(),
             step: StepMesh::default(),
+            position_sections: [true, true, true, true, false],
         }
     }
 }
@@ -260,6 +267,11 @@ impl Settings {
                     }
                 }
                 "step_relativa" => s.step.relative = value == "1",
+                "posizione_sezioni" => {
+                    for (open, c) in s.position_sections.iter_mut().zip(value.chars()) {
+                        *open = c == '1';
+                    }
+                }
                 "colore_salvato" => {
                     if let Some(v) = parse_floats::<3>(value) {
                         if s.saved_colors.len() < MAX_SAVED_COLORS {
@@ -309,6 +321,9 @@ impl Settings {
             self.step.angle,
             u8::from(self.step.relative),
         );
+        let sections: String = self.position_sections.iter().map(|&o| if o { '1' } else { '0' }).collect();
+        out.push_str(&format!("posizione_sezioni = {sections}
+"));
         for [r, g, b] in &self.saved_colors {
             out.push_str(&format!("colore_salvato = {r} {g} {b}\n"));
         }
@@ -326,6 +341,11 @@ impl Settings {
     }
 
     pub fn save(&self) {
+        // I test cliccano nella finestra (es. le sezioni della Posizione): non devono toccare le
+        // preferenze vere dell'utente
+        if cfg!(test) {
+            return;
+        }
         let Some(path) = settings_path() else { return };
         if let Some(dir) = path.parent() {
             let _ = std::fs::create_dir_all(dir);
@@ -359,6 +379,7 @@ mod tests {
             invert_zoom: true,
             saved_colors: vec![[0.1, 0.2, 0.3], [1.0, 0.5, 0.0]],
             step: StepMesh { deviation: 0.025, angle: 12.5, relative: true },
+            position_sections: [false, true, false, true, true],
         };
         s.add_recent(Path::new(r"C:\a b\uno.wrl"));
         s.add_recent(Path::new(r"C:\due.wrl"));
