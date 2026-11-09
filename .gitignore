@@ -19,6 +19,7 @@ HANDOFF.md
 *.HSF
 # Cartelle di prova con le matematiche e gli export dell'utente
 /scocca_Dima3D/
+/prova_hsf/
 !esempi/*.wrl
 
 # Varie

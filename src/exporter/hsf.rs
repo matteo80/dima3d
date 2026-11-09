@@ -307,16 +307,30 @@ DEF Pezzo Shape { geometry IndexedFaceSet { coord Coordinate { point [ 0 0 9, 1 
 mod real_file {
     /// Esporta in HSF dei file reali e li rilegge: `GESTORE_HSF_EXPORT="a.iv|b.hsf|..."`,
     /// `GESTORE_HSF_OUT` = cartella di destinazione (per provarli nel visualizzatore HOOPS).
+    /// Con `GESTORE_HSF_ANONIMO` i file si chiamano `prova_1.hsf`, … e dentro hanno solo nomi
+    /// generici (`gruppo 3`, `pezzo 7`), da portare fuori senza i nomi delle matematiche.
     #[test]
     #[ignore]
     fn hsf_da_verificare() {
         let list = std::env::var("GESTORE_HSF_EXPORT").expect("GESTORE_HSF_EXPORT");
         let dir = std::path::PathBuf::from(std::env::var("GESTORE_HSF_OUT").expect("GESTORE_HSF_OUT"));
+        let anonymous = std::env::var_os("GESTORE_HSF_ANONIMO").is_some();
         std::fs::create_dir_all(&dir).unwrap();
-        for src in list.split('|') {
+        for (k, src) in list.split('|').enumerate() {
             let src = std::path::Path::new(src);
-            let scene = crate::parser::parse_wrl(&std::fs::read(src).unwrap());
-            let out = dir.join(format!("{}_gestore.hsf", src.file_stem().unwrap().to_string_lossy()));
+            let mut scene = crate::parser::parse_wrl(&std::fs::read(src).unwrap());
+            let out = if anonymous {
+                for n in 0..scene.nodes.len() as u32 {
+                    let kind = if matches!(scene.nodes[n as usize], crate::scene_graph::SceneNode::Shape { .. }) { "pezzo" } else { "gruppo" };
+                    scene.rename(n, &format!("{kind} {n}"));
+                }
+                for (i, s) in scene.sources.iter_mut().enumerate() {
+                    s.name = format!("modello {}", i + 1);
+                }
+                dir.join(format!("prova_{}.hsf", k + 1))
+            } else {
+                dir.join(format!("{}_gestore.hsf", src.file_stem().unwrap().to_string_lossy()))
+            };
             let t = std::time::Instant::now();
             let stats = super::export_hsf(&scene, None, &out, [0.5, 0.5, 0.5, 1.0]).unwrap();
             let size = std::fs::metadata(&out).unwrap().len();
