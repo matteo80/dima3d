@@ -56,7 +56,7 @@ Le preferenze sono salvate in %APPDATA%\Dima3D\impostazioni.txt.
 
 Il codice è stato scritto interamente con l'intelligenza artificiale (Claude, di Anthropic):
 l'autore del progetto non ha scritto codice, ha definito le richieste e provato il programma.
-Codice sorgente: https://github.com/matteo80/gestore-wrl
+Codice sorgente: https://github.com/matteo80/dima3d
 
 Licenze: LICENSE.txt (Dima 3D, MIT) e la cartella licenses: librerie Rust incluse nel
 programma (librerie-rust.txt, con le note di copyright) e librerie dei convertitori.

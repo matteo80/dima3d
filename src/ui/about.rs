@@ -4,7 +4,7 @@ use super::theme::{icon, icon_text};
 use crate::app::GestoreApp;
 
 /// Pagina del progetto (codice sorgente).
-pub const PROJECT_URL: &str = "https://github.com/matteo80/gestore-wrl";
+pub const PROJECT_URL: &str = "https://github.com/matteo80/dima3d";
 
 /// Librerie principali mostrate nella finestra (l'elenco completo è in licenses\librerie-rust.txt).
 const LIBRARIES: &[(&str, &str, &str)] = &[
