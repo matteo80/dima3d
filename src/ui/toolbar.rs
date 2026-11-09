@@ -92,6 +92,14 @@ pub fn draw_toolbar(ui: &mut egui::Ui, app: &mut crate::app::GestoreApp) {
              Il testo si può leggere e modificare con un editor. Pezzi, nomi e colori restano in entrambi; \
              le normali seguono l'opzione «Scrivi le normali».",
         );
+        ui.separator();
+        ui.label(egui::RichText::new("HSF (scegli .hsf nella finestra Salva)").strong());
+        ui.label(
+            egui::RichText::new(
+                "Le normali seguono l'opzione «Scrivi le normali». Con le normali i pezzi hanno gli spigoli                  vivi calcolati qui (vertici sdoppiati sugli spigoli) e il file è più grande. Senza, il                  visualizzatore le ricalcola sui vertici uniti: il file è più piccolo ma l'ombreggiatura                  può sfumare sugli spigoli.",
+            )
+            .weak(),
+        );
     })
     .response
     .on_hover_text("Opzioni dell'export");

@@ -107,7 +107,7 @@ pub struct Settings {
     pub recent: Vec<PathBuf>,
     /// Export in formato compatto (vedi `ExportOptions::compact`)
     pub export_compact: bool,
-    /// Normali scritte nel WRL esportato
+    /// Normali scritte nel file esportato (WRL, Open Inventor e HSF)
     pub export_normals: bool,
     /// STL esportato in formato testo invece che binario
     pub export_stl_ascii: bool,

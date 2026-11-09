@@ -403,7 +403,7 @@ impl GestoreApp {
             let result = match extension.as_str() {
                 "stl" => crate::exporter::stl::export_stl(&scene, node, &out, stl_ascii),
                 "iv" => crate::exporter::iv::export_iv(&scene, node, &out, iv_binary, options.normals, default_color),
-                "hsf" => crate::exporter::hsf::export_hsf(&scene, node, &out, default_color),
+                "hsf" => crate::exporter::hsf::export_hsf(&scene, node, &out, default_color, options.normals),
                 _ => crate::exporter::export_with(&scene, node, &out, options),
             };
             let _ = tx.send((scene, result));

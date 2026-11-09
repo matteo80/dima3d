@@ -8,8 +8,21 @@
 //! - i nomi interni dei segmenti sono unici e semplici (`part 12`): HOOPS riapre un segmento con
 //!   lo stesso nome invece di crearne un altro, e alcuni caratteri hanno un significato nei
 //!   percorsi. Il nome vero va nei metadati `name` (`m`), come nei file originali;
-//! - le Shell hanno punti `float` e la lista delle facce standard (`3 a b c` per triangolo);
+//! - le Shell hanno punti `float` e le facce compresse come strisce di triangoli (`3 a b c` per
+//!   triangolo, interi a 8/16/32 bit secondo il numero di vertici), come in tutti i file
+//!   originali: il visualizzatore usato in azienda non accetta la lista delle facce non compressa
+//!   (il file si apre ma «non ha nessun corpo»), che quindi non si scrive;
+//! - normali facoltative («Scrivi le normali»), polari come negli originali: un angolo
+//!   θ = atan2(y, x) e un angolo φ = acos(z) per vertice (attributo 0x13 dopo le facce). Con le
+//!   normali si scrivono i vertici di resa, sdoppiati sugli spigoli vivi, così gli spigoli restano
+//!   quelli calcolati da Dima 3D; senza, i vertici sono uniti e il visualizzatore ricalcola le
+//!   normali sfumando l'ombreggiatura anche sugli spigoli, ma il file è più piccolo;
 //! - colore e trasparenza (`"`: diffuse e transmission) sul segmento del pezzo;
+//! - gerarchia e opzioni utente (`U`) come nei file scritti da HOOPS Exchange, che il
+//!   visualizzatore usato in azienda richiede per riconoscere i corpi (senza, il file si apre ma
+//!   «non ha nessun corpo»): gruppo = `product occurrence` con `hx3d_type=product`; pezzo =
+//!   `product occurrence` › `part` (`hx3d_type=part`) › `representation item` (colore) ›
+//!   `internal container` › Shell;
 //! - le scene HSF sono in metri: le coordinate restano nelle unità della scena e il segmento
 //!   radice (`model_root`, come nei file originali) ha la scala verso i metri (0,001 se la scena
 //!   è in millimetri, nessuna se è già in metri, come una scocca aperta da un WRL in metri).
@@ -30,6 +43,7 @@ struct Ctx<'a> {
     has_visible: Vec<bool>,
     write_file_nodes: bool,
     default_color: [f32; 4],
+    normals: bool,
     segments: u32,
     stats: ExportStats,
 }
@@ -40,6 +54,47 @@ fn push_i32(out: &mut Vec<u8>, v: i32) {
 
 fn push_f32(out: &mut Vec<u8>, v: f32) {
     out.extend_from_slice(&v.to_le_bytes());
+}
+
+/// Opzioni utente (`U`): lunghezza a 16 bit (0xFFFF + 32 bit se più lunga), testo senza zero.
+fn push_options(out: &mut Vec<u8>, text: &str) {
+    out.push(b'U');
+    if text.len() < 0xFFFF {
+        out.extend_from_slice(&(text.len() as u16).to_le_bytes());
+    } else {
+        out.extend_from_slice(&0xFFFFu16.to_le_bytes());
+        push_i32(out, text.len() as i32);
+    }
+    out.extend_from_slice(text.as_bytes());
+}
+
+/// Facce compresse (schema 1) come strisce da un triangolo: lunghezza dei dati più il byte dei
+/// bit, bit per valore, poi `3 a b c` per ogni triangolo in interi little-endian.
+fn push_strips(out: &mut Vec<u8>, indices: &[u32], vertices: usize) {
+    let bits: u8 = if vertices <= 0xFF { 8 } else if vertices <= 0xFFFF { 16 } else { 32 };
+    let bytes = bits as usize / 8;
+    out.push(1);
+    push_i32(out, (indices.len() / 3 * 4 * bytes + 1) as i32);
+    out.push(bits);
+    for t in indices.chunks_exact(3) {
+        for v in [3, t[0], t[1], t[2]] {
+            out.extend_from_slice(&v.to_le_bytes()[..bytes]);
+        }
+    }
+}
+
+/// Normale in coordinate polari come nei file originali: n = (cos θ sin φ, sin θ sin φ, cos φ).
+fn polar(n: [f32; 3]) -> [f32; 2] {
+    let len = (n[0] * n[0] + n[1] * n[1] + n[2] * n[2]).sqrt();
+    if len <= f32::EPSILON {
+        return [0.0, 0.0];
+    }
+    [n[1].atan2(n[0]), (n[2] / len).clamp(-1.0, 1.0).acos()]
+}
+
+/// Testo sicuro dentro le opzioni `chiave=valore,…`: niente virgole né uguali.
+fn option_value(text: &str) -> String {
+    text.chars().map(|c| if c == ',' || c == '=' { '_' } else { c }).collect()
 }
 
 impl Ctx<'_> {
@@ -58,13 +113,16 @@ impl Ctx<'_> {
         }
     }
 
-    /// Apre un segmento con un nome interno unico e il nome vero nei metadati.
-    fn open_segment(&mut self, out: &mut Vec<u8>, kind: &str, label: &str) {
+    /// Apre un segmento con un nome interno unico, le opzioni utente e il nome vero nei metadati.
+    fn open_segment(&mut self, out: &mut Vec<u8>, kind: &str, options: &str, label: &str) {
         self.segments += 1;
         let raw = format!("{kind} {}", self.segments);
         out.push(b'(');
         out.push(raw.len() as u8);
         out.extend_from_slice(raw.as_bytes());
+        if !options.is_empty() {
+            push_options(out, options);
+        }
         if !label.trim().is_empty() {
             out.push(b'm');
             push_i32(out, 1);
@@ -85,7 +143,12 @@ impl Ctx<'_> {
                     return Ok(());
                 }
                 let [r, g, b, a] = scene.effective_user_color(idx).or(shape.color).unwrap_or(self.default_color);
-                self.open_segment(out, "part", &label);
+                // product occurrence › part › representation item › internal container
+                let product = format!("hx3d_type=product,name={}", option_value(&label));
+                self.open_segment(out, "product occurrence", &product, &label);
+                self.open_segment(out, "part", "hx3d_type=part", "");
+                let item = format!("name={}", option_value(&label));
+                self.open_segment(out, "representation item", &item, &label);
                 // Colore delle facce: diffuse, più transmission se il pezzo è trasparente
                 let byte = |v: f32| (v.clamp(0.0, 1.0) * 255.0).round() as u8;
                 let transparency = (1.0 - a).clamp(0.0, 1.0);
@@ -95,22 +158,40 @@ impl Ctx<'_> {
                     let t = byte(transparency);
                     out.extend_from_slice(&[0, t, t, t]);
                 }
-                // Shell: float, prima passata (non è un riempimento), livello di dettaglio 0
-                out.extend_from_slice(&[b'S', 0, 0x10, 0]);
-                push_i32(out, shape.world_vertices.len() as i32);
-                for v in &shape.world_vertices {
-                    v.iter().for_each(|&c| push_f32(out, c));
+                self.open_segment(out, "internal container", "", "");
+                // Shell: float, prima passata (non è un riempimento), facce compresse in strisce,
+                // con o senza normali, livello di dettaglio 0
+                let with_normals =
+                    self.normals && !shape.normals.is_empty() && shape.normals.len() == shape.render_vertex_count();
+                out.extend_from_slice(&[b'S', 0, if with_normals { 0x1e } else { 0x16 }, 0]);
+                if with_normals {
+                    let count = shape.render_vertex_count();
+                    push_i32(out, count as i32);
+                    for r in 0..count {
+                        shape.render_position(r).unwrap_or_default().iter().for_each(|&c| push_f32(out, c));
+                    }
+                    push_strips(out, shape.render_indices(), count);
+                    // Normali polari su tutti i vertici, poi fine degli attributi
+                    out.push(0x13);
+                    for &n in &shape.normals {
+                        let [theta, phi] = polar(n);
+                        push_f32(out, theta);
+                        push_f32(out, phi);
+                    }
+                    out.push(0);
+                } else {
+                    push_i32(out, shape.world_vertices.len() as i32);
+                    for v in &shape.world_vertices {
+                        v.iter().for_each(|&c| push_f32(out, c));
+                    }
+                    push_strips(out, &shape.indices, shape.world_vertices.len());
                 }
-                push_i32(out, (shape.indices.len() / 3 * 4) as i32);
-                for t in shape.indices.chunks_exact(3) {
-                    push_i32(out, 3);
-                    t.iter().for_each(|&i| push_i32(out, i as i32));
-                }
-                out.push(b')');
+                out.extend_from_slice(b"))))");
                 self.stats.shapes_written += 1;
             }
             SceneNode::Group { children, .. } | SceneNode::Transform { children, .. } => {
-                self.open_segment(out, "group", &label);
+                let product = format!("hx3d_type=product,name={}", option_value(&label));
+                self.open_segment(out, "product occurrence", &product, &label);
                 for &c in children {
                     if self.has_visible.get(c as usize).copied().unwrap_or(false) {
                         self.write_node(out, w, c)?;
@@ -130,12 +211,13 @@ impl Ctx<'_> {
 }
 
 /// Esporta le parti visibili (di tutta la scena o del sotto-albero `node`) in HSF.
-/// `default_color` è il colore dei pezzi senza materiale.
+/// `default_color` è il colore dei pezzi senza materiale; `normals` scrive le normali dei pezzi.
 pub fn export_hsf(
     scene: &SceneGraph,
     node: Option<u32>,
     path: &std::path::Path,
     default_color: [f32; 4],
+    normals: bool,
 ) -> io::Result<ExportStats> {
     let files = scene.open_files().count();
     let (roots, write_file_nodes) = match node {
@@ -149,6 +231,7 @@ pub fn export_hsf(
         has_visible: compute_has_visible(scene),
         write_file_nodes,
         default_color,
+        normals,
         segments: 0,
         stats: ExportStats::default(),
     };
@@ -218,10 +301,11 @@ pub fn export_hsf(
         ctx.write_node(&mut out, &mut z, n)?;
     }
     out.push(b')');
-    // Fine del file
-    out.push(0);
+    // Fine della compressione dentro il blocco, terminatore fuori, come negli originali
+    out.push(b'z');
     z.write_all(&out)?;
     let mut file = z.finish()?;
+    file.write_all(&[0])?;
     file.flush()?;
     Ok(ctx.stats)
 }
@@ -245,7 +329,7 @@ DEF Assieme Transform { translation 10 0 0 children [
         let hidden = (0..scene.nodes.len() as u32).find(|&n| scene.display_name(n) == "Nascosto").unwrap();
         scene.set_subtree_visible(hidden, false);
         let path = std::env::temp_dir().join("gestore_wrl_test.hsf");
-        let stats = export_hsf(&scene, None, &path, [0.5, 0.5, 0.5, 1.0]).unwrap();
+        let stats = export_hsf(&scene, None, &path, [0.5, 0.5, 0.5, 1.0], true).unwrap();
         assert_eq!(stats.shapes_written, 2);
         let data = std::fs::read(&path).unwrap();
         assert!(data.starts_with(b";; HSF V21.00 \nI"));
@@ -276,7 +360,7 @@ DEF Pezzo Shape { geometry IndexedFaceSet { coord Coordinate { point [ 0 0 0, 15
 "#,
         );
         let path = std::env::temp_dir().join("gestore_wrl_test_mm.hsf");
-        export_hsf(&scene, None, &path, [0.5, 0.5, 0.5, 1.0]).unwrap();
+        export_hsf(&scene, None, &path, [0.5, 0.5, 0.5, 1.0], true).unwrap();
         let data = std::fs::read(&path).unwrap();
         // Ingombro dopo `I` (5 byte) e `B` con i suoi 2 byte: x massima = 1,5 m
         let max_x = f32::from_le_bytes(data[15 + 5 + 3 + 12..15 + 5 + 3 + 16].try_into().unwrap());
@@ -285,6 +369,48 @@ DEF Pezzo Shape { geometry IndexedFaceSet { coord Coordinate { point [ 0 0 0, 15
         let v = &again.shapes_data[0].world_vertices;
         assert!(v.iter().any(|v| (v[0] - 1500.0).abs() < 1e-3), "{v:?}");
         let _ = std::fs::remove_file(path);
+    }
+
+    /// Facce sempre compresse in strisce; normali polari (0x13) solo se richieste, scritte sui
+    /// vertici di resa (tanti quante le normali del pezzo).
+    #[test]
+    fn faces_are_compressed_and_normals_are_optional() {
+        let scene = crate::parser::parse_wrl(
+            br#"#VRML V2.0 utf8
+DEF Cubo Shape { geometry IndexedFaceSet { coord Coordinate { point [ 0 0 0, 100 0 0, 100 100 0, 0 100 0, 0 0 100, 100 0 100, 100 100 100, 0 100 100 ] }
+  coordIndex [ 0 3 2 1 -1, 4 5 6 7 -1, 0 1 5 4 -1, 1 2 6 5 -1, 2 3 7 6 -1, 3 0 4 7 -1 ] creaseAngle 0.5 } }
+"#,
+        );
+        let shell = |normals: bool| {
+            let path = std::env::temp_dir().join(format!("gestore_wrl_test_normali_{normals}.hsf"));
+            export_hsf(&scene, None, &path, [0.5, 0.5, 0.5, 1.0], normals).unwrap();
+            let data = std::fs::read(&path).unwrap();
+            let again = crate::parser::parse_wrl(&data);
+            assert_eq!(again.shapes_data.len(), 1);
+            assert_eq!(again.shapes_data[0].indices.len(), 36);
+            let _ = std::fs::remove_file(path);
+            let z = data.iter().position(|&b| b == b'Z').unwrap();
+            let mut plain = Vec::new();
+            std::io::Read::read_to_end(&mut flate2::read::ZlibDecoder::new(&data[z + 1..]), &mut plain).unwrap();
+            let s = plain.windows(4).position(|w| w == b"S  " || w == b"S  ").unwrap();
+            let sub = plain[s + 2];
+            let count = i32::from_le_bytes(plain[s + 4..s + 8].try_into().unwrap());
+            assert_eq!(*data.last().unwrap(), 0);
+            (sub, count)
+        };
+        assert_eq!(shell(false), (0x16, 8));
+        let render = scene.shapes_data[0].render_vertex_count() as i32;
+        assert_eq!(scene.shapes_data[0].normals.len(), render as usize);
+        assert_eq!(shell(true), (0x1e, render));
+    }
+
+    #[test]
+    fn polar_normals_point_like_the_originals() {
+        for n in [[1.0f32, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, -1.0], [0.6, -0.48, 0.64]] {
+            let [t, p] = polar(n);
+            let back = [t.cos() * p.sin(), t.sin() * p.sin(), p.cos()];
+            assert!((0..3).all(|k| (back[k] - n[k]).abs() < 1e-5), "{n:?} → {back:?}");
+        }
     }
 
     #[test]
@@ -296,7 +422,7 @@ DEF Pezzo Shape { geometry IndexedFaceSet { coord Coordinate { point [ 0 0 9, 1 
 "#,
         );
         let path = std::env::temp_dir().join("gestore_wrl_test_nomi.hsf");
-        export_hsf(&scene, None, &path, [0.5, 0.5, 0.5, 1.0]).unwrap();
+        export_hsf(&scene, None, &path, [0.5, 0.5, 0.5, 1.0], true).unwrap();
         let again = crate::parser::parse_wrl(&std::fs::read(&path).unwrap());
         assert_eq!(again.shapes_data.len(), 2);
         let _ = std::fs::remove_file(path);
@@ -332,7 +458,8 @@ mod real_file {
                 dir.join(format!("{}_gestore.hsf", src.file_stem().unwrap().to_string_lossy()))
             };
             let t = std::time::Instant::now();
-            let stats = super::export_hsf(&scene, None, &out, [0.5, 0.5, 0.5, 1.0]).unwrap();
+            let normals = std::env::var_os("GESTORE_HSF_SENZA_NORMALI").is_none();
+            let stats = super::export_hsf(&scene, None, &out, [0.5, 0.5, 0.5, 1.0], normals).unwrap();
             let size = std::fs::metadata(&out).unwrap().len();
             let written = t.elapsed();
             let again = crate::parser::parse_wrl(&std::fs::read(&out).unwrap());
