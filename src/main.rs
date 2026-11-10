@@ -13,6 +13,7 @@ mod reduction;
 mod renderer;
 mod scene_graph;
 mod settings;
+mod text3d;
 mod ui;
 mod update;
 

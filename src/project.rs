@@ -618,7 +618,7 @@ impl GestoreApp {
             return;
         }
         let mut warnings = Vec::new();
-        for f in file.files.iter_mut().filter(|f| f.copy.is_none()) {
+        for f in file.files.iter_mut().filter(|f| f.copy.is_none() && f.cabin.is_none()) {
             if !f.path.exists() {
                 // Modello spostato: si chiede dove si trova
                 match locate_missing(&f.path) {
@@ -638,7 +638,15 @@ impl GestoreApp {
                 ));
             }
         }
-        let paths: Vec<PathBuf> = file.files.iter().filter(|f| f.copy.is_none()).map(|f| f.path.clone()).collect();
+        let paths: Vec<PathBuf> =
+            file.files.iter().filter(|f| f.copy.is_none() && f.cabin.is_none()).map(|f| f.path.clone()).collect();
+        if paths.is_empty() {
+            // Solo cabine generate: niente da leggere dal disco, si ricostruisce subito
+            self.close_project();
+            self.project.restore = Some(Restore { path, file, warnings });
+            self.finish_restore();
+            return;
+        }
         self.project.restore = Some(Restore { path, file, warnings });
         self.project.step_choice = None;
         self.ui_state.unit_suggestions.clear();
@@ -653,6 +661,10 @@ impl GestoreApp {
         let Some(restore) = self.project.restore.take() else { return };
         let name = restore.path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
         let mut warnings = restore.warnings;
+        // Un progetto con le sole cabine: si parte da una scena vuota
+        if self.scene_graph.is_none() && restore.file.files.iter().any(|f| f.cabin.is_some()) {
+            self.scene_graph = Some(crate::scene_graph::SceneGraph::default());
+        }
         if self.scene_graph.is_none() {
             self.ui_state.status_message = format!("Progetto {name}: nessun modello si è aperto");
             self.ui_state.load_warnings.extend(warnings);
@@ -667,6 +679,11 @@ impl GestoreApp {
         if let Some(scene) = &mut self.scene_graph {
             for entry in &restore.file.files {
                 let source = match &entry.copy {
+                    None if entry.cabin.is_some() => {
+                        // Cabina generata: si ricostruisce con le stesse misure
+                        scene.append(crate::cabin::scene(&entry.cabin.clone().unwrap_or_default()));
+                        Some(scene.sources.len() - 1)
+                    }
                     None => scene.sources.iter().position(|s| s.path.as_deref() == Some(entry.path.as_path())),
                     Some(c) => sources.get(c.source).copied().flatten().and_then(|of| {
                         let copy = crate::scene_graph::copy::CopyOf { source: of, ..c.clone() };
@@ -774,7 +791,7 @@ impl GestoreApp {
         });
         let cluster = self.project.loaded_cluster.unwrap_or(self.settings.cluster);
         let file = crate::project_file::ProjectFile::capture(scene, cluster, camera);
-        let unsaved = scene.open_files().filter(|f| f.path.is_none() && f.copy_of.is_none()).count();
+        let unsaved = scene.open_files().filter(|f| f.path.is_none() && f.copy_of.is_none() && f.cabin.is_none()).count();
         let revision = scene.revision;
         if let Err(e) = std::fs::write(path, file.to_text(path)) {
             self.ui_state.status_message = format!("Progetto non salvato: {e}");
@@ -1105,6 +1122,74 @@ mod tests {
             .map(|n| (s.nodes[n as usize].is_visible(), s.info[n as usize].deleted, s.info[n as usize].color, s.display_name(n)))
             .collect();
         (nodes, s.shapes_data.iter().map(|d| d.world_vertices.clone()).collect())
+    }
+
+    /// La cabina generata si salva nel progetto con le sue misure: riaperto, viene ricostruita
+    /// e riprende posizione, parti nascoste e colori. Anche un progetto con la sola cabina.
+    #[test]
+    fn cabin_is_saved_in_the_project() {
+        use crate::cabin::CabinParams;
+        use crate::scene_graph::node::multi_file_tests::FILE_A;
+        let dir = std::env::temp_dir().join("dima3d_prova_cabina");
+        std::fs::create_dir_all(&dir).unwrap();
+        let model = dir.join("telaio.wrl");
+        std::fs::write(&model, FILE_A).unwrap();
+        let label = crate::cabin::CabinLabel {
+            text: "Prova".into(),
+            font: crate::cabin::fonts_dir().join("arial.ttf").to_string_lossy().into_owned(),
+            ..Default::default()
+        };
+        let params = CabinParams { length: 14000.0, width: 6000.0, glass: false, label, ..CabinParams::default() };
+
+        let mut app = GestoreApp::new_headless();
+        app.request_add(vec![model.clone()]);
+        pump(&mut app);
+        app.build_cabin(params.clone());
+        let cabin = app.cabin_node().expect("cabina");
+        let find = |app: &GestoreApp, name: &str| {
+            let s = app.scene_graph.as_ref().unwrap();
+            (0..s.nodes.len() as u32).find(|&n| !s.info[n as usize].deleted && s.display_name(n) == name).unwrap()
+        };
+        app.apply(Action::Move { nodes: vec![cabin], matrix: glam::Mat4::from_translation(glam::Vec3::new(-2500.0, 0.0, -500.0)) });
+        app.apply(Action::Hide(find(&app, "Soffitto")));
+        app.apply(Action::SetColor(find(&app, "Grigliato"), Some([0.1, 0.5, 0.1, 1.0])));
+        let project = dir.join("con_cabina.dima3d");
+        assert!(app.write_project(&project));
+        assert!(!app.ui_state.status_message.contains("senza file"), "{}", app.ui_state.status_message);
+        let text = std::fs::read_to_string(&project).unwrap();
+        assert!(text.contains("[cabina]\nmisure = 14000 6000"), "{text}");
+        assert!(text.contains("scritta = laterali 0 500 20 0 250") && text.contains("| Prova"), "{text}");
+        let expected = state(&app);
+
+        let mut other = GestoreApp::new_headless();
+        other.request_open(project.clone());
+        pump(&mut other);
+        assert!(other.ui_state.load_warnings.is_empty(), "{:?}", other.ui_state.load_warnings);
+        let got = state(&other);
+        assert_eq!(got.0, expected.0, "nodi");
+        for (a, b) in got.1.iter().zip(&expected.1) {
+            for (x, y) in a.iter().zip(b) {
+                assert!(glam::Vec3::from(*x).distance(glam::Vec3::from(*y)) < 1e-3, "{x:?} invece di {y:?}");
+            }
+        }
+        let s = other.scene_graph.as_ref().unwrap();
+        assert_eq!(s.sources.last().unwrap().cabin, Some(params.clone()), "misure ricordate");
+        assert!(other.cabin_node().is_some(), "«Aggiorna» la ritrova");
+
+        // Solo la cabina: si apre senza file da leggere
+        let mut only = GestoreApp::new_headless();
+        only.build_cabin(params);
+        pump(&mut only);
+        let alone = dir.join("solo_cabina.dima3d");
+        assert!(only.write_project(&alone));
+        let expected = state(&only);
+        let mut reopened = GestoreApp::new_headless();
+        reopened.request_open(alone.clone());
+        pump(&mut reopened);
+        assert_eq!(state(&reopened).0, expected.0, "{}", reopened.ui_state.status_message);
+        assert!(reopened.ui_state.status_message.starts_with("Progetto aperto"), "{}", reopened.ui_state.status_message);
+        drop((app, other, only, reopened));
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     /// Progetto salvato con file spostati, scalati, nascosti, colorati, rinominati ed eliminati:

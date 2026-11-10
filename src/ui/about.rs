@@ -16,6 +16,7 @@ const LIBRARIES: &[(&str, &str, &str)] = &[
     ("rayon", "calcolo in parallelo", "MIT o Apache 2.0"),
     ("meshoptimizer (meshopt)", "riduzione delle facce", "MIT"),
     ("Phosphor Icons (egui-phosphor)", "icone", "MIT"),
+    ("ab_glyph, lyon", "lettere delle scritte", "Apache 2.0; MIT o Apache 2.0"),
     ("OpenCASCADE 8.0.1", "convertitore STEP", "LGPL 2.1 con eccezione"),
     ("JTReader, SharpCompress", "convertitore JT", "MIT"),
 ];
@@ -75,7 +76,7 @@ pub fn draw(ctx: &egui::Context, app: &mut GestoreApp) {
             });
             ui.label(
                 egui::RichText::new(
-                    "Testi completi delle licenze e note di copyright di tutte le librerie (203 solo per il \
+                    "Testi completi delle licenze e note di copyright di tutte le librerie (208 solo per il \
                      programma) nella cartella «licenses» accanto all'eseguibile.",
                 )
                 .small(),

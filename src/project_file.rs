@@ -30,6 +30,9 @@
 //! saltati = 5                           (rami già eliminati al momento della copia)
 //! titolo = Copia di Staffa
 //! nascosti = …                          (come per i file, numerati dalla radice della copia)
+//!
+//! [cabina]                              (cabina generata: si ricostruisce, poi le modifiche)
+//! misure = 20000 5700 …                 (vedi `CabinParams::to_text`)
 //! ```
 
 use std::path::{Component, Path, PathBuf};
@@ -42,8 +45,8 @@ use crate::scene_graph::SceneGraph;
 use crate::settings::{StepLoad, StepMesh};
 
 pub const EXTENSION: &str = "dima3d";
-/// 2: copie incollate, gruppi creati e pezzi spostati nell'albero.
-const VERSION: u32 = 2;
+/// 2: copie incollate, gruppi creati e pezzi spostati nell'albero. 3: cabina generata.
+const VERSION: u32 = 3;
 
 /// Vista salvata: centro, distanza e orientamento della camera.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -78,6 +81,8 @@ pub struct FileEntry {
     pub groups: Vec<(u32, String)>,
     /// Contenitori cambiati: numero fisso → numeri fissi dei figli, in ordine
     pub children: Vec<(u32, Vec<u32>)>,
+    /// Cabina generata: le sue misure; `path` resta vuoto
+    pub cabin: Option<crate::cabin::CabinParams>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -187,12 +192,12 @@ impl ProjectFile {
                 },
                 None => None,
             };
-            let (path, size, modified) = match (&source.path, &copy) {
-                (Some(path), None) => {
+            let (path, size, modified) = match (&source.path, &copy, &source.cabin) {
+                (Some(path), None, _) => {
                     let (size, modified) = file_stamp(path);
                     (path.clone(), size, modified)
                 }
-                (None, Some(_)) => (PathBuf::new(), 0, 0),
+                (None, Some(_), _) | (None, None, Some(_)) => (PathBuf::new(), 0, 0),
                 _ => continue,
             };
             entry_of[i] = Some(files.len());
@@ -204,6 +209,7 @@ impl ProjectFile {
                 step: source.step,
                 scale: source.scale,
                 title: if copy.is_some() { source.name.clone() } else { String::new() },
+                cabin: if copy.is_none() { source.cabin.clone() } else { None },
                 copy,
                 ..Default::default()
             };
@@ -269,6 +275,12 @@ impl ProjectFile {
                     out.push_str(&format!("saltati = {}\n", ranges(&c.skip)));
                 }
                 out.push_str(&format!("titolo = {}\n", f.title.replace(['\r', '\n'], " ")));
+            } else if let Some(c) = &f.cabin {
+                out.push_str("\n[cabina]\n");
+                out.push_str(&format!("misure = {}\n", c.to_text()));
+                if !c.label.text.trim().is_empty() {
+                    out.push_str(&format!("scritta = {}\n", c.label.to_text()));
+                }
             } else {
                 out.push_str("\n[file]\n");
                 if let Some(rel) = relative_to(&f.path, base) {
@@ -332,6 +344,10 @@ impl ProjectFile {
                 out.files.push(FileEntry { scale: 1.0, copy: Some(CopyOf::default()), ..Default::default() });
                 continue;
             }
+            if line == "[cabina]" {
+                out.files.push(FileEntry { scale: 1.0, cabin: Some(Default::default()), ..Default::default() });
+                continue;
+            }
             let Some((key, value)) = line.split_once('=') else { return Err(bad(i)) };
             let (key, value) = (key.trim(), value.trim());
             if key == "versione" {
@@ -364,6 +380,15 @@ impl ProjectFile {
                 (Some(f), "nodi") => f.copy.as_mut().ok_or_else(|| bad(i))?.nodes = parse_ranges(value).ok_or_else(|| bad(i))?,
                 (Some(f), "saltati") => f.copy.as_mut().ok_or_else(|| bad(i))?.skip = parse_ranges(value).ok_or_else(|| bad(i))?,
                 (Some(f), "titolo") => f.title = value.to_string(),
+                (Some(f), "misure") if f.cabin.is_some() => {
+                    f.cabin = Some(crate::cabin::CabinParams::from_text(value).ok_or_else(|| bad(i))?);
+                }
+                (Some(f), "scritta") if f.cabin.is_some() => {
+                    let label = crate::cabin::CabinLabel::from_text(value).ok_or_else(|| bad(i))?;
+                    if let Some(c) = &mut f.cabin {
+                        c.label = label;
+                    }
+                }
                 (Some(f), "gruppo") => {
                     let (n, name) = value.split_once(' ').unwrap_or((value, ""));
                     f.groups.push((n.parse().map_err(|_| bad(i))?, name.trim().to_string()));
@@ -416,6 +441,9 @@ impl ProjectFile {
                 if c.source >= index || c.nodes.is_empty() {
                     return Err("Nel progetto c'è una copia senza provenienza valida".to_string());
                 }
+                continue;
+            }
+            if f.cabin.is_some() {
                 continue;
             }
             if f.path.as_os_str().is_empty() && f.relative.is_none() {
@@ -531,6 +559,7 @@ mod tests {
             title: String::new(),
             groups: vec![(812, "Lato sinistro".into())],
             children: vec![(4, vec![7, 812, 9]), (812, vec![])],
+            cabin: None,
         };
         let copy = FileEntry {
             scale: 1.0,
@@ -539,10 +568,16 @@ mod tests {
             title: "Copia di Staffa".into(),
             ..Default::default()
         };
+        let cabin = FileEntry {
+            scale: 1.0,
+            hidden: vec![3],
+            cabin: Some(crate::cabin::CabinParams { length: 9000.0, glass: false, ..Default::default() }),
+            ..Default::default()
+        };
         let p = ProjectFile {
             cluster: ClusterConfig { tolerance: 0.75, min_matching_vertices: 20 },
             camera: Some(CameraView { target: Vec3::new(1.0, 2.0, 3.0), distance: 4500.0, orientation: Quat::from_rotation_y(0.4) }),
-            files: vec![file.clone(), FileEntry { path: PathBuf::from(r"E:\b.stl"), scale: 1.0, ..Default::default() }, copy.clone()],
+            files: vec![file.clone(), FileEntry { path: PathBuf::from(r"E:\b.stl"), scale: 1.0, ..Default::default() }, copy.clone(), cabin.clone()],
         };
         let text = p.to_text(project);
         assert!(text.contains(r"percorso = modelli\pezzo uno.wrl"), "{text}");
@@ -559,6 +594,7 @@ mod tests {
         assert_eq!(f.placements, file.placements, "le matrici tornano identiche");
         assert_eq!((&f.groups, &f.children), (&file.groups, &file.children));
         assert_eq!(back.files[1].path, PathBuf::from(r"E:\b.stl"));
+        assert_eq!(back.files[3], cabin, "cabina: misure e modifiche");
         assert!(text.contains("[copia]\ndi = 1\nnodi = 3-5 9\nsaltati = 6\ntitolo = Copia di Staffa"), "{text}");
         assert_eq!(back.files[2], copy);
         // Una copia può venire solo da un elemento scritto prima

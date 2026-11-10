@@ -2,8 +2,8 @@
 //! aperture di ingresso e uscita, soffitto.
 //!
 //! Riferimento (coordinate veicolo, millimetri): X lungo la cabina dall'ingresso (X = 0) verso
-//! l'uscita, Y = 0 sull'asse, Z = 0 sul piano del grigliato, Z verso l'alto. La forma ricalca le
-//! cabine dei file di riferimento: montanti 100×100 ogni 2 m, pannelli tra i montanti, zoccolo
+//! l'uscita, Y = 0 sull'asse, Z = 0 sul piano del grigliato, Z verso l'alto. La forma è quella di una
+//! cabina tipica: montanti 100×100 ogni 2 m, pannelli tra i montanti, zoccolo
 //! scuro sotto il grigliato, fascia vetrata, grigliato a barre piatte diviso in moduli.
 //!
 //! La cabina diventa un file VRML 2.0 tenuto in memoria: nell'albero, nell'export e nella
@@ -11,8 +11,167 @@
 
 use std::fmt::Write;
 
+/// Pareti su cui scrivere.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum LabelWall {
+    #[default]
+    Sides,
+    Left,
+    Right,
+    Entry,
+    Exit,
+    All,
+}
+
+/// Una parete della cabina, per le scritte.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Wall {
+    Left,
+    Right,
+    Entry,
+    Exit,
+}
+
+impl LabelWall {
+    pub const ALL: [(LabelWall, &'static str); 6] = [
+        (LabelWall::Sides, "Pareti laterali"),
+        (LabelWall::Left, "Parete sinistra"),
+        (LabelWall::Right, "Parete destra"),
+        (LabelWall::Entry, "Testata di ingresso"),
+        (LabelWall::Exit, "Testata di uscita"),
+        (LabelWall::All, "Tutte le pareti"),
+    ];
+
+    fn code(self) -> &'static str {
+        match self {
+            LabelWall::Sides => "laterali",
+            LabelWall::Left => "sinistra",
+            LabelWall::Right => "destra",
+            LabelWall::Entry => "ingresso",
+            LabelWall::Exit => "uscita",
+            LabelWall::All => "tutte",
+        }
+    }
+
+    fn from_code(code: &str) -> Option<Self> {
+        Self::ALL.iter().map(|(w, _)| *w).find(|w| w.code() == code)
+    }
+
+    fn walls(self) -> &'static [Wall] {
+        match self {
+            LabelWall::Sides => &[Wall::Left, Wall::Right],
+            LabelWall::Left => &[Wall::Left],
+            LabelWall::Right => &[Wall::Right],
+            LabelWall::Entry => &[Wall::Entry],
+            LabelWall::Exit => &[Wall::Exit],
+            LabelWall::All => &[Wall::Left, Wall::Right, Wall::Entry, Wall::Exit],
+        }
+    }
+}
+
+/// Scritta in rilievo sulle pareti (es. il nome della cabina). Testo vuoto: nessuna scritta.
+#[derive(Debug, Clone, PartialEq)]
+pub struct CabinLabel {
+    pub text: String,
+    /// File del font (TTF/OTF)
+    pub font: String,
+    /// Altezza delle maiuscole
+    pub height: f32,
+    /// Rilievo (spessore delle lettere)
+    pub depth: f32,
+    /// Colore (sRGB, 0–1)
+    pub color: [f32; 3],
+    pub wall: LabelWall,
+    /// Sul lato interno delle pareti invece che su quello esterno
+    pub inside: bool,
+    /// Spostamento del centro della scritta dal centro della parete, verso destra per chi legge
+    pub offset: f32,
+    /// Quota della linea di base dal grigliato
+    pub z: f32,
+}
+
+/// Cartella dei font di Windows.
+pub fn fonts_dir() -> std::path::PathBuf {
+    std::path::PathBuf::from(std::env::var_os("WINDIR").unwrap_or_else(|| "C:\\Windows".into())).join("Fonts")
+}
+
+/// Font comuni di Windows (nome mostrato, file), solo quelli presenti.
+pub fn common_fonts() -> Vec<(&'static str, std::path::PathBuf)> {
+    const LIST: [(&str, &str); 12] = [
+        ("Arial", "arial.ttf"),
+        ("Arial grassetto", "arialbd.ttf"),
+        ("Arial Narrow", "ARIALN.TTF"),
+        ("Calibri", "calibri.ttf"),
+        ("Calibri grassetto", "calibrib.ttf"),
+        ("Segoe UI", "segoeui.ttf"),
+        ("Segoe UI grassetto", "segoeuib.ttf"),
+        ("Consolas", "consola.ttf"),
+        ("Tahoma", "tahoma.ttf"),
+        ("Verdana", "verdana.ttf"),
+        ("Times New Roman", "times.ttf"),
+        ("Impact", "impact.ttf"),
+    ];
+    let dir = fonts_dir();
+    LIST.iter().map(|(name, file)| (*name, dir.join(file))).filter(|(_, p)| p.is_file()).collect()
+}
+
+impl Default for CabinLabel {
+    fn default() -> Self {
+        Self {
+            text: String::new(),
+            font: fonts_dir().join("arialbd.ttf").to_string_lossy().into_owned(),
+            height: 500.0,
+            depth: 20.0,
+            color: [0.05, 0.25, 0.6],
+            wall: LabelWall::Sides,
+            inside: false,
+            offset: 0.0,
+            z: 250.0,
+        }
+    }
+}
+
+impl CabinLabel {
+    /// `parete interno altezza rilievo spostamento quota r g b | font | testo`
+    pub fn to_text(&self) -> String {
+        let [r, g, b] = self.color;
+        format!(
+            "{} {} {} {} {} {} {r} {g} {b} | {} | {}",
+            self.wall.code(),
+            u8::from(self.inside),
+            self.height,
+            self.depth,
+            self.offset,
+            self.z,
+            self.font.replace('|', ""),
+            self.text.replace(['\r', '\n'], " ")
+        )
+    }
+
+    pub fn from_text(text: &str) -> Option<Self> {
+        let mut parts = text.splitn(3, '|');
+        let numbers: Vec<&str> = parts.next()?.split_whitespace().collect();
+        let font = parts.next()?.trim().to_string();
+        let label = parts.next()?.trim().to_string();
+        let [wall, inside, rest @ ..] = numbers.as_slice() else { return None };
+        let v: Vec<f32> = rest.iter().map(|w| w.parse().ok()).collect::<Option<_>>()?;
+        let [height, depth, offset, z, r, g, b] = v.as_slice() else { return None };
+        Some(Self {
+            text: label,
+            font,
+            height: *height,
+            depth: *depth,
+            color: [*r, *g, *b],
+            wall: LabelWall::from_code(wall)?,
+            inside: *inside == "1",
+            offset: *offset,
+            z: *z,
+        })
+    }
+}
+
 /// Misure della cabina, in millimetri.
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct CabinParams {
     /// Lunghezza interna (lungo X)
     pub length: f32,
@@ -47,10 +206,12 @@ pub struct CabinParams {
     /// Apertura di uscita (testata a X = lunghezza)
     pub exit_width: f32,
     pub exit_height: f32,
+    /// Scritta sulle pareti
+    pub label: CabinLabel,
 }
 
 impl Default for CabinParams {
-    /// Misure ricavate dalle cabine dei file di riferimento.
+    /// Misure tipiche di una cabina di verniciatura.
     fn default() -> Self {
         Self {
             length: 20000.0,
@@ -61,10 +222,10 @@ impl Default for CabinParams {
             post: 100.0,
             panel: 50.0,
             glass: true,
-            glass_from: 2200.0,
+            glass_from: 1000.0,
             glass_to: 3000.0,
-            bar_pitch: 500.0,
-            bar_width: 40.0,
+            bar_pitch: 100.0,
+            bar_width: 20.0,
             bar_thickness: 10.0,
             grid_module_x: 6000.0,
             grid_module_y: 2000.0,
@@ -72,13 +233,14 @@ impl Default for CabinParams {
             entry_height: 2500.0,
             exit_width: 3000.0,
             exit_height: 2500.0,
+            label: CabinLabel::default(),
         }
     }
 }
 
 impl CabinParams {
-    /// Valori in ordine, per le preferenze.
-    pub fn to_text(self) -> String {
+    /// Valori in ordine, per le preferenze (la scritta a parte: [`CabinLabel::to_text`]).
+    pub fn to_text(&self) -> String {
         let mut v: Vec<String> = self.values().iter().map(|x| x.to_string()).collect();
         v.push(u8::from(self.glass).to_string());
         v.join(" ")
@@ -100,7 +262,7 @@ impl CabinParams {
     }
 
     fn values(&self) -> Vec<f32> {
-        let mut copy = *self;
+        let mut copy = self.clone();
         copy.fields_mut().into_iter().map(|f| *f).collect()
     }
 
@@ -163,6 +325,18 @@ impl CabinParams {
         let bars = (self.length / self.bar_pitch.max(1.0)) * (self.width / self.bar_pitch.max(1.0));
         if bars > 1.0e6 || self.length / self.module.max(1.0) > 1000.0 {
             out.push("troppi elementi: controlla che le misure siano in millimetri".into());
+        }
+        let label = &self.label;
+        if !label.text.trim().is_empty() {
+            if label.height.is_nan() || label.height <= 0.0 {
+                out.push("scritta: l'altezza delle lettere deve essere maggiore di zero".into());
+            }
+            if label.depth.is_nan() || label.depth < 0.0 {
+                out.push("scritta: il rilievo non può essere negativo".into());
+            }
+            if !std::path::Path::new(&label.font).is_file() {
+                out.push(format!("scritta: font non trovato ({})", label.font));
+            }
         }
         out
     }
@@ -318,25 +492,85 @@ pub fn vrml(p: &CabinParams) -> String {
     out
 }
 
+/// Come [`vrml`], con le scritte; il secondo valore è il motivo se non si sono potute fare.
+pub fn vrml_with_label(p: &CabinParams) -> (String, Option<String>) {
+    let mut out = vrml(p);
+    let problem = if p.label.text.trim().is_empty() { None } else { label_shapes(p, &mut out).err() };
+    (out, problem)
+}
+
+/// Scritte in rilievo sulle pareti scelte, leggibili da chi guarda la faccia (esterna o interna).
+fn label_shapes(p: &CabinParams, out: &mut String) -> Result<(), String> {
+    use glam::Vec3;
+    let label = &p.label;
+    let bytes = std::fs::read(&label.font).map_err(|e| format!("font non letto: {} ({e})", label.font))?;
+    let mesh = crate::text3d::text_mesh(&bytes, label.text.trim(), label.height, label.depth)?;
+    let (half, l) = (p.width / 2.0, p.length);
+    // Le scritte esterne stanno davanti ai montanti, che sporgono più dei pannelli
+    let outer = half + p.panel.max(p.post);
+    for &wall in label.wall.walls() {
+        // Normale verso l'esterno, punto della faccia esterna e di quella interna (al centro, Z = 0)
+        let (normal, outside, inside, name) = match wall {
+            Wall::Left => (Vec3::Y, Vec3::new(l / 2.0, outer, 0.0), Vec3::new(l / 2.0, half, 0.0), "sinistra"),
+            Wall::Right => (-Vec3::Y, Vec3::new(l / 2.0, -outer, 0.0), Vec3::new(l / 2.0, -half, 0.0), "destra"),
+            Wall::Entry => (-Vec3::X, Vec3::new(-p.panel, 0.0, 0.0), Vec3::ZERO, "ingresso"),
+            Wall::Exit => (Vec3::X, Vec3::new(l + p.panel, 0.0, 0.0), Vec3::new(l, 0.0, 0.0), "uscita"),
+        };
+        let (w, origin) = if label.inside { (-normal, inside) } else { (normal, outside) };
+        // Destra di chi guarda la faccia: (direzione dello sguardo) × alto
+        let u = (-w).cross(Vec3::Z);
+        let shift = label.offset - mesh.width / 2.0;
+        let mut text = String::new();
+        let [r, g, b] = label.color;
+        let suffix = if label.inside { "_interna" } else { "" };
+        let _ = writeln!(
+            text,
+            "DEF Scritta_{name}{suffix} Shape {{ appearance Appearance {{ material Material {{ diffuseColor {r} {g} {b} }} }}"
+        );
+        text.push_str("geometry IndexedFaceSet { solid FALSE creaseAngle 0.5\ncoord Coordinate { point [\n");
+        for q in &mesh.points {
+            let v = origin + u * (q.x + shift) + Vec3::Z * (q.y + label.z) + w * q.z;
+            let _ = writeln!(text, "{} {} {},", round(v.x), round(v.y), round(v.z));
+        }
+        text.push_str("] }\ncoordIndex [\n");
+        for f in &mesh.faces {
+            for i in f {
+                let _ = write!(text, "{i} ");
+            }
+            text.push_str("-1\n");
+        }
+        text.push_str("] } }\n");
+        out.push_str(&text);
+    }
+    Ok(())
+}
+
 /// Scena della cabina, pronta da aprire o aggiungere come file «Cabina».
 pub fn scene(p: &CabinParams) -> crate::scene_graph::SceneGraph {
-    let text = vrml(p);
+    let (text, problem) = vrml_with_label(p);
     let mut scene = crate::parser::parse_wrl(text.as_bytes());
+    scene.load_warnings.extend(problem.map(|e| format!("scritta non fatta: {e}")));
     // Le misure sono già in millimetri: niente proposte di cambio di unità
     scene.units_mm = true;
     scene.into_file("Cabina".to_string(), None);
+    scene.sources[0].cabin = Some(p.clone());
     scene
 }
 
 impl crate::app::GestoreApp {
-    /// Nodo radice della cabina generata, se è ancora aperta.
+    /// Nodo radice della cabina generata, se ce n'è una aperta (l'ultima).
     pub fn cabin_node(&self) -> Option<u32> {
+        self.scene_graph.as_ref()?.open_files().filter(|f| f.cabin.is_some()).last().map(|f| f.node)
+    }
+
+    /// Centro della cabina aperta (a metà lunghezza, sull'asse, al piano del grigliato) nella
+    /// scena, e la sua matrice di posizione (gli spostamenti fatti con Posizione).
+    pub fn cabin_center(&self) -> Option<(glam::Vec3, glam::Mat4)> {
         let scene = self.scene_graph.as_ref()?;
-        let node = self.ui_state.cabin_node?;
-        scene
-            .open_files()
-            .any(|f| f.node == node && f.path.is_none() && f.copy_of.is_none() && f.name == "Cabina")
-            .then_some(node)
+        let source = scene.open_files().filter(|f| f.cabin.is_some()).last()?;
+        let p = source.cabin.as_ref()?;
+        let m = scene.placement(source.meshes.start);
+        Some((m.transform_point3(glam::Vec3::new(p.length / 2.0, 0.0, 0.0)), m))
     }
 
     /// Costruisce la cabina con le misure date: sostituisce quella generata prima, se c'è.
@@ -350,7 +584,7 @@ impl crate::app::GestoreApp {
             return;
         }
         let mut settings = self.settings.clone();
-        settings.cabin = params;
+        settings.cabin = params.clone();
         self.apply_settings(settings);
         let replaced = self.cabin_node();
         if let Some(old) = replaced {
@@ -359,7 +593,6 @@ impl crate::app::GestoreApp {
         let scene = scene(&params);
         if self.scene_graph.is_some() {
             self.add_loaded_file(scene);
-            self.ui_state.cabin_node = self.scene_graph.as_ref().and_then(|s| s.sources.last()).map(|s| s.node);
         } else {
             // Scena vuota: la cabina si apre come un file, con lo stesso percorso del caricamento
             let (tx, rx) = std::sync::mpsc::channel();
@@ -368,7 +601,6 @@ impl crate::app::GestoreApp {
             self.project.loading_adds = false;
             self.ui_state.is_loading = true;
             self.load_rx = Some(rx);
-            self.ui_state.cabin_node = Some(0);
         }
         self.ui_state.status_message = format!(
             "Cabina {}: {} × {} × {} mm",
@@ -466,13 +698,84 @@ mod tests {
     #[test]
     #[ignore]
     fn anteprima_cabina() {
-        std::fs::write(std::env::var("GESTORE_CABINA_OUT").expect("GESTORE_CABINA_OUT"), vrml(&CabinParams::default())).unwrap();
+        // GESTORE_CABINA_SCRITTA: testo di prova sulle pareti laterali
+        let label = CabinLabel { text: std::env::var("GESTORE_CABINA_SCRITTA").unwrap_or_default(), ..CabinLabel::default() };
+        let (text, problem) = vrml_with_label(&CabinParams { label, ..CabinParams::default() });
+        assert!(problem.is_none(), "{problem:?}");
+        std::fs::write(std::env::var("GESTORE_CABINA_OUT").expect("GESTORE_CABINA_OUT"), text).unwrap();
+    }
+
+    /// Scritta sulle pareti laterali: davanti alla faccia esterna (o interna), centrata a metà
+    /// cabina, alla quota e con l'altezza scelte. Font mancante: cabina senza scritta e avviso.
+    #[test]
+    fn label_sits_on_the_chosen_walls() {
+        let font = fonts_dir().join("arial.ttf");
+        if !font.is_file() {
+            return;
+        }
+        let label = CabinLabel { text: "Cabina 1".into(), font: font.to_string_lossy().into_owned(), ..CabinLabel::default() };
+        let p = CabinParams { label: label.clone(), ..CabinParams::default() };
+        assert!(p.problems().is_empty(), "{:?}", p.problems());
+        let scene = scene(&p);
+        assert!(scene.load_warnings.is_empty(), "{:?}", scene.load_warnings);
+        let bounds = |name: &str| {
+            let s = scene.shapes_data.iter().find(|s| s.name.as_deref() == Some(name)).unwrap_or_else(|| panic!("manca {name}"));
+            s.world_vertices.iter().fold((glam::Vec3::MAX, glam::Vec3::MIN), |(a, b), &v| (a.min(v.into()), b.max(v.into())))
+        };
+        let outer = p.width / 2.0 + p.post;
+        let (lo, hi) = bounds("Scritta_sinistra");
+        assert!((lo.y - outer).abs() < 0.2 && (hi.y - outer - label.depth).abs() < 0.2, "fuori dalla parete: {lo} {hi}");
+        assert!(((lo.x + hi.x) / 2.0 - p.length / 2.0).abs() < 50.0, "centrata: {lo} {hi}");
+        assert!(lo.z > label.z - 30.0 && hi.z < label.z + label.height + 30.0, "quota: {lo} {hi}");
+        let (lo, hi) = bounds("Scritta_destra");
+        assert!(hi.y < -outer + 0.2 && lo.y > -outer - label.depth - 0.2, "{lo} {hi}");
+
+        // All'interno della parete di uscita, spostata a destra di chi legge (dentro, guardando
+        // l'uscita, la destra è verso -Y)
+        let inside = CabinLabel { wall: LabelWall::Exit, inside: true, offset: 1000.0, ..label.clone() };
+        let scene2 = super::scene(&CabinParams { label: inside, ..CabinParams::default() });
+        let s = scene2.shapes_data.iter().find(|s| s.name.as_deref() == Some("Scritta_uscita_interna")).unwrap();
+        let (lo, hi) = s.world_vertices.iter().fold((glam::Vec3::MAX, glam::Vec3::MIN), |(a, b), &v| (a.min(v.into()), b.max(v.into())));
+        assert!((hi.x - p.length).abs() < 0.2 && (lo.x - (p.length - label.depth)).abs() < 0.2, "{lo} {hi}");
+        assert!(((lo.y + hi.y) / 2.0 + 1000.0).abs() < 50.0, "spostata verso -Y: {lo} {hi}");
+
+        // Si legge dritta da fuori: l'asta della «L» sta a sinistra di chi guarda (sulla parete
+        // sinistra, guardando verso -Y, la sinistra è +X; sulla destra è -X)
+        let l = super::scene(&CabinParams { label: CabinLabel { text: "L".into(), ..label.clone() }, ..CabinParams::default() });
+        for (name, stroke_at_max_x) in [("Scritta_sinistra", true), ("Scritta_destra", false)] {
+            let s = l.shapes_data.iter().find(|s| s.name.as_deref() == Some(name)).unwrap();
+            let xs: Vec<f32> = s.world_vertices.iter().map(|v| v[0]).collect();
+            let (min, max) = (xs.iter().cloned().fold(f32::MAX, f32::min), xs.iter().cloned().fold(f32::MIN, f32::max));
+            let top: Vec<f32> = s.world_vertices.iter().filter(|v| v[2] > label.z + label.height * 0.8).map(|v| v[0]).collect();
+            let stroke = top.iter().sum::<f32>() / top.len() as f32;
+            assert_eq!(stroke > (min + max) / 2.0, stroke_at_max_x, "{name}: asta a {stroke}, lettera da {min} a {max}");
+        }
+
+        let missing = CabinParams { label: CabinLabel { font: "C:\\non\\esiste.ttf".into(), ..label }, ..CabinParams::default() };
+        assert!(missing.problems().iter().any(|p| p.contains("font non trovato")));
+        let scene3 = super::scene(&missing);
+        assert!(scene3.load_warnings.iter().any(|w| w.starts_with("scritta non fatta")), "{:?}", scene3.load_warnings);
+    }
+
+    #[test]
+    fn label_text_roundtrip() {
+        let label = CabinLabel {
+            text: "Linea 2 | primer".into(),
+            font: "C:\\Fonts con spazi\\font.ttf".into(),
+            color: [0.1, 0.2, 0.3],
+            wall: LabelWall::All,
+            inside: true,
+            offset: -250.0,
+            ..CabinLabel::default()
+        };
+        assert_eq!(CabinLabel::from_text(&label.to_text()), Some(label));
+        assert_eq!(CabinLabel::from_text("rotto"), None);
     }
 
     #[test]
     fn params_roundtrip_and_checks() {
         let p = CabinParams { length: 12345.0, glass_to: 2900.0, ..CabinParams::default() };
-        assert_eq!(CabinParams::from_text(&p.to_text()), Some(p));
+        assert_eq!(CabinParams::from_text(&p.to_text()), Some(p.clone()));
         let no_glass = CabinParams { glass: false, ..p };
         assert_eq!(CabinParams::from_text(&no_glass.to_text()), Some(no_glass));
         assert_eq!(CabinParams::from_text("1 2 3"), None);

@@ -35,7 +35,7 @@ pub struct Release {
 #[derive(Default)]
 pub struct UpdateState {
     check: Option<(Receiver<Result<Release, String>>, bool)>,
-    download: Option<(Receiver<Result<PathBuf, String>>, Release)>,
+    download: Option<Download>,
     /// Versione nuova da proporre (finestra aperta)
     pub offer: Option<Release>,
     /// Esito di una verifica chiesta a mano (finestra aperta)
@@ -79,8 +79,8 @@ fn parse_release(text: &str) -> Result<Release, String> {
     Ok(Release { version: tag.trim_start_matches(['v', 'V']).to_string(), zip_url, page_url, notes })
 }
 
-/// Esegue uno script PowerShell senza finestra; i dati arrivano dalle variabili d'ambiente.
-fn powershell(script: &str, env: &[(&str, &str)]) -> Result<String, String> {
+/// Comando PowerShell senza finestra per lo script; i dati arrivano dalle variabili d'ambiente.
+fn powershell_command(script: &str, env: &[(&str, &str)]) -> std::process::Command {
     let preamble = "$ErrorActionPreference = 'Stop'; $ProgressPreference = 'SilentlyContinue'; \
         [Console]::OutputEncoding = [Text.Encoding]::UTF8; \
         [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; \
@@ -97,17 +97,26 @@ fn powershell(script: &str, env: &[(&str, &str)]) -> Result<String, String> {
         const CREATE_NO_WINDOW: u32 = 0x0800_0000;
         command.creation_flags(CREATE_NO_WINDOW);
     }
-    let out = command.output().map_err(|e| format!("PowerShell non disponibile: {e}"))?;
+    command
+}
+
+/// Errore di PowerShell in una riga leggibile (PowerShell va a capo a metà del messaggio).
+fn powershell_error(stderr: &[u8], what: &str) -> String {
+    let err: String = String::from_utf8_lossy(stderr).split_whitespace().collect::<Vec<_>>().join(" ");
+    if err.contains("Not Found") || err.contains("404") {
+        return "su GitHub non c'è ancora una versione pubblicata".into();
+    }
+    let short: String = err.chars().take(160).collect();
+    format!("{what} ({})", if short.is_empty() { "errore sconosciuto" } else { &short })
+}
+
+/// Esegue uno script PowerShell e ne ritorna l'uscita.
+fn powershell(script: &str, env: &[(&str, &str)]) -> Result<String, String> {
+    let out = powershell_command(script, env).output().map_err(|e| format!("PowerShell non disponibile: {e}"))?;
     if out.status.success() {
         Ok(String::from_utf8_lossy(&out.stdout).into_owned())
     } else {
-        // PowerShell va a capo a metà del messaggio: si riunisce
-        let err: String = String::from_utf8_lossy(&out.stderr).split_whitespace().collect::<Vec<_>>().join(" ");
-        if err.contains("Not Found") || err.contains("404") {
-            return Err("su GitHub non c'è ancora una versione pubblicata".into());
-        }
-        let short: String = err.chars().take(160).collect();
-        Err(format!("connessione a GitHub non riuscita ({})", if short.is_empty() { "errore sconosciuto" } else { &short }))
+        Err(powershell_error(&out.stderr, "connessione a GitHub non riuscita"))
     }
 }
 
@@ -119,18 +128,105 @@ fn fetch_latest() -> Result<Release, String> {
     parse_release(&powershell(script, &[("DIMA3D_API", &api)])?)
 }
 
-/// Scarica ed estrae lo zip; ritorna la cartella con i file del pacchetto (quella dell'exe).
-fn download(release: &Release) -> Result<PathBuf, String> {
+/// Avanzamento del download, dal thread che lo segue.
+#[derive(Debug)]
+enum DownloadEvent {
+    /// Byte ricevuti e totali (0 se il server non lo dice)
+    Progress(u64, u64),
+    /// Download finito, estrazione dello zip in corso
+    Extracting,
+    /// Cartella con i file del pacchetto, o l'errore
+    Finished(Result<PathBuf, String>),
+}
+
+/// Script di download: scrive `P ricevuti totali` ogni 150 ms, `E` quando estrae.
+const DOWNLOAD_SCRIPT: &str = "$zip = Join-Path $env:DIMA3D_DIR 'pacchetto.zip'; \
+    $req = [Net.HttpWebRequest]::Create($env:DIMA3D_ZIP); $req.UserAgent = 'Dima3D'; \
+    $resp = $req.GetResponse(); $total = $resp.ContentLength; $in = $resp.GetResponseStream(); \
+    $out = [IO.File]::Create($zip); $buf = New-Object byte[] 262144; $done = 0; \
+    $sw = [Diagnostics.Stopwatch]::StartNew(); $next = 0; \
+    try { while (($n = $in.Read($buf, 0, $buf.Length)) -gt 0) { $out.Write($buf, 0, $n); $done += $n; \
+        if ($sw.ElapsedMilliseconds -ge $next) { $next = $sw.ElapsedMilliseconds + 150; \
+        [Console]::Out.WriteLine(\"P $done $total\"); [Console]::Out.Flush() } } } \
+    finally { $out.Close(); $in.Close(); $resp.Close() }; \
+    [Console]::Out.WriteLine(\"P $done $total\"); [Console]::Out.WriteLine('E'); [Console]::Out.Flush(); \
+    Expand-Archive -Path $zip -DestinationPath (Join-Path $env:DIMA3D_DIR 'file') -Force";
+
+/// Scarica ed estrae lo zip, mandando l'avanzamento a `tx`. `child` tiene il processo, per
+/// poterlo fermare con «Annulla».
+fn download(release: &Release, tx: &std::sync::mpsc::Sender<DownloadEvent>, child: &ChildSlot) -> Result<PathBuf, String> {
+    use std::io::BufRead;
     let dir = std::env::temp_dir().join("Dima3D-aggiornamento");
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
-    let script = "Invoke-WebRequest -UseBasicParsing -Uri $env:DIMA3D_ZIP -OutFile (Join-Path $env:DIMA3D_DIR 'pacchetto.zip') \
-        -Headers @{ 'User-Agent' = 'Dima3D' }; \
-        Expand-Archive -Path (Join-Path $env:DIMA3D_DIR 'pacchetto.zip') -DestinationPath (Join-Path $env:DIMA3D_DIR 'file') -Force";
     let dir_text = dir.to_string_lossy().into_owned();
-    powershell(script, &[("DIMA3D_ZIP", &release.zip_url), ("DIMA3D_DIR", &dir_text)])
-        .map_err(|e| e.replace("connessione a GitHub non riuscita", "download non riuscito"))?;
+    let mut command = powershell_command(DOWNLOAD_SCRIPT, &[("DIMA3D_ZIP", &release.zip_url), ("DIMA3D_DIR", &dir_text)]);
+    command.stdout(std::process::Stdio::piped()).stderr(std::process::Stdio::piped());
+    let mut process = command.spawn().map_err(|e| format!("PowerShell non disponibile: {e}"))?;
+    let stdout = process.stdout.take().ok_or("uscita di PowerShell non leggibile")?;
+    let mut stderr = process.stderr.take();
+    *child.lock().unwrap() = Some(process);
+    for line in std::io::BufReader::new(stdout).lines().map_while(Result::ok) {
+        let mut words = line.split_whitespace();
+        match words.next() {
+            Some("P") => {
+                let mut n = || words.next().and_then(|w| w.parse::<i64>().ok()).unwrap_or(0).max(0) as u64;
+                let (done, total) = (n(), n());
+                let _ = tx.send(DownloadEvent::Progress(done, total));
+            }
+            Some("E") => {
+                let _ = tx.send(DownloadEvent::Extracting);
+            }
+            _ => {}
+        }
+    }
+    let Some(mut process) = child.lock().unwrap().take() else {
+        return Err("annullato".into());
+    };
+    let status = process.wait().map_err(|e| e.to_string())?;
+    if !status.success() {
+        let mut err = Vec::new();
+        if let Some(s) = stderr.as_mut() {
+            let _ = std::io::Read::read_to_end(s, &mut err);
+        }
+        return Err(powershell_error(&err, "download non riuscito"));
+    }
     find_package(&dir.join("file")).ok_or_else(|| format!("nello zip non c'è {EXE}"))
+}
+
+/// Processo del download, condiviso con la finestra per «Annulla».
+type ChildSlot = std::sync::Arc<std::sync::Mutex<Option<std::process::Child>>>;
+
+/// Download in corso.
+struct Download {
+    rx: Receiver<DownloadEvent>,
+    release: Release,
+    child: ChildSlot,
+    done: u64,
+    total: u64,
+    extracting: bool,
+    /// Ultimi campioni (istante, byte) per la velocità media degli ultimi secondi
+    samples: std::collections::VecDeque<(std::time::Instant, u64)>,
+}
+
+impl Download {
+    /// Byte al secondo negli ultimi 3 s.
+    fn speed(&self) -> Option<f64> {
+        let (first, last) = (self.samples.front()?, self.samples.back()?);
+        let seconds = last.0.duration_since(first.0).as_secs_f64();
+        (seconds > 0.3).then(|| (last.1 - first.1) as f64 / seconds)
+    }
+}
+
+/// `12,3 MB`
+fn megabytes(bytes: u64) -> String {
+    format!("{:.1} MB", bytes as f64 / 1_048_576.0).replace('.', ",")
+}
+
+/// `1 min 20 s`, `45 s`
+fn duration_text(seconds: f64) -> String {
+    let s = seconds.round().max(1.0) as u64;
+    if s >= 60 { format!("{} min {} s", s / 60, s % 60) } else { format!("{s} s") }
 }
 
 /// Cartella che contiene l'exe (lo zip ha una cartella `Dima3D-x.y.z` con dentro i file).
@@ -170,10 +266,72 @@ fn install_into(package: &Path, install: &Path) -> Result<(), String> {
     Ok(())
 }
 
+/// Si può scrivere nella cartella (es. no in «Programmi» senza permessi da amministratore).
+fn writable(dir: &Path) -> bool {
+    let probe = dir.join(".dima3d-prova-scrittura");
+    match std::fs::write(&probe, b"") {
+        Ok(()) => {
+            let _ = std::fs::remove_file(&probe);
+            true
+        }
+        Err(e) => e.kind() != std::io::ErrorKind::PermissionDenied,
+    }
+}
+
+/// Testo PowerShell tra apici singoli (l'apice si raddoppia).
+fn quoted(path: &Path) -> String {
+    format!("'{}'", path.to_string_lossy().replace('\'', "''"))
+}
+
+/// Script che installa da amministratore: aspetta che il programma `pid` si chiuda, mette i
+/// file nuovi al posto dei vecchi (se non riesce rimette l'exe com'era) e, con `launch`, riapre
+/// il programma come utente normale (tramite Esplora risorse, non da amministratore).
+fn elevated_script(package: &Path, install: &Path, pid: u32, launch: bool) -> String {
+    format!(
+        "$ErrorActionPreference = 'Stop'\r\n\
+         $pkg = {pkg}\r\n$dest = {dest}\r\n\
+         try {{ Wait-Process -Id {pid} -Timeout 60 -ErrorAction SilentlyContinue }} catch {{ }}\r\n\
+         $exe = Join-Path $dest '{EXE}'\r\n$old = \"$exe.old\"\r\n\
+         try {{\r\n\
+           Remove-Item -LiteralPath $old -Force -ErrorAction SilentlyContinue\r\n\
+           Move-Item -LiteralPath $exe -Destination $old -Force\r\n\
+           Get-ChildItem -LiteralPath $pkg | Copy-Item -Destination $dest -Recurse -Force\r\n\
+           Remove-Item -LiteralPath $old -Force -ErrorAction SilentlyContinue\r\n\
+         }} catch {{\r\n\
+           if (-not (Test-Path -LiteralPath $exe) -and (Test-Path -LiteralPath $old)) {{ Move-Item -LiteralPath $old -Destination $exe -Force }}\r\n\
+         }}\r\n\
+         {start}",
+        pkg = quoted(package),
+        dest = quoted(install),
+        start = if launch { "Start-Process -FilePath 'explorer.exe' -ArgumentList ('\"' + $exe + '\"')\r\n" } else { "" },
+    )
+}
+
+/// Avvia l'installazione da amministratore: Windows chiede il permesso (UAC). Lo script parte
+/// e aspetta che il programma si chiuda; se l'utente rifiuta, errore.
+fn install_elevated(package: &Path, install: &Path) -> Result<(), String> {
+    let script = std::env::temp_dir().join("Dima3D-aggiornamento").join("installa.ps1");
+    std::fs::write(&script, elevated_script(package, install, std::process::id(), true)).map_err(|e| e.to_string())?;
+    let launcher = "Start-Process -FilePath 'powershell.exe' -Verb RunAs -WindowStyle Hidden \
+        -ArgumentList ('-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File \"' + $env:DIMA3D_SCRIPT + '\"')";
+    let script_text = script.to_string_lossy().into_owned();
+    let out = powershell_command(launcher, &[("DIMA3D_SCRIPT", &script_text)]).output().map_err(|e| e.to_string())?;
+    if out.status.success() {
+        Ok(())
+    } else {
+        Err("serve il permesso di amministratore per scrivere nella cartella del programma, e non è stato dato".into())
+    }
+}
+
 /// Installa il pacchetto scaricato e riavvia il programma. Ritorna solo in caso di errore.
+/// Se la cartella del programma non è scrivibile (es. «Programmi») chiede il permesso a Windows:
+/// in quel caso i file li copia lo script da amministratore, dopo la chiusura del programma.
 pub fn install_and_restart(package: &Path) -> Result<(), String> {
     let current = std::env::current_exe().map_err(|e| e.to_string())?;
     let install = current.parent().ok_or("cartella del programma non trovata")?;
+    if !writable(install) {
+        return install_elevated(package, install);
+    }
     install_into(package, install)?;
     std::process::Command::new(install.join(EXE)).spawn().map_err(|e| format!("riavvio non riuscito ({e})"))?;
     Ok(())
@@ -227,30 +385,66 @@ impl crate::app::GestoreApp {
                 Err(_) => ctx.request_repaint_after(std::time::Duration::from_millis(200)),
             }
         }
-        if let Some((rx, _)) = &self.update.download {
-            match rx.try_recv() {
-                Ok(result) => {
-                    let (_, release) = self.update.download.take().unwrap();
-                    match result {
-                        Ok(package) => self.request_install(ctx, package),
-                        Err(e) => {
-                            self.update.message = Some(format!("Aggiornamento a {} non riuscito: {e}.", release.version));
+        let mut finished = None;
+        if let Some(d) = &mut self.update.download {
+            while let Ok(event) = d.rx.try_recv() {
+                match event {
+                    DownloadEvent::Progress(done, total) => {
+                        let now = std::time::Instant::now();
+                        d.done = done;
+                        d.total = total;
+                        d.samples.push_back((now, done));
+                        while d.samples.front().is_some_and(|s| now.duration_since(s.0).as_secs_f64() > 3.0) {
+                            d.samples.pop_front();
                         }
                     }
+                    DownloadEvent::Extracting => d.extracting = true,
+                    DownloadEvent::Finished(result) => finished = Some(result),
                 }
-                Err(_) => ctx.request_repaint_after(std::time::Duration::from_millis(200)),
+            }
+            ctx.request_repaint_after(std::time::Duration::from_millis(100));
+        }
+        if let Some(result) = finished {
+            let release = self.update.download.take().map(|d| d.release);
+            match result {
+                Ok(package) => self.request_install(ctx, package),
+                Err(e) if e == "annullato" => self.update.message = Some("Aggiornamento annullato.".into()),
+                Err(e) => {
+                    let version = release.map(|r| r.version).unwrap_or_default();
+                    self.update.message = Some(format!("Aggiornamento a {version} non riuscito: {e}."));
+                }
             }
         }
     }
 
     fn start_download(&mut self, release: Release) {
         let (tx, rx) = channel();
-        let r = release.clone();
+        let child: ChildSlot = Default::default();
+        let (r, slot) = (release.clone(), child.clone());
         std::thread::spawn(move || {
-            let _ = tx.send(download(&r));
+            let result = download(&r, &tx, &slot);
+            let _ = tx.send(DownloadEvent::Finished(result));
         });
-        self.update.message = Some(format!("Scaricamento di {} {}…", crate::APP_NAME, release.version));
-        self.update.download = Some((rx, release));
+        self.update.message = None;
+        self.update.download = Some(Download {
+            rx,
+            release,
+            child,
+            done: 0,
+            total: 0,
+            extracting: false,
+            samples: Default::default(),
+        });
+    }
+
+    /// Ferma il download in corso.
+    fn cancel_download(&mut self) {
+        if let Some(d) = &self.update.download {
+            if let Some(mut process) = d.child.lock().unwrap().take() {
+                let _ = process.kill();
+                let _ = process.wait();
+            }
+        }
     }
 
     /// Installa subito, o dopo la conferma se ci sono modifiche non salvate.
@@ -331,6 +525,52 @@ pub fn draw(ctx: &egui::Context, app: &mut crate::app::GestoreApp) {
             app.update.offer = None;
         }
     }
+    if let Some(d) = &app.update.download {
+        let mut cancel = false;
+        let title = format!("Aggiornamento a {} {}", crate::APP_NAME, d.release.version);
+        egui::Window::new(title)
+            .id(egui::Id::new("finestra_download"))
+            .collapsible(false)
+            .resizable(false)
+            .anchor(egui::Align2::CENTER_CENTER, egui::Vec2::ZERO)
+            .show(ctx, |ui| {
+                ui.set_width(380.0);
+                if d.extracting {
+                    ui.horizontal(|ui| {
+                        ui.spinner();
+                        ui.label("Estrazione dei file…");
+                    });
+                    return;
+                }
+                let fraction = if d.total > 0 { d.done as f32 / d.total as f32 } else { 0.0 };
+                let amount = if d.total > 0 {
+                    format!("{} di {}", megabytes(d.done), megabytes(d.total))
+                } else {
+                    megabytes(d.done)
+                };
+                ui.add(egui::ProgressBar::new(fraction).text(amount).animate(d.total == 0));
+                let speed = d.speed();
+                let detail = match speed {
+                    Some(s) if s > 0.0 => {
+                        let rate = format!("{}/s", megabytes(s as u64));
+                        if d.total > d.done {
+                            format!("{rate}  ·  mancano circa {}", duration_text((d.total - d.done) as f64 / s))
+                        } else {
+                            rate
+                        }
+                    }
+                    _ if d.done == 0 => "Collegamento a GitHub…".to_string(),
+                    _ => "In attesa di dati…".to_string(),
+                };
+                ui.label(egui::RichText::new(detail).weak());
+                if ui.button("Annulla").clicked() {
+                    cancel = true;
+                }
+            });
+        if cancel {
+            app.cancel_download();
+        }
+    }
     if let Some(message) = app.update.message.clone() {
         let busy = app.update.busy();
         let mut open = true;
@@ -386,8 +626,89 @@ mod tests {
         let release = fetch_latest();
         println!("{release:?}");
         if let (Ok(r), true) = (&release, std::env::var("DIMA3D_SCARICA").is_ok()) {
-            println!("pacchetto: {:?}", download(r));
+            let (tx, rx) = channel();
+            let result = download(r, &tx, &Default::default());
+            let events: Vec<DownloadEvent> = rx.try_iter().collect();
+            println!("{} eventi, ultimi {:?}", events.len(), &events[events.len().saturating_sub(2)..]);
+            println!("pacchetto: {result:?}");
         }
+    }
+
+    /// Lo script da amministratore (qui eseguito senza permessi speciali e senza riavvio) mette i
+    /// file nuovi al posto dei vecchi, unisce le sottocartelle e toglie l'exe vecchio; percorsi con
+    /// spazi e apici.
+    #[test]
+    fn elevated_script_replaces_the_files() {
+        let base = std::env::temp_dir().join("dima3d prova l'amministratore");
+        let _ = std::fs::remove_dir_all(&base);
+        let (package, install) = (base.join("pacchetto"), base.join("Programmi").join("Dima 3D"));
+        std::fs::create_dir_all(package.join("licenses")).unwrap();
+        std::fs::create_dir_all(install.join("licenses")).unwrap();
+        std::fs::write(package.join(EXE), "nuovo").unwrap();
+        std::fs::write(package.join("licenses").join("a.txt"), "nuova").unwrap();
+        std::fs::write(install.join(EXE), "vecchio").unwrap();
+        std::fs::write(install.join("licenses").join("b.txt"), "resta").unwrap();
+        let script = base.join("installa.ps1");
+        // Processo inesistente: non c'è da aspettare
+        std::fs::write(&script, elevated_script(&package, &install, 999_999, false)).unwrap();
+        let status = std::process::Command::new("powershell")
+            .args(["-NoProfile", "-ExecutionPolicy", "Bypass", "-File"])
+            .arg(&script)
+            .status()
+            .unwrap();
+        assert!(status.success());
+        assert_eq!(std::fs::read_to_string(install.join(EXE)).unwrap(), "nuovo");
+        assert_eq!(std::fs::read_to_string(install.join("licenses").join("a.txt")).unwrap(), "nuova");
+        assert!(install.join("licenses").join("b.txt").exists());
+        assert!(!install.join("licenses").join("licenses").exists(), "niente cartelle annidate");
+        assert!(!install.join(format!("{EXE}.old")).exists(), "exe vecchio tolto");
+        let _ = std::fs::remove_dir_all(&base);
+    }
+
+    /// La finestra del download mostra quanto manca, la velocità e «Annulla».
+    #[test]
+    fn download_window_shows_progress_and_speed() {
+        let mut app = crate::app::GestoreApp::new_headless();
+        let (tx, rx) = channel();
+        let release = parse_release(
+            "v9.0.0\nhttps://github.com/matteo80/dima3d/releases/download/v9.0.0/Dima3D-9.0.0.zip\n\n",
+        )
+        .unwrap();
+        let start = std::time::Instant::now() - std::time::Duration::from_secs(2);
+        app.update.download = Some(Download {
+            rx,
+            release,
+            child: Default::default(),
+            done: 0,
+            total: 0,
+            extracting: false,
+            samples: [(start, 0)].into_iter().collect(),
+        });
+        tx.send(DownloadEvent::Progress(12 * 1_048_576, 36 * 1_048_576)).unwrap();
+        let ctx = egui::Context::default();
+        let mut texts = Vec::new();
+        for _ in 0..2 {
+            let out = ctx.run(Default::default(), |ctx| draw(ctx, &mut app));
+            texts.clear();
+            for c in &out.shapes {
+                if let egui::epaint::Shape::Text(t) = &c.shape {
+                    texts.push(t.galley.text().to_string());
+                }
+            }
+        }
+        assert!(texts.iter().any(|t| t == "12,0 MB di 36,0 MB"), "{texts:?}");
+        // 12 MB in 2 s: 6 MB/s, mancano 24 MB → 4 s
+        assert!(texts.iter().any(|t| t.starts_with("6,0 MB/s") && t.ends_with("mancano circa 4 s")), "{texts:?}");
+        assert!(texts.iter().any(|t| t == "Annulla"), "{texts:?}");
+        drop(tx);
+    }
+
+    #[test]
+    fn sizes_and_times_are_readable() {
+        assert_eq!(megabytes(36_290_000), "34,6 MB");
+        assert_eq!(duration_text(45.2), "45 s");
+        assert_eq!(duration_text(80.0), "1 min 20 s");
+        assert!(writable(&std::env::temp_dir()));
     }
 
     /// I file nuovi prendono il posto dei vecchi, l'exe in uso resta come `.old`; se la copia

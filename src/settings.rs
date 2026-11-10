@@ -130,6 +130,8 @@ pub struct Settings {
     pub skipped_version: String,
     /// Ultime misure della cabina generata
     pub cabin: crate::cabin::CabinParams,
+    /// Mostra il centro della cabina con le sue coordinate nella vista
+    pub cabin_center: bool,
 }
 
 /// Sezioni richiudibili della finestra Posizione
@@ -159,6 +161,7 @@ impl Default for Settings {
             check_updates: true,
             skipped_version: String::new(),
             cabin: crate::cabin::CabinParams::default(),
+            cabin_center: false,
         }
     }
 }
@@ -273,6 +276,12 @@ impl Settings {
                 "verifica_aggiornamenti" => s.check_updates = value != "0",
                 "versione_saltata" => s.skipped_version = value.to_string(),
                 "cabina" => s.cabin = crate::cabin::CabinParams::from_text(value).unwrap_or_default(),
+                "cabina_scritta" => {
+                    if let Some(label) = crate::cabin::CabinLabel::from_text(value) {
+                        s.cabin.label = label;
+                    }
+                }
+                "cabina_centro" => s.cabin_center = value == "1",
                 "step_deviazione" => {
                     if let Ok(v) = value.parse::<f32>() {
                         s.step.deviation = v.clamp(*STEP_DEVIATION_RANGE.start(), *STEP_DEVIATION_RANGE.end());
@@ -343,6 +352,8 @@ impl Settings {
         out.push_str(&format!("posizione_sezioni = {sections}\n"));
         out.push_str(&format!("verifica_aggiornamenti = {}\n", u8::from(self.check_updates)));
         out.push_str(&format!("cabina = {}\n", self.cabin.to_text()));
+        out.push_str(&format!("cabina_scritta = {}\n", self.cabin.label.to_text()));
+        out.push_str(&format!("cabina_centro = {}\n", u8::from(self.cabin_center)));
         if !self.skipped_version.is_empty() {
             out.push_str(&format!("versione_saltata = {}\n", self.skipped_version));
         }
@@ -405,7 +416,13 @@ mod tests {
             position_sections: [false, true, false, true, true],
             check_updates: false,
             skipped_version: "0.3.1".to_string(),
-            cabin: crate::cabin::CabinParams { length: 18000.0, glass: false, ..Default::default() },
+            cabin: crate::cabin::CabinParams {
+                length: 18000.0,
+                glass: false,
+                label: crate::cabin::CabinLabel { text: "Cabina primer | linea 2".into(), inside: true, ..Default::default() },
+                ..Default::default()
+            },
+            cabin_center: true,
         };
         s.add_recent(Path::new(r"C:\a b\uno.wrl"));
         s.add_recent(Path::new(r"C:\due.wrl"));

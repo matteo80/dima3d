@@ -936,16 +936,28 @@ Fatto:
       riavvio. Con modifiche non salvate chiede prima. Solo zip delle Release del progetto. «Salta questa versione».
       Pubblicare: `pacchetto.ps1`, commit e push, poi `pubblica.ps1 -Note note.md` (gh release create).
 - [x] Autore in Info e nel LEGGIMI: matteo80 (scelta dell'utente: resta anonimo).
+- [x] Aggiornamento (0.2.5): barra di avanzamento con MB, velocità e tempo rimanente, «Annulla»; cartella protetta
+      (es. Programmi): script da amministratore con la richiesta di Windows (UAC), che aspetta la chiusura, copia i
+      file e riapre il programma come utente normale (tramite Esplora risorse). Provato dall'utente: aggiornamento
+      0.2.3 → 0.2.4 riuscito in Documenti, fallito in Programmi prima di questa modifica.
+- [x] Cabina nel progetto: sezione `[cabina]` con le misure (formato 3); alla riapertura si ricostruisce e riprende
+      posizione, parti nascoste, colori; anche un progetto con la sola cabina.
+- [x] Scritta sulle pareti della cabina (`src/text3d.rs`: contorni del font con ab_glyph, riempimento con
+      lyon_tessellation, estrusione): testo, font di Windows o file TTF/OTF, altezza delle maiuscole, rilievo, colore,
+      pareti (laterali, una, testate, tutte), lato esterno o interno, spostamento dal centro, quota. Si legge dritta
+      da chi guarda quella faccia. Salvata nelle preferenze e nel progetto (`scritta = …`).
+- [x] Centro cabina (opzione nella finestra Cabina): assi e coordinate X Y Z (e rotazione attorno a Z) a metà
+      lunghezza, sull'asse, al piano del grigliato; segue la cabina spostata con Posizione.
+- [x] Valori predefiniti della cabina (richiesta dell'utente): vetrata da 1000 a 3000 mm, barre del grigliato a passo
+      100 mm e larghe 20 mm.
 - [x] **Cabina dalle misure** (`src/cabin.rs`, finestra `ui/cabin_panel.rs`, pulsante «Cabina»): grigliato a barre
       piatte diviso in moduli, pareti laterali modulari (montanti ogni 2 m, zoccolo sotto il grigliato, pannelli,
       fascia vetrata facoltativa), testate con le aperture di ingresso e uscita centrate sull'asse, soffitto
       semitrasparente. Zero all'ingresso, sull'asse, al piano del grigliato (scelte dell'utente). Misure predefinite
-      ricavate dalle cabine dei file di riferimento; ricordate nelle preferenze. La cabina è un file «Cabina» in
+      tipiche di una cabina; ricordate nelle preferenze. La cabina è un file «Cabina» in
       memoria (VRML 2.0 in mm): albero, Posizione, export come gli altri; «Aggiorna» la sostituisce.
 
 Da fare (richieste dell'utente 2026-11-10):
-- [ ] Cabina nel progetto (.dima3d): oggi non viene salvata ("modelli senza file"); salvare le misure e
-      ricostruirla all'apertura, poi riapplicare spostamenti e modifiche come per le copie.
 - [ ] Cabina: porte laterali e vani per i robot (l'utente per ora non li ha chiesti); poi i robot dai file di
       configurazione rispetto al robot di riferimento, e la cabina messa nella posizione giusta.
 - [ ] Linee (`IndexedLineSet`) non disegnate: restano nell'avviso (es. contorni a pavimento nelle celle).

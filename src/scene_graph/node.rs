@@ -187,6 +187,8 @@ pub struct SourceFile {
     pub copy_of: Option<crate::scene_graph::copy::CopyOf>,
     /// Prossimo numero fisso libero per un gruppo creato in questo file (vedi `NodeInfo::origin`)
     pub next_origin: u32,
+    /// Cabina generata dalle misure (vedi `crate::cabin`); `path` è `None`
+    pub cabin: Option<crate::cabin::CabinParams>,
 }
 
 /// Informazioni accessorie, allineate 1:1 con `SceneGraph::nodes`.
@@ -405,6 +407,7 @@ impl SceneGraph {
             step: None,
             copy_of: None,
             next_origin: self.nodes.len() as u32,
+            cabin: None,
         }];
         for (i, inf) in self.info.iter_mut().enumerate() {
             inf.origin = i as u32;

@@ -55,8 +55,8 @@ Formati
 Le preferenze sono salvate in %APPDATA%\Dima3D\impostazioni.txt.
 
 Aggiornamenti: all'avvio il programma chiede a GitHub se c'è una versione nuova e, se c'è,
-propone di installarla (si spegne in Preferenze; a mano dalla finestra Info). La cartella
-del programma deve essere scrivibile.
+propone di installarla (si spegne in Preferenze; a mano dalla finestra Info). Se il programma
+sta in una cartella protetta (es. Programmi), Windows chiede il permesso di amministratore.
 
 Autore: matteo80.
 Il codice è stato scritto interamente con l'intelligenza artificiale (Claude, di Anthropic):
