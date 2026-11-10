@@ -909,10 +909,12 @@ Fatto:
       contenuto dei gruppi cambiati (`figli`). L'ordine dei numeri non è più quello dell'albero: chi visita i figli
       prima dei padri usa `SceneGraph::tree_order` (`scene_graph/tree_edit.rs`).
 - [x] Toolbar: «Modifiche non esportate» non copre più i pulsanti quando la finestra è stretta (resta l'icona ⚠).
+- [x] **Esporta selezionati** (dopo la 0.2.0): tasto destro nell'albero e nella vista 3D, menu ▾ accanto a «Esporta»,
+      Ctrl+Maiusc+E. Si scrivono solo i pezzi visibili dei nodi selezionati, con i gruppi che li contengono; il nodo del
+      file solo se la selezione tocca più file. Vale per WRL, STL, IV e HSF (`exporter::Scope`: Visible / Node /
+      Selected, al posto del vecchio `node: Option<u32>`). Non toglie l'avviso «Modifiche non esportate».
 
 Da fare (richieste dell'utente 2026-11-10):
-- [ ] **Esporta selezionati**: export dei soli elementi selezionati (oggi si esporta tutto il visibile, o un file intero
-      dal suo nodo nell'albero).
 - [ ] **Segno della X nello scostamento**: l'utente deve invertire la X dell'offset calcolato perché il pezzo vada nella
       direzione giusta (succedeva anche con lo script). Ipotesi da verificare con una prova con Y e rotazioni diverse da
       zero: le basi del robot (cabina) hanno l'asse X opposto a quello del veicolo (scocca con X verso il retro), cioè

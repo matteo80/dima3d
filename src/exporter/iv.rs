@@ -16,7 +16,7 @@
 use std::collections::HashMap;
 use std::io::{self, BufWriter, Write};
 
-use super::writer::{compute_has_visible, coordinate_decimals, push_fixed, push_uint, ExportStats, METERS_DECIMALS};
+use super::writer::{coordinate_decimals, push_fixed, push_uint, ExportStats, Scope, METERS_DECIMALS};
 use crate::scene_graph::{NodeKind, SceneGraph, SceneNode};
 
 /// Cifre decimali delle normali nel formato di testo (errore massimo ~0,05°).
@@ -308,11 +308,11 @@ fn write_all(w: &mut dyn IvWriter, ctx: &mut Ctx, top: &[u32]) -> io::Result<()>
     w.finish()
 }
 
-/// Esporta le parti visibili (di tutta la scena o del sotto-albero `node`) in Open Inventor.
+/// Esporta le parti visibili di `scope` in Open Inventor.
 /// `default_color` è il colore dei pezzi senza materiale.
 pub fn export_iv(
     scene: &SceneGraph,
-    node: Option<u32>,
+    scope: &Scope,
     path: &std::path::Path,
     binary: bool,
     normals: bool,
@@ -320,14 +320,11 @@ pub fn export_iv(
     default_color: [f32; 4],
 ) -> io::Result<ExportStats> {
     let file = BufWriter::with_capacity(1 << 20, std::fs::File::create(path)?);
-    let files = scene.open_files().count();
-    let (roots, write_file_nodes) = match node {
-        Some(n) => (vec![n], false),
-        None => (scene.roots.clone(), files > 1),
-    };
+    let has_visible = scope.has_visible(scene);
+    let (roots, write_file_nodes) = scope.roots(scene, &has_visible);
     let mut ctx = Ctx {
         scene,
-        has_visible: compute_has_visible(scene),
+        has_visible,
         write_file_nodes,
         normals,
         // In metri i numeri sono mille volte più piccoli: tre cifre decimali in più, fino al
@@ -379,7 +376,7 @@ DEF Assieme Transform { translation 10 0 0 children [
         );
         let path = std::env::temp_dir().join("dima3d_unita.iv");
         for (meters, wanted) in [(false, "2900 -900 650"), (true, "2.9 -0.9 0.65")] {
-            export_iv(&scene, None, &path, false, false, meters, [0.5, 0.5, 0.5, 1.0]).unwrap();
+            export_iv(&scene, &super::Scope::Visible, &path, false, false, meters, [0.5, 0.5, 0.5, 1.0]).unwrap();
             let text = std::fs::read_to_string(&path).unwrap();
             assert!(text.contains(wanted), "{meters}: {text}");
         }
@@ -389,7 +386,7 @@ DEF Assieme Transform { translation 10 0 0 children [
     #[test]
     fn ascii_has_named_separators_colors_and_world_coordinates() {
         let path = std::env::temp_dir().join("gestore_wrl_test.iv");
-        let stats = export_iv(&scene(), None, &path, false, true, false, [0.5, 0.5, 0.5, 1.0]).unwrap();
+        let stats = export_iv(&scene(), &super::Scope::Visible, &path, false, true, false, [0.5, 0.5, 0.5, 1.0]).unwrap();
         assert_eq!(stats.shapes_written, 2);
         let text = std::fs::read_to_string(&path).unwrap();
         assert!(text.starts_with("#Inventor V2.1 ascii\n"), "{text}");
@@ -417,7 +414,7 @@ DEF Assieme Transform { translation 10 0 0 children [
         push_string(&mut out, "Material");
         assert_eq!(out, b"\0\0\0\x03DEF\0\0\0\0\x08Material");
         let path = std::env::temp_dir().join("gestore_wrl_test_bin.iv");
-        export_iv(&scene(), None, &path, true, false, false, [0.5, 0.5, 0.5, 1.0]).unwrap();
+        export_iv(&scene(), &super::Scope::Visible, &path, true, false, false, [0.5, 0.5, 0.5, 1.0]).unwrap();
         let data = std::fs::read(&path).unwrap();
         assert!(data.starts_with(b"#Inventor V2.1 binary  \n"));
         assert_eq!(data.len() % 4, 0);
@@ -444,7 +441,7 @@ mod real_file {
             for (suffix, binary, normals) in [("testo", false, true), ("bin", true, false), ("bin_normali", true, true)] {
                 let out = std::env::temp_dir().join(format!("gestore_iv_{name}_{suffix}.iv"));
                 let t = std::time::Instant::now();
-                let stats = super::export_iv(scene, None, &out, binary, normals, false, [0.5, 0.5, 0.5, 1.0]).unwrap();
+                let stats = super::export_iv(scene, &super::Scope::Visible, &out, binary, normals, false, [0.5, 0.5, 0.5, 1.0]).unwrap();
                 let size = std::fs::metadata(&out).unwrap().len();
                 println!("{}: {} pezzi, {:.1} MB in {:?}", out.display(), stats.shapes_written, size as f64 / 1e6, t.elapsed());
             }

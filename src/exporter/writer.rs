@@ -42,6 +42,53 @@ impl ExportOptions {
     }
 }
 
+/// Cosa esportare (sempre e solo i pezzi visibili).
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub enum Scope {
+    /// Tutta la scena.
+    #[default]
+    Visible,
+    /// Un solo sotto-albero (es. un file dell'insieme), scritto come radice.
+    Node(u32),
+    /// I sotto-alberi dei nodi selezionati, con i gruppi che li contengono (l'albero resta
+    /// quello della scena, senza gli altri pezzi).
+    Selected(Vec<u32>),
+}
+
+impl Scope {
+    /// Nodi da cui partire e se scrivere i nodi dei file (solo con più file nell'export).
+    pub(super) fn roots(&self, scene: &SceneGraph, has_visible: &[bool]) -> (Vec<u32>, bool) {
+        match self {
+            Scope::Node(n) => (vec![*n], false),
+            Scope::Visible => (scene.roots.clone(), scene.open_files().count() > 1),
+            Scope::Selected(_) => {
+                let files = scene.open_files().filter(|s| has_visible.get(s.node as usize) == Some(&true)).count();
+                (scene.roots.clone(), files > 1)
+            }
+        }
+    }
+
+    /// Per ogni nodo: true se il suo sotto-albero contiene almeno una Shape visibile da esportare.
+    pub(super) fn has_visible(&self, scene: &SceneGraph) -> Vec<bool> {
+        let Scope::Selected(nodes) = self else { return compute_has_visible(scene) };
+        let mut inside = vec![false; scene.nodes.len()];
+        for &n in nodes {
+            if (n as usize) < inside.len() && !inside[n as usize] {
+                scene.for_each_subtree_node(n, |i| inside[i as usize] = true);
+            }
+        }
+        visible_where(scene, |i| inside[i])
+    }
+
+    /// Nome dell'export per i formati che ne scrivono uno (il primo file, o il nodo esportato).
+    pub(super) fn root_name(&self, scene: &SceneGraph) -> String {
+        match self {
+            Scope::Node(n) => scene.display_name(*n),
+            _ => scene.sources.first().map(|s| s.name.clone()).unwrap_or_default(),
+        }
+    }
+}
+
 /// Millimetri → metri.
 pub const MM_TO_METERS: f32 = 0.001;
 
@@ -53,17 +100,17 @@ pub const METERS_DECIMALS: u32 = 6;
 /// Vedi [`export_with`].
 #[cfg(test)]
 pub fn export_visible_wrl(scene: &SceneGraph, output_path: &std::path::Path) -> io::Result<ExportStats> {
-    export_with(scene, None, output_path, ExportOptions::VERBATIM)
+    export_with(scene, &Scope::Visible, output_path, ExportOptions::VERBATIM)
 }
 
 /// Esporta le parti visibili di un solo sotto-albero (es. un file dell'insieme), copiando i
 /// campi originali.
 #[cfg(test)]
 pub fn export_subtree_wrl(scene: &SceneGraph, node: u32, output_path: &std::path::Path) -> io::Result<ExportStats> {
-    export_with(scene, Some(node), output_path, ExportOptions::VERBATIM)
+    export_with(scene, &Scope::Node(node), output_path, ExportOptions::VERBATIM)
 }
 
-/// Esporta gli elementi visibili (di tutta la scena o del sotto-albero `node`).
+/// Esporta gli elementi visibili di `scope` (tutta la scena, un sotto-albero o la selezione).
 ///
 /// * La gerarchia dei macro-oggetti viene mantenuta come `DEF Nome Group { children [...] }`
 ///   (i contenitori senza parti visibili vengono omessi): riaprendo il file
@@ -81,13 +128,13 @@ pub fn export_subtree_wrl(scene: &SceneGraph, node: u32, output_path: &std::path
 /// nodo non viene scritto, così riaprendo l'export l'albero è quello di partenza.
 pub fn export_with(
     scene: &SceneGraph,
-    node: Option<u32>,
+    scope: &Scope,
     output_path: &std::path::Path,
     options: ExportOptions,
 ) -> io::Result<ExportStats> {
     let file = std::fs::File::create(output_path)?;
     let mut w = BufWriter::with_capacity(1 << 20, file);
-    let stats = write_scene(scene, node, &mut w, options)?;
+    let stats = write_scene(scene, scope, &mut w, options)?;
     w.flush()?;
     tracing::info!(
         "Esportato {}: {} shape, {} gruppi",
@@ -99,9 +146,9 @@ pub fn export_with(
 }
 
 /// Dimensione in byte del file che [`export_with`] scriverebbe, senza scriverlo.
-pub fn estimate_size(scene: &SceneGraph, node: Option<u32>, options: ExportOptions) -> u64 {
+pub fn estimate_size(scene: &SceneGraph, scope: &Scope, options: ExportOptions) -> u64 {
     let mut counter = ByteCounter(0);
-    let _ = write_scene(scene, node, &mut counter, options);
+    let _ = write_scene(scene, scope, &mut counter, options);
     counter.0
 }
 
@@ -118,14 +165,9 @@ impl Write for ByteCounter {
     }
 }
 
-fn write_scene(scene: &SceneGraph, node: Option<u32>, w: &mut impl Write, options: ExportOptions) -> io::Result<ExportStats> {
-    let files = scene.open_files().count();
-    let (roots, write_file_nodes) = match node {
-        Some(n) => (vec![n], false),
-        None => (scene.roots.clone(), files > 1),
-    };
-
-    let has_visible = compute_has_visible(scene);
+fn write_scene(scene: &SceneGraph, scope: &Scope, w: &mut impl Write, options: ExportOptions) -> io::Result<ExportStats> {
+    let has_visible = scope.has_visible(scene);
+    let (roots, write_file_nodes) = scope.roots(scene, &has_visible);
     let mut visible = 0;
     for &r in &roots {
         scene.for_each_subtree_node(r, |i| {
@@ -224,11 +266,17 @@ pub(crate) fn push_uint(out: &mut Vec<u8>, mut v: u64) {
 
 /// Per ogni nodo: true se il suo sotto-albero contiene almeno una Shape visibile.
 pub(super) fn compute_has_visible(scene: &SceneGraph) -> Vec<bool> {
+    visible_where(scene, |_| true)
+}
+
+/// Come [`compute_has_visible`], contando solo le Shape per cui `keep` è vero.
+fn visible_where(scene: &SceneGraph, keep: impl Fn(usize) -> bool) -> Vec<bool> {
     let mut flags: Vec<bool> = scene
         .nodes
         .iter()
         .zip(&scene.info)
-        .map(|(n, i)| !i.deleted && matches!(n, SceneNode::Shape { visible: true, .. }))
+        .enumerate()
+        .map(|(k, (n, i))| !i.deleted && matches!(n, SceneNode::Shape { visible: true, .. }) && keep(k))
         .collect();
     // Al contrario dell'ordine dell'albero i figli vengono prima del padre
     for &i in scene.tree_order().iter().rev() {
@@ -794,7 +842,7 @@ DEF Assieme Transform {
 
         for options in [ExportOptions::default(), ExportOptions::VERBATIM] {
             let path = std::env::temp_dir().join("dima3d_export_transform.wrl");
-            export_with(&scene, None, &path, options).unwrap();
+            export_with(&scene, &Scope::Visible, &path, options).unwrap();
             let text = std::fs::read_to_string(&path).unwrap();
             let again = crate::parser::parse_wrl(text.as_bytes());
             let _ = std::fs::remove_file(&path);
@@ -828,7 +876,7 @@ DEF Pezzo Group { children [ Transform { translation 215 0 1665 rotation 0 1 0 0
         let pezzo = (0..scene.nodes.len() as u32).find(|&n| scene.display_name(n) == "Pezzo").unwrap();
         for options in [ExportOptions { meters: true, ..Default::default() }, ExportOptions { meters: true, ..ExportOptions::VERBATIM }] {
             let path = std::env::temp_dir().join("dima3d_export_metri.wrl");
-            export_with(&scene, None, &path, options).unwrap();
+            export_with(&scene, &Scope::Visible, &path, options).unwrap();
             let text = std::fs::read_to_string(&path).unwrap();
             let _ = std::fs::remove_file(&path);
             assert!(text.contains("translation 0.215 0 1.665\n"), "{options:?}\n{text}");
@@ -879,6 +927,62 @@ DEF Pezzo Group { children [ Transform { translation 215 0 1665 rotation 0 1 0 0
         assert_eq!(again.display_name(again.roots[0]), "Sportello");
         let _ = std::fs::remove_file(path);
         let _ = std::fs::remove_file(single);
+    }
+
+    /// "Esporta selezionati": solo i pezzi scelti (e visibili), con i gruppi che li contengono; il
+    /// nodo del file solo se la selezione tocca più file. Uguale in tutti i formati.
+    #[test]
+    fn export_of_the_selection() {
+        use crate::scene_graph::node::multi_file_tests::two_files;
+        let mut scene = two_files();
+        let shapes_of = |scene: &SceneGraph, root: u32| {
+            let mut v = Vec::new();
+            scene.for_each_subtree_node(root, |i| {
+                if matches!(scene.nodes[i as usize], SceneNode::Shape { .. }) {
+                    v.push(i);
+                }
+            });
+            v
+        };
+        let (a, b) = (shapes_of(&scene, scene.roots[0]), shapes_of(&scene, scene.roots[1]));
+        let dir = std::env::temp_dir();
+        let path = dir.join("gestore_wrl_export_selezione.wrl");
+
+        // Un pezzo per file: due pezzi, ognuno nel Group del suo file
+        let scope = Scope::Selected(vec![a[0], b[1]]);
+        let stats = export_with(&scene, &scope, &path, ExportOptions::default()).unwrap();
+        assert_eq!(stats.shapes_written, 2);
+        let again = crate::parser::parse_wrl(&std::fs::read(&path).unwrap());
+        let names: Vec<String> = again.roots.iter().map(|&r| again.display_name(r)).collect();
+        assert_eq!(names, vec!["a", "b"]);
+        assert_eq!(estimate_size(&scene, &scope, ExportOptions::default()), std::fs::metadata(&path).unwrap().len());
+
+        // Il gruppo di un file solo: niente nodo del file, si ritrova l'albero di partenza
+        let scope = Scope::Selected(vec![scene.roots[1]]);
+        assert_eq!(export_with(&scene, &scope, &path, ExportOptions::default()).unwrap().shapes_written, 2);
+        let again = crate::parser::parse_wrl(&std::fs::read(&path).unwrap());
+        assert_eq!(again.display_name(again.roots[0]), "Sportello");
+
+        // I pezzi nascosti della selezione restano fuori
+        scene.set_subtree_visible(b[0], false);
+        assert_eq!(export_with(&scene, &scope, &path, ExportOptions::default()).unwrap().shapes_written, 1);
+
+        // Gli altri formati scrivono gli stessi pezzi
+        let scope = Scope::Selected(vec![a[0], b[1]]);
+        let stl = dir.join("gestore_export_selezione.stl");
+        assert_eq!(super::super::stl::export_stl(&scene, &scope, &stl, false).unwrap().shapes_written, 2);
+        let iv = dir.join("gestore_export_selezione.iv");
+        let color = [0.5, 0.5, 0.5, 1.0];
+        assert_eq!(super::super::iv::export_iv(&scene, &scope, &iv, false, true, false, color).unwrap().shapes_written, 2);
+        let hsf = dir.join("gestore_export_selezione.hsf");
+        assert_eq!(super::super::hsf::export_hsf(&scene, &scope, &hsf, color, true).unwrap().shapes_written, 2);
+
+        // Selezione senza pezzi visibili: un file vuoto, nessun pezzo
+        let scope = Scope::Selected(vec![b[0]]);
+        assert_eq!(export_with(&scene, &scope, &path, ExportOptions::default()).unwrap().shapes_written, 0);
+        for p in [path, stl, iv, hsf] {
+            let _ = std::fs::remove_file(p);
+        }
     }
 
     /// Confronto tra due WRL con la stessa geometria scritta in modo diverso (es. jt2wrl prima e
@@ -953,9 +1057,9 @@ DEF Assieme Transform { translation 10 0 0 children [
         let scene = crate::parser::parse_wrl(wrl);
         let path = std::env::temp_dir().join("gestore_wrl_export_compatto.wrl");
         let options = ExportOptions { compact: true, normals: true, meters: false };
-        export_with(&scene, None, &path, options).unwrap();
+        export_with(&scene, &Scope::Visible, &path, options).unwrap();
         let out = std::fs::read(&path).unwrap();
-        assert_eq!(estimate_size(&scene, None, options), out.len() as u64);
+        assert_eq!(estimate_size(&scene, &Scope::Visible, options), out.len() as u64);
         let text = String::from_utf8_lossy(&out);
         assert!(!text.contains("\n  "), "niente rientri:\n{text}");
         assert!(text.contains("DEF Assieme Group") && text.contains("DEF A Group"));
@@ -979,11 +1083,11 @@ DEF Assieme Transform { translation 10 0 0 children [
         }
 
         let lighter = ExportOptions { compact: true, normals: false, meters: false };
-        export_with(&scene, None, &path, lighter).unwrap();
+        export_with(&scene, &Scope::Visible, &path, lighter).unwrap();
         let out = std::fs::read(&path).unwrap();
         let text = String::from_utf8_lossy(&out);
         assert!(!text.contains("normal") && text.contains("creaseAngle 0.5"), "{text}");
-        assert!(estimate_size(&scene, None, lighter) < estimate_size(&scene, None, options));
+        assert!(estimate_size(&scene, &Scope::Visible, lighter) < estimate_size(&scene, &Scope::Visible, options));
         let _ = std::fs::remove_file(path);
     }
 

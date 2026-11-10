@@ -400,8 +400,31 @@ impl GestoreApp {
 
     /// Esporta un solo sotto-albero (es. un file dell'insieme) con la finestra "Salva come".
     pub fn export_node_dialog(&mut self, node: u32) {
+        self.export_part_dialog(crate::exporter::Scope::Node(node));
+    }
+
+    /// Esporta le parti visibili dei nodi selezionati con la finestra "Salva come".
+    pub fn export_selection_dialog(&mut self, nodes: Vec<u32>) {
+        if nodes.is_empty() {
+            self.ui_state.status_message = "Esporta selezionati: non c'è niente di selezionato.".to_string();
+            return;
+        }
+        self.export_part_dialog(crate::exporter::Scope::Selected(nodes));
+    }
+
+    /// "Salva come" per un file dell'insieme o per la selezione: nome e cartella dal primo nodo.
+    fn export_part_dialog(&mut self, scope: crate::exporter::Scope) {
+        use crate::exporter::Scope;
         let Some(scene) = &self.scene_graph else { return };
-        let name = scene.display_name(node);
+        let (first, name) = match &scope {
+            Scope::Node(n) => (*n, scene.display_name(*n)),
+            Scope::Selected(nodes) if nodes.len() == 1 => (nodes[0], scene.display_name(nodes[0])),
+            Scope::Selected(nodes) => {
+                let stem = self.project.current_path.as_ref().and_then(|p| p.file_stem()).map(|s| s.to_string_lossy().into_owned());
+                (nodes[0], format!("{}_selezione", stem.unwrap_or_else(|| "export".to_string())))
+            }
+            Scope::Visible => return,
+        };
         let stem = name.strip_suffix(".wrl").or(name.strip_suffix(".WRL")).unwrap_or(&name);
         let mut dialog = rfd::FileDialog::new()
             .add_filter("VRML World", &["wrl"])
@@ -410,9 +433,8 @@ impl GestoreApp {
             .add_filter("HSF (HOOPS)", &["hsf"])
             .set_file_name(format!("{}_export.wrl", crate::exporter::sanitize_identifier(stem)));
         let file_dir = scene
-            .sources
-            .iter()
-            .find(|s| s.node == node)
+            .source_of_node(first)
+            .and_then(|i| scene.sources.get(i))
             .or(scene.sources.first())
             .and_then(|s| s.path.as_ref())
             .and_then(|p| p.parent());
@@ -420,11 +442,11 @@ impl GestoreApp {
             dialog = dialog.set_directory(dir);
         }
         let Some(path) = dialog.save_file() else { return };
-        self.start_export(path, Some(node), None);
+        self.start_export(path, scope, None);
     }
 
-    /// Avvia l'export in un thread: `node` = solo quel sotto-albero, altrimenti tutto il visibile.
-    pub fn start_export(&mut self, path: PathBuf, node: Option<u32>, then: Option<Pending>) -> bool {
+    /// Avvia l'export in un thread (`scope`: tutto il visibile, un sotto-albero o la selezione).
+    pub fn start_export(&mut self, path: PathBuf, scope: crate::exporter::Scope, then: Option<Pending>) -> bool {
         if self.project.busy() {
             return false;
         }
@@ -435,19 +457,20 @@ impl GestoreApp {
         let default_color = self.settings.default_color;
         let extension = path.extension().map(|e| e.to_string_lossy().to_ascii_lowercase()).unwrap_or_default();
         let Some(scene) = self.scene_graph.take() else { return false };
+        let whole = scope == crate::exporter::Scope::Visible;
         let (tx, rx) = std::sync::mpsc::channel();
         let out = path.clone();
         std::thread::spawn(move || {
             let result = match extension.as_str() {
-                "stl" => crate::exporter::stl::export_stl(&scene, node, &out, stl_ascii),
-                "iv" => crate::exporter::iv::export_iv(&scene, node, &out, iv_binary, options.normals, iv_meters, default_color),
-                "hsf" => crate::exporter::hsf::export_hsf(&scene, node, &out, default_color, options.normals),
-                _ => crate::exporter::export_with(&scene, node, &out, options),
+                "stl" => crate::exporter::stl::export_stl(&scene, &scope, &out, stl_ascii),
+                "iv" => crate::exporter::iv::export_iv(&scene, &scope, &out, iv_binary, options.normals, iv_meters, default_color),
+                "hsf" => crate::exporter::hsf::export_hsf(&scene, &scope, &out, default_color, options.normals),
+                _ => crate::exporter::export_with(&scene, &scope, &out, options),
             };
             let _ = tx.send((scene, result));
         });
         self.ui_state.status_message = format!("Esportazione in corso: {}", path.display());
-        self.project.export_job = Some(ExportJob { rx, path, whole: node.is_none(), then, started: Instant::now() });
+        self.project.export_job = Some(ExportJob { rx, path, whole, then, started: Instant::now() });
         true
     }
 
@@ -525,7 +548,7 @@ impl GestoreApp {
             dialog = dialog.set_directory(dir);
         }
         let Some(path) = dialog.save_file() else { return false };
-        self.start_export(path, None, then)
+        self.start_export(path, crate::exporter::Scope::Visible, then)
     }
 
     /// Esegue l'operazione rimasta in attesa dopo la conferma.
@@ -1026,9 +1049,9 @@ mod tests {
         assert!(app.is_dirty());
         let nodes = app.scene_graph.as_ref().unwrap().nodes.len();
         let path = std::env::temp_dir().join("gestore_export_thread.wrl");
-        assert!(app.start_export(path.clone(), None, Some(super::Pending::Close)));
+        assert!(app.start_export(path.clone(), crate::exporter::Scope::Visible, Some(super::Pending::Close)));
         assert!(app.scene_graph.is_none() && app.project.export_job.is_some());
-        assert!(!app.start_export(path.clone(), None, None), "un export alla volta");
+        assert!(!app.start_export(path.clone(), crate::exporter::Scope::Visible, None), "un export alla volta");
 
         let ctx = egui::Context::default();
         let t = std::time::Instant::now();
@@ -1044,7 +1067,7 @@ mod tests {
         // Senza operazione in attesa la scena torna, senza modifiche da esportare
         let mut app = app_with_example();
         app.apply(Action::Hide(root_children(&app)[0]));
-        app.start_export(path.clone(), None, None);
+        app.start_export(path.clone(), crate::exporter::Scope::Visible, None);
         while !app.poll_export(&ctx) {
             std::thread::sleep(std::time::Duration::from_millis(5));
         }

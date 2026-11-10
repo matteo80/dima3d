@@ -220,7 +220,7 @@ impl GestoreApp {
                 }
             }
             scene.revision += 1;
-            let size = |normals| crate::exporter::estimate_size(&scene, None, ExportOptions { compact, normals, meters: true });
+            let size = |normals| crate::exporter::estimate_size(&scene, &crate::exporter::writer::Scope::Visible, ExportOptions { compact, normals, meters: true });
             let summary = Summary {
                 before: outcome.triangles_before,
                 after: outcome.triangles_after,
@@ -228,7 +228,7 @@ impl GestoreApp {
                 max_error: outcome.max_error,
                 size_with_normals: size(true),
                 size_without_normals: size(false),
-                size_stl: crate::exporter::stl::estimate_binary_size(&scene, None),
+                size_stl: crate::exporter::stl::estimate_binary_size(&scene, &crate::exporter::writer::Scope::Visible),
                 compact,
                 seconds: started.elapsed().as_secs_f32(),
                 revision: scene.revision,
@@ -363,7 +363,7 @@ mod tests {
         // La stima è la dimensione vera del file (in metri, come l'export)
         let path = std::env::temp_dir().join("gestore_wrl_riduzione_test.wrl");
         let scene = app.scene_graph.as_ref().unwrap();
-        crate::exporter::export_with(scene, None, &path, ExportOptions { compact: true, normals: false, meters: true }).unwrap();
+        crate::exporter::export_with(scene, &crate::exporter::writer::Scope::Visible, &path, ExportOptions { compact: true, normals: false, meters: true }).unwrap();
         assert_eq!(std::fs::metadata(&path).unwrap().len(), app.project.reduction.summary.as_ref().unwrap().size_without_normals);
         let again = crate::parser::parse_wrl(&std::fs::read(&path).unwrap());
         assert_eq!(again.shapes_data[0].face_count as u64, after);

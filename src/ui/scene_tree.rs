@@ -337,6 +337,8 @@ mod tests {
 
     /// Trascina con il mouse la riga `from` sulla riga `to`.
     fn drag(ctx: &egui::Context, app: &mut GestoreApp, from: &str, to: &str) -> Vec<String> {
+        // Prima che l'albero abbia finito di scorrere (es. fino alla selezione) le righe si muovono
+        frame(ctx, app, vec![]);
         let texts = frame(ctx, app, vec![]);
         let row = |name: &str| {
             texts
@@ -383,6 +385,48 @@ mod tests {
         drag(&ctx, &mut app, "Pannello", "Telaio");
         assert!(app.ui_state.status_message.starts_with("Non spostato"), "{}", app.ui_state.status_message);
         assert_eq!(app.project.undo.len(), undo);
+    }
+
+    /// Trascinando una riga selezionata si sposta tutta la selezione; lasciandola su un pezzo
+    /// finisce nel gruppo del pezzo. L'export riaperto ha lo stesso albero.
+    #[test]
+    fn dragging_the_selection_onto_a_piece_and_exporting() {
+        let mut app = app_two_files();
+        let ctx = egui::Context::default();
+        let (trave, copia) = (node(&app, "Trave"), node(&app, "Copia"));
+        app.apply(Action::NewGroup(vec![trave]));
+        let lato = app.ui_state.selected_node.unwrap();
+        app.apply(Action::Rename(lato, "Lato".into()));
+        app.ui_state.renaming = None;
+        app.ui_state.status_message.clear();
+        app.ui_state.expanded.insert(lato);
+        // Selezionati Copia e Trave (Trave è già nel gruppo e resta dov'è)
+        app.ui_state.select_single(Some(copia));
+        app.ui_state.selected_extra.insert(trave);
+
+        let during = drag(&ctx, &mut app, "Copia", "Lato");
+        assert!(during.iter().any(|t| t.contains("Sposta 2 elementi")), "etichetta della selezione");
+        let s = app.scene_graph.as_ref().unwrap();
+        assert_eq!(s.parent_of(copia), Some(lato), "{}", app.ui_state.status_message);
+        assert_eq!(s.parent_of(trave), Some(lato));
+
+        // Su un pezzo (non selezionato): nel gruppo del pezzo
+        app.undo();
+        assert_eq!(app.scene_graph.as_ref().unwrap().parent_of(copia), Some(node(&app, "Telaio")));
+        app.ui_state.select_single(None);
+        drag(&ctx, &mut app, "Copia", "Trave");
+        let s = app.scene_graph.as_ref().unwrap();
+        assert_eq!(s.parent_of(copia), Some(lato), "{}", app.ui_state.status_message);
+
+        let path = std::env::temp_dir().join("gestore_albero_trascinato.wrl");
+        crate::exporter::export_with(s, &crate::exporter::Scope::Visible, &path, Default::default()).unwrap();
+        let again = crate::parser::parse_wrl(&std::fs::read(&path).unwrap());
+        let _ = std::fs::remove_file(&path);
+        let find = |name: &str| (0..again.nodes.len() as u32).find(|&n| again.display_name(n) == name).unwrap();
+        let lato = find("Lato");
+        assert_eq!(again.parent_of(find("Trave")), Some(lato));
+        assert_eq!(again.parent_of(find("Copia")), Some(lato));
+        assert_eq!(again.display_name(again.parent_of(lato).unwrap()), "Telaio");
     }
 
     /// «Nuovo gruppo con la selezione»: gruppo nel gruppo comune, rinomina aperta, un Annulla.
@@ -675,6 +719,14 @@ fn draw_row(ui: &mut egui::Ui, ctx: &mut RowCtx, node_idx: u32, depth: u16) {
                 actions.extend(crate::ui::color_menu::spread_colors(chosen, group.unwrap_or(&[])));
             });
             ui.separator();
+            if ui
+                .button(icon_text(ui, icon::EXPORT, "Esporta selezionati…    Ctrl+Maiusc+E"))
+                .on_hover_text("Salva solo le parti visibili degli elementi selezionati, con i gruppi che li contengono")
+                .clicked()
+            {
+                actions.push(Action::ExportSelected(group.map_or_else(|| vec![node_idx], <[u32]>::to_vec)));
+                ui.close_menu();
+            }
             let is_file = info.kind == NodeKind::File;
             if is_file && group.is_none() {
                 if ui.button(icon_text(ui, icon::EXPORT, "Esporta questo file…")).clicked() {

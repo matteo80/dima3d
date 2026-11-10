@@ -29,7 +29,7 @@
 
 use std::io::{self, BufWriter, Write};
 
-use super::writer::{compute_has_visible, ExportStats};
+use super::writer::{ExportStats, Scope};
 use crate::scene_graph::{NodeKind, SceneGraph, SceneNode};
 
 /// Millimetri → metri della scena HSF.
@@ -210,25 +210,22 @@ impl Ctx<'_> {
     }
 }
 
-/// Esporta le parti visibili (di tutta la scena o del sotto-albero `node`) in HSF.
+/// Esporta le parti visibili di `scope` in HSF.
 /// `default_color` è il colore dei pezzi senza materiale; `normals` scrive le normali dei pezzi.
 pub fn export_hsf(
     scene: &SceneGraph,
-    node: Option<u32>,
+    scope: &Scope,
     path: &std::path::Path,
     default_color: [f32; 4],
     normals: bool,
 ) -> io::Result<ExportStats> {
-    let files = scene.open_files().count();
-    let (roots, write_file_nodes) = match node {
-        Some(n) => (vec![n], false),
-        None => (scene.roots.clone(), files > 1),
-    };
+    let has_visible = scope.has_visible(scene);
+    let (roots, write_file_nodes) = scope.roots(scene, &has_visible);
     // La scena è in millimetri (i file in metri si convertono all'apertura): l'HSF in metri
     let to_meters = MM_TO_METERS;
     let mut ctx = Ctx {
         scene,
-        has_visible: compute_has_visible(scene),
+        has_visible,
         write_file_nodes,
         default_color,
         normals,
@@ -277,10 +274,7 @@ pub fn export_hsf(
     let mut z = flate2::write::ZlibEncoder::new(file, flate2::Compression::default());
     let mut out = Vec::with_capacity(1 << 23);
     // Segmento radice con la scala verso i metri, se serve
-    let root_name = match node {
-        Some(n) => scene.display_name(n),
-        None => scene.sources.first().map(|s| s.name.clone()).unwrap_or_default(),
-    };
+    let root_name = scope.root_name(scene);
     out.extend_from_slice(&[b'(', 10]);
     out.extend_from_slice(b"model_root");
     if !root_name.trim().is_empty() {
@@ -329,7 +323,7 @@ DEF Assieme Transform { translation 10 0 0 children [
         let hidden = (0..scene.nodes.len() as u32).find(|&n| scene.display_name(n) == "Nascosto").unwrap();
         scene.set_subtree_visible(hidden, false);
         let path = std::env::temp_dir().join("gestore_wrl_test.hsf");
-        let stats = export_hsf(&scene, None, &path, [0.5, 0.5, 0.5, 1.0], true).unwrap();
+        let stats = export_hsf(&scene, &super::Scope::Visible, &path, [0.5, 0.5, 0.5, 1.0], true).unwrap();
         assert_eq!(stats.shapes_written, 2);
         let data = std::fs::read(&path).unwrap();
         assert!(data.starts_with(b";; HSF V21.00 \nI"));
@@ -360,7 +354,7 @@ DEF Pezzo Shape { geometry IndexedFaceSet { coord Coordinate { point [ 0 0 0, 15
 "#,
         );
         let path = std::env::temp_dir().join("gestore_wrl_test_mm.hsf");
-        export_hsf(&scene, None, &path, [0.5, 0.5, 0.5, 1.0], true).unwrap();
+        export_hsf(&scene, &super::Scope::Visible, &path, [0.5, 0.5, 0.5, 1.0], true).unwrap();
         let data = std::fs::read(&path).unwrap();
         // Ingombro dopo `I` (5 byte) e `B` con i suoi 2 byte: x massima = 1,5 m
         let max_x = f32::from_le_bytes(data[15 + 5 + 3 + 12..15 + 5 + 3 + 16].try_into().unwrap());
@@ -383,7 +377,7 @@ DEF Cubo Shape { geometry IndexedFaceSet { coord Coordinate { point [ 0 0 0, 100
         );
         let shell = |normals: bool| {
             let path = std::env::temp_dir().join(format!("gestore_wrl_test_normali_{normals}.hsf"));
-            export_hsf(&scene, None, &path, [0.5, 0.5, 0.5, 1.0], normals).unwrap();
+            export_hsf(&scene, &super::Scope::Visible, &path, [0.5, 0.5, 0.5, 1.0], normals).unwrap();
             let data = std::fs::read(&path).unwrap();
             let again = crate::parser::parse_wrl(&data);
             assert_eq!(again.shapes_data.len(), 1);
@@ -422,7 +416,7 @@ DEF Pezzo Shape { geometry IndexedFaceSet { coord Coordinate { point [ 0 0 9, 1 
 "#,
         );
         let path = std::env::temp_dir().join("gestore_wrl_test_nomi.hsf");
-        export_hsf(&scene, None, &path, [0.5, 0.5, 0.5, 1.0], true).unwrap();
+        export_hsf(&scene, &super::Scope::Visible, &path, [0.5, 0.5, 0.5, 1.0], true).unwrap();
         let again = crate::parser::parse_wrl(&std::fs::read(&path).unwrap());
         assert_eq!(again.shapes_data.len(), 2);
         let _ = std::fs::remove_file(path);
@@ -459,7 +453,7 @@ mod real_file {
             };
             let t = std::time::Instant::now();
             let normals = std::env::var_os("GESTORE_HSF_SENZA_NORMALI").is_none();
-            let stats = super::export_hsf(&scene, None, &out, [0.5, 0.5, 0.5, 1.0], normals).unwrap();
+            let stats = super::export_hsf(&scene, &super::Scope::Visible, &out, [0.5, 0.5, 0.5, 1.0], normals).unwrap();
             let size = std::fs::metadata(&out).unwrap().len();
             let written = t.elapsed();
             let again = crate::parser::parse_wrl(&std::fs::read(&out).unwrap());

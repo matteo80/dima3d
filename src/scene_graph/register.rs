@@ -262,7 +262,7 @@ mod tests {
             crate::exporter::ExportOptions { compact: false, normals: true, meters: true },
         ] {
             let out = std::env::temp_dir().join("dima3d_scostamento_export.wrl");
-            crate::exporter::export_with(&scene, None, &out, options).unwrap();
+            crate::exporter::export_with(&scene, &crate::exporter::writer::Scope::Visible, &out, options).unwrap();
             let mut again = crate::parser::parse_wrl(&std::fs::read(&out).unwrap());
             let size = std::fs::metadata(&out).map_or(0, |m| m.len());
             // GESTORE_EXPORT_OUT: conserva l'export compatto (es. per provarlo con lo script)

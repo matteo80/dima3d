@@ -110,11 +110,25 @@ pub fn draw_toolbar(ui: &mut egui::Ui, app: &mut crate::app::GestoreApp) {
     if tool(ui, has_scene && !loading, compact, icon::FILE_PLUS, "Aggiungi", "Aggiunge uno o più file (WRL, STEP, JT, STL, HSF, IV) alla scena aperta, anche trascinandoli sulla finestra") {
         app.add_dialog();
     }
-    if tool(ui, has_scene, compact, icon::EXPORT, "Esporta", "Salva solo le parti visibili in un nuovo file WRL, STL, IV o HSF  [Ctrl+E]") {
+    if tool(ui, has_scene, compact, icon::EXPORT, "Esporta", "Salva solo le parti visibili in un nuovo file WRL, STL, IV o HSF  [Ctrl+E]
+Solo la selezione: Ctrl+Maiusc+E o il tasto destro") {
         app.export_dialog(None);
     }
     let mut export_settings = app.settings.clone();
+    let selected = app.ui_state.selected_nodes();
+    let mut export_selection = false;
     ui.menu_button(icon_text(ui, icon::CARET_DOWN, ""), |ui| {
+        let button = egui::Button::new(icon_text(ui, icon::EXPORT, "Esporta selezionati…    Ctrl+Maiusc+E"));
+        if ui
+            .add_enabled(has_scene && !selected.is_empty(), button)
+            .on_hover_text("Salva solo le parti visibili degli elementi selezionati, con i gruppi che li contengono")
+            .on_disabled_hover_text("Seleziona prima uno o più elementi nell'albero o nella vista")
+            .clicked()
+        {
+            export_selection = true;
+            ui.close_menu();
+        }
+        ui.separator();
         ui.label(egui::RichText::new("Formato dell'export").strong());
         ui.checkbox(&mut export_settings.export_compact, "Formato compatto").on_hover_text(
             "Niente rientri e numeri con la precisione che serve (un milionesimo dell'ingombro): il file è meno \
@@ -162,8 +176,11 @@ pub fn draw_toolbar(ui: &mut egui::Ui, app: &mut crate::app::GestoreApp) {
         );
     })
     .response
-    .on_hover_text("Opzioni dell'export");
+    .on_hover_text("Opzioni dell'export ed export della selezione");
     app.apply_settings(export_settings);
+    if export_selection {
+        app.export_selection_dialog(selected);
+    }
     let reduce_open = app.project.reduction.panel.open;
     let reduce_text = icon_text(ui, icon::TRIANGLE_DASHED, if compact { "" } else { "Riduci" });
     let reduce = ui

@@ -56,6 +56,8 @@ pub enum Action {
     Straighten,
     /// Esporta un solo sotto-albero (es. un file dell'insieme) con "Salva come".
     ExportNode(u32),
+    /// Esporta le parti visibili dei nodi (la selezione) con "Salva come".
+    ExportSelected(Vec<u32>),
     /// Riapre i file aperti con le impostazioni correnti (es. nuovo raggruppamento automatico).
     ReloadFiles,
     /// Scala la geometria del file con questo nodo radice (es. 0.001 da millimetri a metri).
@@ -96,6 +98,7 @@ impl Action {
                 | Action::ViewFrom(_)
                 | Action::Straighten
                 | Action::ExportNode(_)
+                | Action::ExportSelected(_)
                 | Action::ScaleFile(..)
                 | Action::RemeshStep(_)
                 | Action::ReloadFiles
@@ -216,6 +219,10 @@ impl GestoreApp {
         }
         if let Action::ExportNode(n) = action {
             self.export_node_dialog(n);
+            return;
+        }
+        if let Action::ExportSelected(nodes) = action {
+            self.export_selection_dialog(nodes);
             return;
         }
         if action == Action::ReloadFiles {
@@ -470,6 +477,7 @@ impl GestoreApp {
             }
             Action::StartRename(_)
             | Action::ExportNode(_)
+            | Action::ExportSelected(_)
             | Action::ScaleFile(..)
             | Action::RemeshStep(_)
             | Action::ReloadFiles
@@ -545,7 +553,11 @@ impl GestoreApp {
             return;
         }
         if export {
-            self.export_dialog(None);
+            if ctx.input(|inp| inp.modifiers.shift) {
+                self.export_selection_dialog(self.ui_state.selected_nodes());
+            } else {
+                self.export_dialog(None);
+            }
             return;
         }
         let (undo, redo) = ctx.input(|inp| {

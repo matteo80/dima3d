@@ -4,13 +4,13 @@
 
 use std::io::{self, BufWriter, Write};
 
-use super::writer::{compute_has_visible, ExportStats};
+use super::writer::{ExportStats, Scope};
 use crate::scene_graph::{SceneGraph, SceneNode};
 
 /// Pezzi visibili da scrivere (mesh_id e nome), nell'ordine dell'albero.
-fn visible_shapes(scene: &SceneGraph, node: Option<u32>) -> Vec<(u32, String)> {
-    let has_visible = compute_has_visible(scene);
-    let roots = node.map_or_else(|| scene.roots.clone(), |n| vec![n]);
+fn visible_shapes(scene: &SceneGraph, scope: &Scope) -> Vec<(u32, String)> {
+    let has_visible = scope.has_visible(scene);
+    let (roots, _) = scope.roots(scene, &has_visible);
     let mut out = Vec::new();
     for root in roots {
         scene.for_each_subtree_node(root, |i| {
@@ -47,8 +47,8 @@ pub fn binary_size(triangles: u64) -> u64 {
 }
 
 /// Dimensione dell'STL binario delle parti visibili.
-pub fn estimate_binary_size(scene: &SceneGraph, node: Option<u32>) -> u64 {
-    let triangles: usize = visible_shapes(scene, node)
+pub fn estimate_binary_size(scene: &SceneGraph, scope: &Scope) -> u64 {
+    let triangles: usize = visible_shapes(scene, scope)
         .iter()
         .filter_map(|(m, _)| scene.shapes_data.get(*m as usize))
         .map(|s| triangles(s).count())
@@ -57,8 +57,8 @@ pub fn estimate_binary_size(scene: &SceneGraph, node: Option<u32>) -> u64 {
 }
 
 /// Esporta le parti visibili (di tutta la scena o del sotto-albero `node`) in STL.
-pub fn export_stl(scene: &SceneGraph, node: Option<u32>, path: &std::path::Path, ascii: bool) -> io::Result<ExportStats> {
-    let shapes = visible_shapes(scene, node);
+pub fn export_stl(scene: &SceneGraph, scope: &Scope, path: &std::path::Path, ascii: bool) -> io::Result<ExportStats> {
+    let shapes = visible_shapes(scene, scope);
     let mut w = BufWriter::with_capacity(1 << 20, std::fs::File::create(path)?);
     if ascii {
         let mut names = std::collections::HashMap::new();
@@ -137,7 +137,7 @@ DEF Assieme Transform { translation 10 0 0 children [
     fn binary_round_trip() {
         let scene = scene();
         let path = std::env::temp_dir().join("gestore_wrl_export_test.stl");
-        let stats = export_stl(&scene, None, &path, false).unwrap();
+        let stats = export_stl(&scene, &super::Scope::Visible, &path, false).unwrap();
         assert_eq!(stats.shapes_written, 2);
         let data = std::fs::read(&path).unwrap();
         assert_eq!(data.len() as u64, binary_size(3));
@@ -159,7 +159,7 @@ DEF Assieme Transform { translation 10 0 0 children [
     fn ascii_round_trip() {
         let scene = scene();
         let path = std::env::temp_dir().join("gestore_wrl_export_test_ascii.stl");
-        export_stl(&scene, None, &path, true).unwrap();
+        export_stl(&scene, &super::Scope::Visible, &path, true).unwrap();
         let text = std::fs::read_to_string(&path).unwrap();
         assert!(text.contains("solid Piastra") && text.contains("endsolid Lato"), "{text}");
         assert!(!text.contains("Nascosto"));
@@ -186,7 +186,7 @@ mod real_file {
         for ascii in [false, true] {
             let out = std::env::temp_dir().join(if ascii { "gestore_wrl_reale_ascii.stl" } else { "gestore_wrl_reale.stl" });
             let t = std::time::Instant::now();
-            super::export_stl(&scene, None, &out, ascii).unwrap();
+            super::export_stl(&scene, &super::Scope::Visible, &out, ascii).unwrap();
             let written = t.elapsed();
             let data = std::fs::read(&out).unwrap();
             let t = std::time::Instant::now();
@@ -201,7 +201,7 @@ mod real_file {
                 again.load_warnings
             );
             if !ascii {
-                assert_eq!(data.len() as u64, super::estimate_binary_size(&scene, None));
+                assert_eq!(data.len() as u64, super::estimate_binary_size(&scene, &super::Scope::Visible));
             }
         }
     }

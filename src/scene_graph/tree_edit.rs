@@ -349,7 +349,7 @@ mod tests {
         scene.move_into(&[pannello], scene.sources[1].node).unwrap();
         scene.set_subtree_visible(copia, false);
         let path = std::env::temp_dir().join("dima3d_export_albero.wrl");
-        crate::exporter::export_with(&scene, None, &path, crate::exporter::ExportOptions::default()).unwrap();
+        crate::exporter::export_with(&scene, &crate::exporter::writer::Scope::Visible, &path, crate::exporter::ExportOptions::default()).unwrap();
         let text = std::fs::read_to_string(&path).unwrap();
         let _ = std::fs::remove_file(&path);
         let lato = text.find("DEF Lato_sinistro Group").expect("gruppo nuovo nell'export");

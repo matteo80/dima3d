@@ -76,6 +76,7 @@ fn context_menu(ui: &mut egui::Ui, app: &crate::app::GestoreApp, actions: &mut V
         item(ui, true, glyph, label, app.toggle_selection_action());
         item(ui, true, icon::CUBE_FOCUS, "Isola    I", app.ui_state.isolate_action());
         item(ui, true, icon::CORNERS_OUT, "Inquadra    F", Some(app.ui_state.focus_action()));
+        item(ui, true, icon::EXPORT, "Esporta selezionati…    Ctrl+Maiusc+E", Some(Action::ExportSelected(selection.clone())));
         ui.separator();
         item(ui, true, icon::TRASH, "Elimina    Canc", app.ui_state.on_selection(Action::Delete));
     } else {

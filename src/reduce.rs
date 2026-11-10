@@ -616,7 +616,7 @@ mod tests {
         use crate::exporter::{estimate_size, ExportOptions};
         let size = |scene: &crate::scene_graph::SceneGraph, compact, normals| {
             let t = std::time::Instant::now();
-            let s = estimate_size(scene, None, ExportOptions { compact, normals, meters: false });
+            let s = estimate_size(scene, &crate::exporter::writer::Scope::Visible, ExportOptions { compact, normals, meters: false });
             format!("{:.1} MB ({:?})", mb(s), t.elapsed())
         };
         println!(
@@ -643,12 +643,12 @@ mod tests {
                 );
                 if n == 1_000_000 {
                     let path = std::env::temp_dir().join("gestore_wrl_ridotto.wrl");
-                    crate::exporter::export_with(&reduced, None, &path, ExportOptions { compact: true, normals: false, meters: false }).unwrap();
+                    crate::exporter::export_with(&reduced, &crate::exporter::writer::Scope::Visible, &path, ExportOptions { compact: true, normals: false, meters: false }).unwrap();
                     let back = crate::parser::parse_wrl(&std::fs::read(&path).unwrap());
                     let tris: usize = back.shapes_data.iter().map(|s| s.indices.len() / 3).sum();
                     println!("Riaperto: {} pezzi, {tris} triangoli, file in {}", back.shapes_data.len(), path.display());
                     let with = std::env::temp_dir().join("gestore_wrl_ridotto_normali.wrl");
-                    crate::exporter::export_with(&reduced, None, &with, ExportOptions { compact: true, normals: true, meters: false }).unwrap();
+                    crate::exporter::export_with(&reduced, &crate::exporter::writer::Scope::Visible, &with, ExportOptions { compact: true, normals: true, meters: false }).unwrap();
                 }
             }
             return;
