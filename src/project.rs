@@ -25,6 +25,8 @@ pub enum Pending {
     Reload(Vec<PathBuf>),
     /// Apre un progetto Dima 3D
     OpenProject(PathBuf),
+    /// Installa la versione nuova scaricata (cartella del pacchetto) e riavvia
+    Update(PathBuf),
 }
 
 /// Progetto in apertura: i modelli si caricano uno alla volta, poi si riapplicano le modifiche.
@@ -564,6 +566,11 @@ impl GestoreApp {
             }
             Pending::Reload(paths) => self.reload(paths),
             Pending::OpenProject(path) => self.open_project_now(path),
+            Pending::Update(package) => {
+                if self.install_update(&package) {
+                    ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+                }
+            }
         }
     }
 
@@ -1782,6 +1789,7 @@ pub fn draw_confirm_dialog(ctx: &egui::Context, app: &mut GestoreApp) {
         Pending::Exit => "uscire",
         Pending::Reload(_) => "ricaricare i file",
         Pending::OpenProject(_) => "aprire un altro progetto",
+        Pending::Update(_) => "aggiornare il programma",
     };
 
     let mut choice: Option<u8> = None; // 0 = esporta, 1 = continua, 2 = annulla, 3 = salva progetto

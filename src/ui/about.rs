@@ -5,6 +5,8 @@ use crate::app::GestoreApp;
 
 /// Pagina del progetto (codice sorgente).
 pub const PROJECT_URL: &str = "https://github.com/matteo80/dima3d";
+/// Autore del progetto (lo stesso nome della licenza MIT).
+pub const AUTHOR: &str = "matteo80";
 
 /// Librerie principali mostrate nella finestra (l'elenco completo è in licenses\librerie-rust.txt).
 const LIBRARIES: &[(&str, &str, &str)] = &[
@@ -38,6 +40,7 @@ pub fn draw(ctx: &egui::Context, app: &mut GestoreApp) {
                 ui.vertical(|ui| {
                     ui.label(egui::RichText::new(crate::APP_NAME).size(26.0).strong());
                     ui.label(format!("Versione {}", env!("CARGO_PKG_VERSION")));
+                    ui.label(format!("Autore: {AUTHOR}"));
                     ui.label(
                         egui::RichText::new("Visualizza, posiziona ed esporta matematiche 3D di grandi dimensioni")
                             .weak(),
@@ -87,6 +90,13 @@ pub fn draw(ctx: &egui::Context, app: &mut GestoreApp) {
                     if let Some(f) = &folder {
                         let _ = std::process::Command::new("explorer").arg(f).spawn();
                     }
+                }
+                if ui
+                    .add_enabled(!app.update.busy(), egui::Button::new(icon_text(ui, icon::ARROW_CLOCKWISE, "Verifica aggiornamenti")))
+                    .on_hover_text("Chiede a GitHub se c'è una versione nuova")
+                    .clicked()
+                {
+                    app.check_for_updates(true);
                 }
                 if ui.button("Chiudi").clicked() {
                     app.ui_state.about = false;

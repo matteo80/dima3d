@@ -54,6 +54,11 @@ Formati
 
 Le preferenze sono salvate in %APPDATA%\Dima3D\impostazioni.txt.
 
+Aggiornamenti: all'avvio il programma chiede a GitHub se c'è una versione nuova e, se c'è,
+propone di installarla (si spegne in Preferenze; a mano dalla finestra Info). La cartella
+del programma deve essere scrivibile.
+
+Autore: matteo80.
 Il codice è stato scritto interamente con l'intelligenza artificiale (Claude, di Anthropic):
 l'autore del progetto non ha scritto codice, ha definito le richieste e provato il programma.
 Codice sorgente: https://github.com/matteo80/dima3d

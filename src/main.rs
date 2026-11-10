@@ -13,6 +13,7 @@ mod renderer;
 mod scene_graph;
 mod settings;
 mod ui;
+mod update;
 
 /// Nome del programma (titolo della finestra, finestra Info, file esportati).
 pub const APP_NAME: &str = "Dima 3D";

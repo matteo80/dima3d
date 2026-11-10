@@ -929,6 +929,13 @@ Fatto:
       dentro `children [...]` ora si trovano anche per i `USE`.
 - [x] IV binario copiato come testo (FTP in ASCII: ogni `0D`/`0A` diventato `0D 0A`, byte `1A` tolti): riconosciuto,
       con un avviso chiaro. Non ricostruibile (mancano byte: verificato su un file con il gemello sano).
+- [x] Aggiornamento dall'app (`src/update.rs`, versione 0.2.3): all'avvio (Preferenze, «Verifica all'avvio») o
+      da Info si chiede a GitHub l'ultima Release; se è più nuova si mostrano le note e si chiede se aggiornare.
+      Download ed estrazione con PowerShell (proxy di sistema con le credenziali di Windows, niente librerie in
+      più); l'exe in uso diventa `dima3d.exe.old` (cancellato all'avvio dopo), i file nuovi prendono il suo posto,
+      riavvio. Con modifiche non salvate chiede prima. Solo zip delle Release del progetto. «Salta questa versione».
+      Pubblicare: `pacchetto.ps1`, commit e push, poi `pubblica.ps1 -Note note.md` (gh release create).
+- [x] Autore in Info e nel LEGGIMI: matteo80 (scelta dell'utente: resta anonimo).
 
 Da fare (richieste dell'utente 2026-11-10):
 - [ ] Linee (`IndexedLineSet`) non disegnate: restano nell'avviso (es. contorni a pavimento nelle celle).

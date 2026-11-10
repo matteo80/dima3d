@@ -124,6 +124,10 @@ pub struct Settings {
     /// Sezioni aperte della finestra Posizione: Oggetto, Trasformazione, Cerniere, Applica
     /// offset, Calcola offset
     pub position_sections: [bool; POSITION_SECTIONS],
+    /// Verifica gli aggiornamenti su GitHub all'avvio
+    pub check_updates: bool,
+    /// Versione per cui non avvisare più all'avvio ("Salta questa versione")
+    pub skipped_version: String,
 }
 
 /// Sezioni richiudibili della finestra Posizione
@@ -150,6 +154,8 @@ impl Default for Settings {
             saved_colors: Vec::new(),
             step: StepMesh::default(),
             position_sections: [true, true, true, true, false],
+            check_updates: true,
+            skipped_version: String::new(),
         }
     }
 }
@@ -261,6 +267,8 @@ impl Settings {
                 "export_iv_binario" => s.export_iv_binary = value == "1",
                 "export_iv_metri" => s.export_iv_meters = value == "1",
                 "zoom_invertito" => s.invert_zoom = value == "1",
+                "verifica_aggiornamenti" => s.check_updates = value != "0",
+                "versione_saltata" => s.skipped_version = value.to_string(),
                 "step_deviazione" => {
                     if let Ok(v) = value.parse::<f32>() {
                         s.step.deviation = v.clamp(*STEP_DEVIATION_RANGE.start(), *STEP_DEVIATION_RANGE.end());
@@ -328,8 +336,11 @@ impl Settings {
             u8::from(self.step.relative),
         );
         let sections: String = self.position_sections.iter().map(|&o| if o { '1' } else { '0' }).collect();
-        out.push_str(&format!("posizione_sezioni = {sections}
-"));
+        out.push_str(&format!("posizione_sezioni = {sections}\n"));
+        out.push_str(&format!("verifica_aggiornamenti = {}\n", u8::from(self.check_updates)));
+        if !self.skipped_version.is_empty() {
+            out.push_str(&format!("versione_saltata = {}\n", self.skipped_version));
+        }
         for [r, g, b] in &self.saved_colors {
             out.push_str(&format!("colore_salvato = {r} {g} {b}\n"));
         }
@@ -387,6 +398,8 @@ mod tests {
             saved_colors: vec![[0.1, 0.2, 0.3], [1.0, 0.5, 0.0]],
             step: StepMesh { deviation: 0.025, angle: 12.5, relative: true },
             position_sections: [false, true, false, true, true],
+            check_updates: false,
+            skipped_version: "0.3.1".to_string(),
         };
         s.add_recent(Path::new(r"C:\a b\uno.wrl"));
         s.add_recent(Path::new(r"C:\due.wrl"));

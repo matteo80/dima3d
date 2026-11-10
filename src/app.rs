@@ -122,6 +122,8 @@ pub struct GestoreApp {
     pub settings: crate::settings::Settings,
     /// Annulla/Ripeti, file corrente, conferme
     pub project: crate::project::ProjectState,
+    /// Verifica e download degli aggiornamenti
+    pub update: crate::update::UpdateState,
 }
 
 impl GestoreApp {
@@ -149,7 +151,12 @@ impl GestoreApp {
             wgpu_render_state,
             settings,
             project: Default::default(),
+            update: Default::default(),
         };
+        crate::update::cleanup_previous();
+        if app.settings.check_updates {
+            app.check_for_updates(false);
+        }
         // File passato a riga di comando o con "Apri con" di Windows
         if let Some(path) = std::env::args_os().nth(1) {
             app.open_wrl_async(path.into());
@@ -182,6 +189,7 @@ impl GestoreApp {
             wgpu_render_state: None,
             settings: crate::settings::Settings::default(),
             project: Default::default(),
+            update: Default::default(),
         }
     }
 
@@ -1072,6 +1080,7 @@ impl eframe::App for GestoreApp {
         crate::ui::reduce_panel::draw(ctx, self);
         crate::ui::position_panel::draw(ctx, self);
         crate::ui::about::draw(ctx, self);
+        crate::update::draw(ctx, self);
         self.update_window_title(ctx);
     }
 }

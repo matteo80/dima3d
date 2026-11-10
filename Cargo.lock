@@ -815,7 +815,7 @@ dependencies = [
 
 [[package]]
 name = "dima3d"
-version = "0.2.2"
+version = "0.2.3"
 dependencies = [
  "bytemuck",
  "eframe",

@@ -392,6 +392,13 @@ fn view_menu(
         .on_hover_text("Rotella in avanti per allontanarsi invece di avvicinarsi (anche dal tasto Zoom nella vista)");
 
     ui.separator();
+    ui.label(egui::RichText::new("Aggiornamenti").strong());
+    ui.checkbox(&mut settings.check_updates, "Verifica all'avvio").on_hover_text(
+        "All'avvio chiede a GitHub se c'è una versione nuova e, se c'è, propone di aggiornare. \
+         Si può verificare anche a mano dalla finestra Info.",
+    );
+
+    ui.separator();
     ui.label(egui::RichText::new("Viste standard").strong());
     ui.horizontal(|ui| {
         ui.label("Assi del modello:");
