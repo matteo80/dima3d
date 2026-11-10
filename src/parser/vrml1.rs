@@ -158,7 +158,9 @@ struct Material {
     specular: [f32; 3],
     shininess: f32,
     transparency: f32,
-    multi_color: bool,
+    /// Posizione nel file della lista dei colori, se ce n'è più d'uno (`diffuseColor [...]` o
+    /// `rgb [...]`): con un legame per faccia o per vertice la superficie ha più colori.
+    colors: Option<(usize, usize)>,
 }
 
 /// Stato di visita del VRML 1.0. Gli intervalli sono posizioni nel file sorgente.
@@ -366,6 +368,12 @@ impl<'a> Conv<'a> {
     }
 
     /// Contenuto di un vettore, senza le quadre (in VRML 1.0 un valore solo può non averle).
+    /// Posizione della lista di colori del campo, se ne ha più di uno (`count` = numeri letti).
+    fn color_list(&self, fields: &[(&'a str, usize, usize)], name: &str, count: usize) -> Option<(usize, usize)> {
+        let &(_, start, end) = fields.iter().find(|f| f.0 == name).filter(|_| count > 3)?;
+        Some(self.inner(start, end))
+    }
+
     fn inner(&self, start: usize, end: usize) -> (usize, usize) {
         let open = lexer::skip_whitespace_comments(self.data, start);
         match self.brackets.get(&open) {
@@ -417,7 +425,7 @@ impl<'a> Conv<'a> {
                     specular: self.vec3(&f, "specularColor", [0.0; 3]),
                     shininess: self.scalar(&f, "shininess", 0.2),
                     transparency: self.scalar(&f, "transparency", 0.0),
-                    multi_color: diffuse.len() > 3,
+                    colors: self.color_list(&f, "diffuseColor", diffuse.len()),
                 });
             }
             "Coordinate3" => {
@@ -456,20 +464,7 @@ impl<'a> Conv<'a> {
                 let s = self.vec3(&f, "scaleFactor", [1.0; 3]);
                 state.matrix *= glam::Mat4::from_scale(s.into());
             }
-            "Transform" => {
-                let f = fields(self);
-                let translation = glam::Mat4::from_translation(self.vec3(&f, "translation", [0.0; 3]).into());
-                let center: glam::Vec3 = self.vec3(&f, "center", [0.0; 3]).into();
-                let orientation = self.rotation(&f, "scaleOrientation");
-                let scale = glam::Mat4::from_scale(self.vec3(&f, "scaleFactor", [1.0; 3]).into());
-                state.matrix *= translation
-                    * glam::Mat4::from_translation(center)
-                    * self.rotation(&f, "rotation")
-                    * orientation
-                    * scale
-                    * orientation.inverse()
-                    * glam::Mat4::from_translation(-center);
-            }
+            "Transform" => state.matrix *= self.transform(&fields(self), "scaleFactor"),
             "MatrixTransform" => {
                 let f = fields(self);
                 if let Some(m) = self.numbers(&f, "matrix").and_then(|n| <[f32; 16]>::try_from(n).ok()) {
@@ -482,8 +477,24 @@ impl<'a> Conv<'a> {
                 self.face_set(item, &local, None);
             }
             // Sotto-albero VRML 2.0 dentro una scena Inventor (Coin): passa al lettore VRML 2.0
+            // Gruppo VRML 2.0 con dentro nodi Inventor (materiale come nodo a sé, primitive...):
+            // si legge con le regole Inventor
+            "VRMLTransform" | "VRMLGroup" if self.has_inventor_nodes(item, 0) => {
+                let mut inner = *state;
+                if item.ty == "VRMLTransform" {
+                    inner.matrix *= self.transform(&fields(self), "scale");
+                }
+                let children = self.vrml_children(item);
+                self.with_group(item.name, |conv| {
+                    for child in children {
+                        conv.visit(child, &mut inner, depth + 1);
+                    }
+                });
+            }
             ty if is_vrml2_subtree(ty) => {
                 let text = rename_vrml2(&self.data[item.pos..=item.close]);
+                // Le primitive (`Box`...) non le legge il lettore VRML 2.0: diventano superfici
+                let text = super::primitives::expand_vrml2(&text).unwrap_or(text);
                 self.vrml2(&text, state);
             }
             // Nodi solo Open Inventor
@@ -496,12 +507,12 @@ impl<'a> Conv<'a> {
                     specular: [0.0; 3],
                     shininess: 0.2,
                     transparency: 0.0,
-                    multi_color: false,
+                    colors: None,
                 });
                 if let [r, g, b, ..] = rgb[..] {
                     m.diffuse = [r, g, b];
                 }
-                m.multi_color = rgb.len() > 3;
+                m.colors = self.color_list(&f, "rgb", rgb.len());
                 state.material = Some(m);
             }
             "RotationXYZ" => {
@@ -553,10 +564,16 @@ impl<'a> Conv<'a> {
                 self.face_set(item, state, Some(faces));
             }
             "IndexedLineSet" | "PointSet" | "LineSet" => self.counts.lines += 1,
-            "Cube" | "Sphere" | "Cone" | "Cylinder" | "AsciiText" | "WWWInline" | "Text2" | "Text3"
-            | "NurbsSurface" | "IndexedNurbsSurface" => {
+            "Cube" | "Sphere" | "Cone" | "Cylinder" => {
+                let mesh = self.primitive(item);
+                self.write_mesh(item.name, state, &mesh);
+            }
+            "AsciiText" | "WWWInline" | "Text2" | "Text3" | "NurbsSurface" | "IndexedNurbsSurface" => {
                 self.counts.unsupported += 1;
             }
+            // Nodo di un'estensione (es. `SoFCSelection` di FreeCAD, che contiene tutto il pezzo):
+            // si dichiara con `fields [...]`. Se ha dei nodi dentro è un gruppo e si legge come tale.
+            _ if self.is_extension_group(item) => self.group(item, state, depth),
             // Info, luci, camere, texture...: senza effetto sulla geometria
             _ => {}
         }
@@ -623,7 +640,17 @@ impl<'a> Conv<'a> {
             let at = lexer::skip_whitespace_comments(self.data, pos);
             pos = match word {
                 "\"" => skip_string(self.data, at),
-                "[" => self.brackets.get(&at).map_or(next, |&c| c + 1),
+                // Le liste di numeri si saltano; quelle di nodi (`children [...]` dei nodi VRML
+                // 2.0 di Coin) possono contenere dei `DEF`
+                "[" => {
+                    let first = self.data.get(lexer::skip_whitespace_comments(self.data, at + 1)).copied();
+                    match first {
+                        Some(b) if b.is_ascii_digit() || b"-+.]".contains(&b) => {
+                            self.brackets.get(&at).map_or(next, |&c| c + 1)
+                        }
+                        _ => next,
+                    }
+                }
                 "DEF" => {
                     let Some((name, _)) = lexer::scan_word(self.data, next) else {
                         break;
@@ -651,6 +678,92 @@ impl<'a> Conv<'a> {
         } else if name.is_some() {
             self.out.extend_from_slice(b"] }\n");
         }
+    }
+
+    /// Matrice di un `Transform` (Inventor: scala in `scaleFactor`; VRML 2.0: in `scale`).
+    fn transform(&self, f: &[(&'a str, usize, usize)], scale_field: &str) -> glam::Mat4 {
+        let translation = glam::Mat4::from_translation(self.vec3(f, "translation", [0.0; 3]).into());
+        let center: glam::Vec3 = self.vec3(f, "center", [0.0; 3]).into();
+        let orientation = self.rotation(f, "scaleOrientation");
+        let scale = glam::Mat4::from_scale(self.vec3(f, scale_field, [1.0; 3]).into());
+        translation
+            * glam::Mat4::from_translation(center)
+            * self.rotation(f, "rotation")
+            * orientation
+            * scale
+            * orientation.inverse()
+            * glam::Mat4::from_translation(-center)
+    }
+
+    /// Nodi nel campo `children` di un nodo VRML 2.0 (tra parentesi quadre o, se è uno solo,
+    /// anche senza).
+    fn vrml_children(&self, item: Item<'a>) -> Vec<Item<'a>> {
+        match self.fields(item).iter().find(|f| f.0 == "children") {
+            Some(&(_, start, end)) => {
+                let (s, e) = self.inner(start, end);
+                self.items(s, e)
+            }
+            None => Vec::new(),
+        }
+    }
+
+    /// Nodi Inventor (primitive, facce, linee, `Separator`...) tra i figli di un gruppo VRML 2.0
+    /// di Coin, fuori dai `VRMLShape`: il lettore VRML 2.0 li ignorerebbe.
+    fn has_inventor_nodes(&self, item: Item<'a>, depth: usize) -> bool {
+        if depth > MAX_DEPTH {
+            return false;
+        }
+        self.vrml_children(item).into_iter().any(|c| match c.ty {
+            "VRMLShape" | "USE" => false,
+            ty if ty.starts_with("VRML") => self.has_inventor_nodes(c, depth + 1),
+            _ => true,
+        })
+    }
+
+    /// Superficie di una primitiva Inventor dai suoi campi.
+    fn primitive(&self, item: Item<'a>) -> super::primitives::Mesh {
+        use super::primitives::{cube, cylinder, sphere};
+        let f = self.fields(item);
+        // `parts`: SIDES, TOP, BOTTOM, ALL (anche combinati con `|`); se manca, tutte
+        let parts = self.word(&f, "parts").map(|w| w.trim_matches(|c| c == '(' || c == ')'));
+        let has = |part: &str| parts.is_none_or(|p| p.contains("ALL") || p.contains(part));
+        match item.ty {
+            "Cube" => cube(self.scalar(&f, "width", 2.0), self.scalar(&f, "height", 2.0), self.scalar(&f, "depth", 2.0)),
+            "Sphere" => sphere(self.scalar(&f, "radius", 1.0)),
+            "Cylinder" => {
+                let r = self.scalar(&f, "radius", 1.0);
+                cylinder(r, r, self.scalar(&f, "height", 2.0), has("SIDES"), has("TOP"), has("BOTTOM"))
+            }
+            _ => cylinder(self.scalar(&f, "bottomRadius", 1.0), 0.0, self.scalar(&f, "height", 2.0), has("SIDES"), false, has("BOTTOM")),
+        }
+    }
+
+    /// Scrive una primitiva come `Shape` con il materiale e la posizione correnti.
+    fn write_mesh(&mut self, name: Option<&str>, state: &State<'a>, mesh: &super::primitives::Mesh) {
+        if mesh.faces.is_empty() {
+            return;
+        }
+        match name {
+            Some(name) => { let _ = writeln!(self.out, "DEF {name} Shape {{"); }
+            None => self.out.extend_from_slice(b"Shape {\n"),
+        }
+        if let Some(m) = state.material {
+            self.appearance(m);
+        }
+        self.out.extend_from_slice(b"geometry ");
+        mesh.write_vrml2(&mut self.out, state.matrix);
+        self.out.extend_from_slice(b"}\n");
+        self.shapes += 1;
+    }
+
+    /// Nodo non standard che dichiara i suoi campi (`fields [ SFColor colore, ... ]`, come scrive
+    /// Inventor per i nodi che il lettore può non conoscere) e contiene altri nodi.
+    fn is_extension_group(&self, item: Item<'a>) -> bool {
+        let first = lexer::skip_whitespace_comments(self.data, item.open + 1);
+        let declares_fields = lexer::scan_word(self.data, first).is_some_and(|(w, next)| {
+            w == "fields" && self.data.get(lexer::skip_whitespace_comments(self.data, next)) == Some(&b'[')
+        });
+        declares_fields && !self.children(item).is_empty()
     }
 
     fn group(&mut self, item: Item<'a>, state: &mut State<'a>, depth: usize) {
@@ -748,37 +861,26 @@ impl<'a> Conv<'a> {
         let linear = glam::Mat3::from_mat4(state.matrix);
         let mirrored = linear.determinant() < 0.0;
 
-        match item.name {
-            Some(name) => { let _ = writeln!(self.out, "DEF {name} Shape {{"); }
-            None => self.out.extend_from_slice(b"Shape {\n"),
-        }
-        if let Some(m) = state.material {
-            let [r, g, b] = m.diffuse;
-            let _ = write!(self.out, "appearance Appearance {{ material Material {{ diffuseColor {r} {g} {b}");
-            let [r, g, b] = m.emissive;
-            let _ = write!(self.out, " emissiveColor {r} {g} {b}");
-            let [r, g, b] = m.specular;
-            let _ = write!(self.out, " specularColor {r} {g} {b}");
-            let _ = writeln!(self.out, " shininess {} transparency {} }} }}", m.shininess, m.transparency);
-            if m.multi_color && !matches!(state.material_binding, "DEFAULT" | "OVERALL") {
-                self.counts.multi_colors += 1;
+        // Più colori legati alle facce o ai vertici: un colore solo se sono tutti uguali,
+        // altrimenti un pezzo per colore
+        let mut material = state.material;
+        if let Some(m) = state.material.filter(|m| m.colors.is_some()) {
+            match self.face_colors(&fields, &m, state.material_binding, &indices).filter(|_| verbatim) {
+                Some(colors) => {
+                    let palette = distinct(&colors);
+                    if let [only] = palette[..] {
+                        material = Some(Material { diffuse: only, ..m });
+                    } else {
+                        self.write_by_color(item, state, &fields, &indices, &points, &colors, &palette);
+                        return;
+                    }
+                }
+                None if !matches!(state.material_binding, "DEFAULT" | "OVERALL") => self.counts.multi_colors += 1,
+                None => {}
             }
         }
-        self.out.extend_from_slice(b"geometry IndexedFaceSet {\n");
-        // Con l'ordine dei vertici ignoto la superficie va mostrata da entrambi i lati
-        let known = state.ordering != "UNKNOWN_ORDERING";
-        let solid = known && state.shape_type == "SOLID";
-        let _ = writeln!(self.out, "solid {}", if solid { "TRUE" } else { "FALSE" });
-        if (state.ordering == "CLOCKWISE") != mirrored {
-            self.out.extend_from_slice(b"ccw FALSE\n");
-        }
-        if let Some(angle) = state.crease_angle {
-            let _ = writeln!(self.out, "creaseAngle {angle}");
-        }
-        if non_triangles {
-            self.out.extend_from_slice(b"convex FALSE\n");
-        }
 
+        self.shape_head(item.name, material, state, mirrored, non_triangles);
         self.out.extend_from_slice(b"coord Coordinate { point [\n");
         if all_used && identity {
             self.out.extend_from_slice(&data[coord_start..coord_end]);
@@ -812,17 +914,7 @@ impl<'a> Conv<'a> {
             _ => None,
         };
         if let (Some((per_vertex, index)), Some((start, end))) = (binding, state.normals) {
-            self.out.extend_from_slice(b"normal Normal { vector [\n");
-            if identity {
-                self.out.extend_from_slice(&data[start..end]);
-            } else {
-                let matrix = linear.inverse().transpose();
-                for n in lexer::scan_numbers_f32(data, start, end).chunks_exact(3) {
-                    let v = (matrix * glam::Vec3::new(n[0], n[1], n[2])).normalize_or_zero();
-                    let _ = writeln!(self.out, "{} {} {},", v.x, v.y, v.z);
-                }
-            }
-            self.out.extend_from_slice(b"\n] }\n");
+            self.normal_vectors(start, end, state);
             if !per_vertex {
                 self.out.extend_from_slice(b"normalPerVertex FALSE\n");
             }
@@ -874,6 +966,194 @@ impl<'a> Conv<'a> {
         self.out.extend_from_slice(b"\n] }\n}\n");
         self.shapes += 1;
     }
+
+    /// Inizio di una `Shape`: nome, materiale e campi dell'`IndexedFaceSet` prima della geometria.
+    fn shape_head(&mut self, name: Option<&str>, material: Option<Material>, state: &State<'a>, mirrored: bool, non_triangles: bool) {
+        match name {
+            Some(name) => { let _ = writeln!(self.out, "DEF {name} Shape {{"); }
+            None => self.out.extend_from_slice(b"Shape {\n"),
+        }
+        if let Some(m) = material {
+            self.appearance(m);
+        }
+        self.out.extend_from_slice(b"geometry IndexedFaceSet {\n");
+        // Con l'ordine dei vertici ignoto la superficie va mostrata da entrambi i lati
+        let known = state.ordering != "UNKNOWN_ORDERING";
+        let solid = known && state.shape_type == "SOLID";
+        let _ = writeln!(self.out, "solid {}", if solid { "TRUE" } else { "FALSE" });
+        if (state.ordering == "CLOCKWISE") != mirrored {
+            self.out.extend_from_slice(b"ccw FALSE\n");
+        }
+        if let Some(angle) = state.crease_angle {
+            let _ = writeln!(self.out, "creaseAngle {angle}");
+        }
+        if non_triangles {
+            self.out.extend_from_slice(b"convex FALSE\n");
+        }
+    }
+
+    /// `appearance` VRML 2.0 di un materiale.
+    fn appearance(&mut self, m: Material) {
+        let [r, g, b] = m.diffuse;
+        let _ = write!(self.out, "appearance Appearance {{ material Material {{ diffuseColor {r} {g} {b}");
+        let [r, g, b] = m.emissive;
+        let _ = write!(self.out, " emissiveColor {r} {g} {b}");
+        let [r, g, b] = m.specular;
+        let _ = write!(self.out, " specularColor {r} {g} {b}");
+        let _ = writeln!(self.out, " shininess {} transparency {} }} }}", m.shininess, m.transparency);
+    }
+
+    /// Normali del file (`vector [...]`), girate con la trasformazione accumulata.
+    fn normal_vectors(&mut self, start: usize, end: usize, state: &State<'a>) {
+        self.out.extend_from_slice(b"normal Normal { vector [\n");
+        if state.matrix == glam::Mat4::IDENTITY {
+            self.out.extend_from_slice(&self.data[start..end]);
+        } else {
+            let matrix = glam::Mat3::from_mat4(state.matrix).inverse().transpose();
+            for n in lexer::scan_numbers_f32(self.data, start, end).chunks_exact(3) {
+                let v = (matrix * glam::Vec3::new(n[0], n[1], n[2])).normalize_or_zero();
+                let _ = writeln!(self.out, "{} {} {},", v.x, v.y, v.z);
+            }
+        }
+        self.out.extend_from_slice(b"\n] }\n");
+    }
+
+    /// Colore di ogni faccia (quelle non vuote, in ordine) secondo il legame dei materiali;
+    /// `None` se il legame non assegna i colori alle facce o ai vertici.
+    fn face_colors(&self, fields: &[(&'a str, usize, usize)], m: &Material, binding: &str, indices: &[i32]) -> Option<Vec<[f32; 3]>> {
+        let (start, end) = m.colors?;
+        let palette: Vec<[f32; 3]> =
+            lexer::scan_numbers_f32(self.data, start, end).chunks_exact(3).map(|c| [c[0], c[1], c[2]]).collect();
+        let last = palette.len().checked_sub(1)?;
+        let material_index = self.numbers_i32(fields, "materialIndex");
+        let pick = |i: i32| palette[usize::try_from(i).unwrap_or(0).min(last)];
+        let mut corners = 0;
+        let mut out = Vec::new();
+        for (k, (start, end)) in face_ranges(indices).into_iter().enumerate() {
+            // Per vertice: il colore del primo angolo (nei CAD gli angoli di una faccia hanno
+            // lo stesso colore)
+            let index = match binding {
+                "PER_FACE" | "PER_PART" => k as i32,
+                "PER_FACE_INDEXED" | "PER_PART_INDEXED" => material_index.get(k).copied().unwrap_or(k as i32),
+                "PER_VERTEX" => corners as i32,
+                "PER_VERTEX_INDEXED" if material_index.is_empty() => indices[start],
+                "PER_VERTEX_INDEXED" => material_index.get(start).copied().unwrap_or(0),
+                _ => return None,
+            };
+            out.push(pick(index));
+            corners += end - start;
+        }
+        Some(out)
+    }
+
+    /// Superficie con più colori: un pezzo per colore con le sue facce, nel gruppo col nome della
+    /// superficie. Le normali del file restano, con un indice per ogni angolo.
+    #[allow(clippy::too_many_arguments)]
+    fn write_by_color(
+        &mut self,
+        item: Item<'a>,
+        state: &State<'a>,
+        fields: &[(&'a str, usize, usize)],
+        indices: &[i32],
+        points: &[f32],
+        colors: &[[f32; 3]],
+        palette: &[[f32; 3]],
+    ) {
+        let Some(material) = state.material else { return };
+        let faces = face_ranges(indices);
+        let normal_index = self.numbers_i32(fields, "normalIndex");
+        let has_normal_index = normal_index.iter().any(|&i| i != -1);
+        // Normale di ogni angolo (per posizione in `indices`) secondo il legame del file
+        let corner_normals: Option<Vec<i32>> = state.normals.and_then(|_| {
+            let mut out = vec![-1; indices.len()];
+            let mut corner = 0;
+            for (k, &(s, e)) in faces.iter().enumerate() {
+                for p in s..e {
+                    out[p] = match state.normal_binding {
+                        "DEFAULT" | "PER_VERTEX_INDEXED" if has_normal_index => *normal_index.get(p)?,
+                        "DEFAULT" | "PER_VERTEX_INDEXED" => indices[p],
+                        "PER_VERTEX" => corner,
+                        "PER_FACE_INDEXED" if has_normal_index => *normal_index.get(k)?,
+                        "PER_FACE_INDEXED" | "PER_FACE" => k as i32,
+                        _ => return None,
+                    };
+                    corner += 1;
+                }
+            }
+            Some(out)
+        });
+        let mirrored = glam::Mat3::from_mat4(state.matrix).determinant() < 0.0;
+        self.with_group(item.name, |conv| {
+            for &color in palette {
+                let mut new_index = vec![u32::MAX; points.len() / 3];
+                let mut order: Vec<usize> = Vec::new();
+                let (mut coord_index, mut corner_index) = (Vec::<u8>::new(), Vec::<u8>::new());
+                let mut non_triangles = false;
+                for (&(s, e), &c) in faces.iter().zip(colors) {
+                    if c != color {
+                        continue;
+                    }
+                    non_triangles |= e - s > 3;
+                    for p in s..e {
+                        let Some(slot) = usize::try_from(indices[p]).ok().and_then(|i| new_index.get_mut(i)) else { continue };
+                        if *slot == u32::MAX {
+                            *slot = order.len() as u32;
+                            order.push(indices[p] as usize);
+                        }
+                        let _ = write!(coord_index, "{} ", *slot);
+                        if let Some(n) = &corner_normals {
+                            let _ = write!(corner_index, "{} ", n[p]);
+                        }
+                    }
+                    coord_index.extend_from_slice(b"-1\n");
+                    corner_index.extend_from_slice(b"-1\n");
+                }
+                conv.shape_head(None, Some(Material { diffuse: color, colors: None, ..material }), state, mirrored, non_triangles);
+                conv.out.extend_from_slice(b"coord Coordinate { point [\n");
+                for &v in &order {
+                    let p = state.matrix.transform_point3(glam::Vec3::new(points[3 * v], points[3 * v + 1], points[3 * v + 2]));
+                    let _ = writeln!(conv.out, "{} {} {},", p.x, p.y, p.z);
+                }
+                conv.out.extend_from_slice(b"] }\n");
+                if let (Some(_), Some((start, end))) = (&corner_normals, state.normals) {
+                    conv.normal_vectors(start, end, state);
+                    conv.out.extend_from_slice(b"normalIndex [\n");
+                    conv.out.extend_from_slice(&corner_index);
+                    conv.out.extend_from_slice(b"]\n");
+                }
+                conv.out.extend_from_slice(b"coordIndex [\n");
+                conv.out.extend_from_slice(&coord_index);
+                conv.out.extend_from_slice(b"] }\n}\n");
+                conv.shapes += 1;
+            }
+        });
+    }
+}
+
+/// Facce di un indice con `-1` come separatore: posizione di inizio e di fine, senza le vuote.
+fn face_ranges(indices: &[i32]) -> Vec<(usize, usize)> {
+    let mut out = Vec::new();
+    let mut start = 0;
+    for (p, &i) in indices.iter().chain(std::iter::once(&-1)).enumerate() {
+        if i == -1 {
+            if p > start {
+                out.push((start, p));
+            }
+            start = p + 1;
+        }
+    }
+    out
+}
+
+/// Colori diversi, nell'ordine in cui compaiono.
+fn distinct(colors: &[[f32; 3]]) -> Vec<[f32; 3]> {
+    let mut out: Vec<[f32; 3]> = Vec::new();
+    for c in colors {
+        if !out.contains(c) {
+            out.push(*c);
+        }
+    }
+    out
 }
 
 /// Triangoli delle strisce (`v0 v1 v2`, `v2 v1 v3`, ... con il verso alternato), con -1 dopo
@@ -1055,6 +1335,121 @@ mod tests {
         assert_eq!(with("PER_FACE", ""), [x, x, x, y, y, y]);
         assert_eq!(with("PER_FACE_INDEXED", "normalIndex [ 5, 3 ]"), [z, z, z, nx, nx, nx]);
         assert_eq!(with("OVERALL", ""), [z; 6], "ricalcolate");
+    }
+
+    /// Colori per faccia o per vertice: un pezzo per colore con le sue facce e le sue normali;
+    /// colori tutti uguali: un pezzo solo, senza avviso.
+    #[test]
+    fn several_colors_become_one_piece_per_color() {
+        let with = |binding: &str, colors: &str, extra: &str| {
+            parse(&format!(
+                "DEF Pezzo Separator {{
+                 Material {{ diffuseColor [ {colors} ] }}
+                 MaterialBinding {{ value {binding} }}
+                 NormalBinding {{ value PER_VERTEX_INDEXED }}
+                 Coordinate3 {{ point [ 0 0 0, 1 0 0, 0 1 0, 9 9 9, 1 1 0 ] }}
+                 Normal {{ vector [ 1 0 0, 0 1 0, 0 0 -1, -1 0 0, 0 -1 0, 0 0 1 ] }}
+                 IndexedFaceSet {{ coordIndex [ 0, 1, 2, -1, 1, 4, 2, -1 ] normalIndex [ 2, 0, 1, -1, 3, 4, 5, -1 ] {extra} }} }}"
+            ))
+        };
+        let (red, blue) = (Some([1.0, 0.0, 0.0, 1.0]), Some([0.0, 0.0, 1.0, 1.0]));
+        let colors = |scene: &SceneGraph| scene.shapes_data.iter().map(|s| s.color).collect::<Vec<_>>();
+
+        let scene = with("PER_FACE", "1 0 0, 0 0 1", "");
+        assert_eq!(colors(&scene), [red, blue]);
+        assert!(scene.load_warnings.is_empty(), "{:?}", scene.load_warnings);
+        // Ogni pezzo ha solo i suoi vertici e le sue normali
+        assert_eq!(scene.shapes_data[0].world_vertices, [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0]]);
+        assert_eq!(scene.shapes_data[1].world_vertices, [[1.0, 0.0, 0.0], [1.0, 1.0, 0.0], [0.0, 1.0, 0.0]]);
+        assert_eq!(scene.shapes_data[0].corner_normals(), [[0.0, 0.0, -1.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0]]);
+        assert_eq!(scene.shapes_data[1].corner_normals(), [[-1.0, 0.0, 0.0], [0.0, -1.0, 0.0], [0.0, 0.0, 1.0]]);
+        // I pezzi stanno nel gruppo col nome
+        let group = scene.parent_of(scene.mesh_to_node[0]).unwrap();
+        assert_eq!(scene.display_name(group), "Pezzo");
+
+        // Indici dei materiali, per faccia e per vertice
+        assert_eq!(colors(&with("PER_FACE_INDEXED", "1 0 0, 0 0 1", "materialIndex [ 1, 0 ]")), [blue, red]);
+        assert_eq!(colors(&with("PER_VERTEX", "1 0 0, 1 0 0, 1 0 0, 0 0 1, 0 0 1, 0 0 1", "")), [red, blue]);
+        let per_vertex = with("PER_VERTEX_INDEXED", "1 0 0, 0 0 1", "materialIndex [ 0, 0, 0, -1, 1, 1, 1, -1 ]");
+        assert_eq!(colors(&per_vertex), [red, blue]);
+        // Senza materialIndex il colore segue i vertici (0 e 1: rosso e blu)
+        assert_eq!(colors(&with("PER_VERTEX_INDEXED", "1 0 0, 0 0 1, 0 0 1, 0 0 1, 0 0 1", "")), [red, blue]);
+
+        // Tutti uguali (come negli export JT): un pezzo, con quel colore
+        let scene = with("PER_VERTEX_INDEXED", "0 0 1, 0 0 1, 0 0 1, 0 0 1, 0 0 1", "");
+        assert_eq!(colors(&scene), [blue]);
+        assert!(scene.load_warnings.is_empty(), "{:?}", scene.load_warnings);
+        assert_eq!(scene.shapes_data[0].corner_normals().len(), 6, "normali del file");
+    }
+
+    /// Primitive Inventor: superfici con il materiale e la posizione correnti, misure del file.
+    #[test]
+    fn primitives_become_surfaces() {
+        let scene = parse(
+            "Separator { Material { diffuseColor 1 0 0 } Translation { translation 10 0 0 }
+               DEF Blocco Cube { width 4 height 2 depth 6 }
+               Sphere { radius 3 }
+               Cylinder { parts SIDES }
+               Cone { } }",
+        );
+        let s = &scene.shapes_data;
+        assert_eq!(s.len(), 4, "{:?}", scene.load_warnings);
+        assert!(scene.load_warnings.is_empty(), "{:?}", scene.load_warnings);
+        let size = |i: usize| {
+            let b = s[i].world_vertices.iter().fold((glam::Vec3::MAX, glam::Vec3::MIN), |(lo, hi), &v| {
+                (lo.min(v.into()), hi.max(v.into()))
+            });
+            ((b.0 + b.1) / 2.0, b.1 - b.0)
+        };
+        assert_eq!(size(0), (glam::Vec3::new(10.0, 0.0, 0.0), glam::Vec3::new(4.0, 2.0, 6.0)));
+        assert_eq!(s[0].color, Some([1.0, 0.0, 0.0, 1.0]));
+        assert_eq!(s[0].name.as_deref(), Some("Blocco"));
+        assert!((size(1).1 - glam::Vec3::splat(6.0)).abs().max_element() < 1e-4);
+        assert!((size(2).1.y - 2.0).abs() < 1e-6, "cilindro alto 2 sull'asse Y");
+        assert_eq!(s[2].indices.len() / 3, 64, "solo il fianco: 32 quadrilateri");
+    }
+
+    /// Gruppi VRML 2.0 di Coin con dentro nodi Inventor (come i modelli dei binari): materiale
+    /// come nodo a sé, primitive, linee segnalate.
+    #[test]
+    fn coin_vrml_groups_with_inventor_nodes() {
+        let scene = parse_wrl(
+            b"#Inventor V2.1 ascii
+            Separator { DEF Binario VRMLTransform {
+              children [ VRMLMaterial { diffuseColor 0 0 1 },
+                DEF Carrello VRMLTransform { children Cube { width 2 height 2 depth 2 } translation 5 0 0 },
+                Separator { Coordinate3 { point [ 0 0 0, 1 0 0 ] } IndexedLineSet { coordIndex [ 0, 1 ] } } ]
+              translation 0 0 1 }
+              DEF Altro VRMLTransform { children [ Separator { DEF Verde Material { diffuseColor 0 1 0 } } ] }
+              DEF Terzo VRMLTransform { children [ Separator { USE Verde Cube { } } ] } }",
+        );
+        assert_eq!(scene.shapes_data.len(), 2);
+        assert_eq!(scene.shapes_data[1].color, Some([0.0, 1.0, 0.0, 1.0]), "USE di un DEF dentro children [...]");
+        assert_eq!(scene.load_warnings.len(), 1, "{:?}", scene.load_warnings);
+        let shape = &scene.shapes_data[0];
+        assert_eq!(shape.color, Some([0.0, 0.0, 1.0, 1.0]));
+        let min = shape.world_vertices.iter().fold(glam::Vec3::MAX, |m, &v| m.min(v.into()));
+        assert_eq!(min, glam::Vec3::new(4.0, -1.0, 0.0), "traslazioni dei due VRMLTransform");
+        assert!(scene.load_warnings[0].contains("1 nodi di linee"), "{:?}", scene.load_warnings);
+        let names: Vec<String> = scene.roots.iter().map(|&r| scene.display_name(r)).collect();
+        assert_eq!(names, ["Binario", "Terzo"]);
+    }
+
+    /// Nodo di un'estensione (FreeCAD scrive `SoFCSelection` attorno a tutto il pezzo): si legge
+    /// il contenuto come in un gruppo.
+    #[test]
+    fn extension_nodes_with_children_are_read_as_groups() {
+        let scene = parse_wrl(
+            format!(
+                "#Inventor V2.1 ascii\nSeparator {{ Switch {{ whichChild 0
+                 SoFCSelection {{ fields [ SFString objectName, SFEnum selected ] objectName \"Pezzo\" selected NOTSELECTED
+                   Separator {{ {TRIANGLE} }} }} }}
+                 NodoIgnoto {{ fields [ SFFloat valore ] valore 2 }} }}"
+            )
+            .as_bytes(),
+        );
+        assert_eq!(scene.shapes_data.len(), 1);
+        assert!(scene.load_warnings.is_empty(), "{:?}", scene.load_warnings);
     }
 
     /// Il testo dei numeri è copiato; l'export è un VRML 2.0 che si riapre uguale.

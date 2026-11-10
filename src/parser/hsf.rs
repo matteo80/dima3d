@@ -987,7 +987,7 @@ impl<'a> Reader<'a> {
     }
 
     fn finish(self) -> (Vec<ShapeInfo>, Vec<String>) {
-        let mut warnings = self.warnings.clone();
+        let warnings = self.warnings.clone();
         let mut hidden = 0usize;
         let mut empty = 0usize;
         let mut prepared = Vec::new();
@@ -1025,8 +1025,10 @@ impl<'a> Reader<'a> {
             }
             prepared.push((slot.segment, mesh));
         }
+        // Corpi vuoti scritti dal CAD: non si perde niente, quindi solo nel registro (nella barra
+        // di stato sembrava un errore)
         if empty > 0 {
-            warnings.push(format!("{empty} Shell senza geometria ignorate"));
+            tracing::info!("HSF: {empty} Shell senza geometria ignorate");
         }
         tracing::info!("HSF: {} pezzi, {hidden} prototipi nascosti", prepared.len());
 

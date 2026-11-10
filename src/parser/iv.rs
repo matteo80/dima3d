@@ -37,6 +37,14 @@ pub(crate) fn ascii(data: &[u8]) -> (Cow<'_, [u8]>, Vec<String>) {
     if !is_binary(data) {
         return (Cow::Borrowed(data), Vec::new());
     }
+    if damaged_by_text_transfer(data) {
+        return (
+            Cow::Owned(b"#Inventor V2.1 ascii\n".to_vec()),
+            vec!["IV binario rovinato da un trasferimento in modalità testo (es. FTP in ASCII): i fine riga sono \
+                  stati cambiati e i byte 0x1A tolti. Non si può ricostruire: serve una copia integra del file."
+                .to_string()],
+        );
+    }
     let start = header_line(data).len() + 1;
     let mut bin = Binary { data, pos: start.min(data.len()), out: Vec::with_capacity(data.len() * 2) };
     bin.out.extend_from_slice(b"#Inventor V2.1 ascii\n");
@@ -54,6 +62,20 @@ pub(crate) fn ascii(data: &[u8]) -> (Cow<'_, [u8]>, Vec<String>) {
         }
     }
     (Cow::Owned(bin.out), warnings)
+}
+
+/// Binario copiato come testo: ogni byte `0D` e ogni `0A` è diventato `0D 0A` (anche alla fine
+/// dell'intestazione) e i byte `1A` (fine file per DOS) sono spariti. In un file sano è il
+/// contrario: tanti `0D` e `0A` da soli e quasi mai la coppia. I byte tolti non si possono
+/// rimettere al loro posto, quindi il file non si ricostruisce.
+fn damaged_by_text_transfer(data: &[u8]) -> bool {
+    if !header_line(data).ends_with(b"\r") {
+        return false;
+    }
+    let body = &data[(header_line(data).len() + 1).min(data.len())..];
+    let pairs = body.windows(2).filter(|w| w == b"\r\n").count();
+    let alone = body.iter().filter(|&&b| b == b'\r' || b == b'\n').count() - 2 * pairs;
+    pairs > 0 && alone == 0
 }
 
 /// Chiude le parentesi rimaste aperte da un nodo interrotto, tenendo quello già scritto.
@@ -658,6 +680,38 @@ Separator {
         let (text, warnings) = ascii(&data);
         std::fs::write(std::env::var("GESTORE_IV_OUT").expect("GESTORE_IV_OUT"), &text).unwrap();
         println!("{} byte, avvisi {warnings:?}", text.len());
+    }
+
+    /// Un binario copiato come testo si riconosce e lo dice; uno sano con dei `0D`/`0A` no.
+    #[test]
+    fn binary_damaged_by_a_text_transfer() {
+        let mut sane = b"#Inventor V2.1 binary  \n".to_vec();
+        sane.extend_from_slice(&[0, 0, 0, 13, 0, 0, 0, 10, 0, 0, 0, 26]);
+        assert!(!damaged_by_text_transfer(&sane));
+        let mut damaged = Vec::new();
+        for &b in &sane {
+            match b {
+                b'\r' | b'\n' => damaged.extend_from_slice(b"\r\n"),
+                0x1a => {}
+                _ => damaged.push(b),
+            }
+        }
+        assert!(damaged_by_text_transfer(&damaged));
+        let (_, warnings) = ascii(&damaged);
+        assert!(warnings[0].contains("copia integra"), "{warnings:?}");
+        // Un file di testo con i fine riga di Windows non è un binario rovinato
+        assert!(!is_binary(b"#Inventor V2.1 ascii\r\nSeparator { }\r\n"));
+    }
+
+    #[test]
+    #[ignore]
+    fn iv_vrml2() {
+        // GESTORE_IV_FILE=file.iv GESTORE_IV_OUT=file.wrl: salva il VRML 2.0 della conversione
+        let data = std::fs::read(std::env::var("GESTORE_IV_FILE").expect("GESTORE_IV_FILE")).unwrap();
+        let (text, _) = ascii(&data);
+        let converted = crate::parser::vrml1::convert(&text);
+        std::fs::write(std::env::var("GESTORE_IV_OUT").expect("GESTORE_IV_OUT"), &converted.text).unwrap();
+        println!("{} byte, avvisi {:?}", converted.text.len(), converted.warnings);
     }
 
     #[test]

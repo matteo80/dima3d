@@ -913,15 +913,30 @@ Fatto:
       Ctrl+Maiusc+E. Si scrivono solo i pezzi visibili dei nodi selezionati, con i gruppi che li contengono; il nodo del
       file solo se la selezione tocca più file. Vale per WRL, STL, IV e HSF (`exporter::Scope`: Visible / Node /
       Selected, al posto del vecchio `node: Option<u32>`). Non toglie l'avviso «Modifiche non esportate».
+- [x] Avviso HSF «N Shell senza geometria ignorate» tolto dalla barra di stato: resta solo nel registro (corpi vuoti
+      scritti dal CAD, non si perde niente).
+- [x] IV di FreeCAD (`SoFCSelection` attorno a tutto il pezzo): si aprivano vuoti e senza avvisi. I nodi di estensione
+      che dichiarano `fields [...]` e hanno dei nodi dentro si leggono come gruppi.
+- [x] VRML 1.0 / IV con più colori (`MaterialBinding` per faccia o per vertice, con o senza `materialIndex`): un pezzo
+      per colore nel gruppo della superficie, con le normali del file. Colori tutti uguali (export JT): un pezzo solo,
+      senza avviso. Prima: solo il primo colore e un avviso.
+- [x] Primitive Inventor (`Cube`, `Sphere`, `Cylinder` con `parts`, `Cone`) e VRML 2.0 dei file IV (`Box`...):
+      superfici generate (`parser/primitives.rs`, 32 lati, `creaseAngle` 0,5). Solo nei file IV/VRML 1.0: nei WRL
+      normali resterebbe sfalsato l'export fedele al testo del file.
+- [x] Gruppi VRML 2.0 di Coin con dentro nodi Inventor (`VRMLTransform { children [ Separator {...} ] }`, modelli
+      di binari e robot): si leggono con le regole Inventor (materiale come nodo a sé), la posizione è scritta nelle
+      coordinate. Prima il lettore VRML 2.0 li ignorava in silenzio (su un robot di prova: da 9.580 a 18.086 triangoli). I `DEF`
+      dentro `children [...]` ora si trovano anche per i `USE`.
+- [x] IV binario copiato come testo (FTP in ASCII: ogni `0D`/`0A` diventato `0D 0A`, byte `1A` tolti): riconosciuto,
+      con un avviso chiaro. Non ricostruibile (mancano byte: verificato su un file con il gemello sano).
 
 Da fare (richieste dell'utente 2026-11-10):
+- [ ] Linee (`IndexedLineSet`) non disegnate: restano nell'avviso (es. contorni a pavimento nelle celle).
 - [ ] **Segno della X nello scostamento**: l'utente deve invertire la X dell'offset calcolato perché il pezzo vada nella
       direzione giusta (succedeva anche con lo script). Ipotesi da verificare con una prova con Y e rotazioni diverse da
       zero: le basi del robot (cabina) hanno l'asse X opposto a quello del veicolo (scocca con X verso il retro), cioè
       una rotazione di 180° attorno a Z. In quel caso cambiano segno anche Y e gli angoli A e B, non solo X; se invece
       cambia solo X è una specchiatura. Poi: opzione «Coordinate robot / veicolo» nel calcolo, invece di correggere a mano.
-- [ ] Avviso «N Shell senza geometria ignorate» negli HSF: non si perde niente (corpi vuoti scritti dal CAD). Valutare
-      se toglierlo o spostarlo nei dettagli, perché sembra un errore.
 
 ### Piano di lavoro in autonomia (proposto 2026-11-07, in attesa di approvazione)
 

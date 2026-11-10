@@ -8,6 +8,7 @@ pub mod material;
 pub mod shape_extractor;
 pub mod stl;
 pub mod transform;
+mod primitives;
 mod vrml1;
 
 pub use loader::{load_wrl_async, load_wrl_async_with, LoadEvent};
