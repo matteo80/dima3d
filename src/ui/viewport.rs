@@ -50,6 +50,40 @@ fn pick(
     scene.pick_triangle_kept(origin, dir, visibility, |p| section.is_none_or(|s| s.keeps(p)))
 }
 
+/// Menu del tasto destro nella vista: comandi sulla selezione e Incolla.
+fn context_menu(ui: &mut egui::Ui, app: &crate::app::GestoreApp, actions: &mut Vec<Action>) {
+    use crate::ui::theme::{icon, icon_text};
+    let Some(scene) = &app.scene_graph else { return };
+    let selection = app.ui_state.selected_nodes();
+    let mut item = |ui: &mut egui::Ui, enabled: bool, glyph: &str, label: &str, action: Option<Action>| {
+        if ui.add_enabled(enabled && action.is_some(), egui::Button::new(icon_text(ui, glyph, label))).clicked() {
+            actions.extend(action);
+            ui.close_menu();
+        }
+    };
+    if let Some(&current) = app.ui_state.selected_node.as_ref().or(selection.first()) {
+        let title = match selection.len() {
+            0 | 1 => scene.display_name(current),
+            n => format!("{n} elementi selezionati"),
+        };
+        ui.label(egui::RichText::new(title).strong());
+        ui.separator();
+        item(ui, true, icon::COPY, "Copia    Ctrl+C", Some(Action::Copy(selection.clone())));
+        item(ui, !app.ui_state.clipboard.is_empty(), icon::CLIPBOARD, "Incolla    Ctrl+V", Some(Action::Paste));
+        ui.separator();
+        let visible = scene.nodes.get(current as usize).is_some_and(|n| n.is_visible());
+        let (glyph, label) = if visible { (icon::EYE_SLASH, "Nascondi    Spazio") } else { (icon::EYE, "Mostra    Spazio") };
+        item(ui, true, glyph, label, app.toggle_selection_action());
+        item(ui, true, icon::CUBE_FOCUS, "Isola    I", app.ui_state.isolate_action());
+        item(ui, true, icon::CORNERS_OUT, "Inquadra    F", Some(app.ui_state.focus_action()));
+        ui.separator();
+        item(ui, true, icon::TRASH, "Elimina    Canc", app.ui_state.on_selection(Action::Delete));
+    } else {
+        item(ui, !app.ui_state.clipboard.is_empty(), icon::CLIPBOARD, "Incolla    Ctrl+V", Some(Action::Paste));
+        item(ui, true, icon::EYE, "Mostra tutto", Some(Action::ShowAll));
+    }
+}
+
 /// Disegna il viewport 3D interattivo nativo con pipeline wgpu.
 pub fn draw_viewport(ui: &mut egui::Ui, app: &mut crate::app::GestoreApp) {
     let available_size = ui.available_size();
@@ -256,6 +290,28 @@ pub fn draw_viewport(ui: &mut egui::Ui, app: &mut crate::app::GestoreApp) {
             }
         }
 
+        // Tasto destro su un pezzo: lo seleziona come il clic sinistro, se non fa già parte della
+        // selezione (così il menu agisce su tutta la selezione multipla). Il trascinamento con il
+        // tasto destro sposta la vista e non apre il menu.
+        if !measuring && !picking_color && response.secondary_clicked() {
+            if let (Some(scene), Some(pos)) = (&app.scene_graph, response.interact_pointer_pos()) {
+                renderer.sync_with_scene(scene, &app.ui_state.selected_nodes());
+                let (origin, dir) = pointer_ray(&renderer.camera, rect, pos);
+                let picked = pick(scene, &renderer.visibility, section, (origin, dir))
+                    .and_then(|(mesh, _, _)| scene.mesh_to_node.get(mesh as usize).copied())
+                    .filter(|&n| n != crate::scene_graph::NO_PARENT);
+                if let Some(shape_node) = picked {
+                    let selection = app.ui_state.selected_nodes();
+                    let mut chain = scene.ancestors(shape_node);
+                    chain.push(shape_node);
+                    if !chain.iter().any(|n| selection.contains(n)) {
+                        let target = scene.parent_of(shape_node).unwrap_or(shape_node);
+                        actions.push(Action::Select { node: Some(target), reveal: true });
+                    }
+                }
+            }
+        }
+
         // Doppio click: inquadra la selezione (o tutte le parti visibili)
         if response.double_clicked() && !measuring {
             actions.push(app.ui_state.focus_action());
@@ -270,6 +326,15 @@ pub fn draw_viewport(ui: &mut egui::Ui, app: &mut crate::app::GestoreApp) {
     // Le azioni modificano scena/camera: applicale prima del rendering del frame
     for a in actions.drain(..) {
         app.apply(a);
+    }
+    // Menu del tasto destro (dopo le azioni: la selezione è già quella del pezzo cliccato)
+    let menu_open = !(app.ui_state.measure.is_some() || app.ui_state.eyedropper || app.ui_state.position.hinge.picking);
+    if menu_open && app.scene_graph.is_some() {
+        let mut chosen = Vec::new();
+        response.context_menu(|ui| context_menu(ui, app, &mut chosen));
+        for a in chosen {
+            app.apply(a);
+        }
     }
     if let Some(m) = eyedropper_message {
         app.ui_state.status_message = m;
@@ -733,6 +798,48 @@ mod tests {
         app.ui_state.eyedropper = true;
         click(&ctx, &mut app, center);
         assert_eq!(app.settings.saved_colors.first(), Some(&[1.0, 0.0, 0.0]));
+    }
+
+    /// Tasto destro su un pezzo: lo seleziona e apre il menu; Copia e Nascondi agiscono su di lui.
+    #[test]
+    fn right_click_menu_acts_on_the_clicked_piece() {
+        let _gpu = crate::renderer::gpu_lock();
+        let Some(mut app) = app_with_renderer() else { return };
+        // Come nell'applicazione: la scena aperta è un file (serve alla copia)
+        app.scene_graph.as_mut().unwrap().into_file("due.wrl".into(), None);
+        let ctx = egui::Context::default();
+        let texts = frame(&ctx, &mut app, vec![]);
+        let center = viewport_center(&texts);
+        let right_click = |app: &mut crate::app::GestoreApp| {
+            let button = |pressed| egui::Event::PointerButton {
+                pos: center,
+                button: egui::PointerButton::Secondary,
+                pressed,
+                modifiers: Default::default(),
+            };
+            for events in [vec![egui::Event::PointerMoved(center)], vec![button(true)], vec![button(false)]] {
+                frame(&ctx, app, events);
+            }
+            frame(&ctx, app, vec![])
+        };
+        let item = |texts: &[(String, egui::Pos2)], label: &str| {
+            texts.iter().find(|(s, _)| s.contains(label)).map(|(_, p)| *p + egui::vec2(6.0, 6.0)).unwrap_or_else(|| panic!("{label} non nel menu: {texts:?}"))
+        };
+
+        let texts = right_click(&mut app);
+        let scene = app.scene_graph.as_ref().unwrap();
+        let r1 = node(scene, "R1");
+        let selected = app.ui_state.selected_node.expect("il tasto destro seleziona il pezzo");
+        assert!(selected == r1 || scene.ancestors(r1).contains(&selected));
+        assert!(texts.iter().any(|(s, _)| s.contains("Incolla")));
+        click(&ctx, &mut app, item(&texts, "Copia    Ctrl+C"));
+        assert_eq!(app.ui_state.clipboard, vec![selected]);
+        assert!(app.ui_state.status_message.starts_with("Copiato"), "{}", app.ui_state.status_message);
+
+        let texts = right_click(&mut app);
+        assert_eq!(app.ui_state.selected_node, Some(selected), "la selezione resta");
+        click(&ctx, &mut app, item(&texts, "Nascondi    Spazio"));
+        assert!(!app.scene_graph.as_ref().unwrap().nodes[selected as usize].is_visible());
     }
 
     /// Il tasto "Zoom" della vista inverte il verso della rotella.

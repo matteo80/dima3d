@@ -109,6 +109,19 @@ impl Reduction {
 }
 
 impl Reduction {
+    /// Mesh incollate (`origins[i]` è la mesh copiata in `first + i`): se l'originale era ridotto,
+    /// anche la copia ritrova la geometria completa con «Ripristina».
+    pub fn copy_stash(&mut self, first: u32, origins: &[u32]) {
+        for (i, &m) in origins.iter().enumerate() {
+            let Some(Some(original)) = self.stash.get(m as usize).cloned() else { continue };
+            let at = first as usize + i;
+            if self.stash.len() <= at {
+                self.stash.resize(at + 1, None);
+            }
+            self.stash[at] = Some(original);
+        }
+    }
+
     /// Sposta anche gli originali messi da parte, come `SceneGraph::transform_meshes` con la scena.
     pub fn transform(&mut self, meshes: &[u32], m: glam::Mat4) {
         for &i in meshes {
@@ -131,21 +144,10 @@ fn restore(scene: &mut SceneGraph, stash: &mut [Option<ShapeInfo>]) -> usize {
     n
 }
 
-/// Ingombro della scena e fattore per passare dalle sue unità ai millimetri, se si capisce:
-/// una scocca o un pezzo d'auto in metri misura tra 0,05 e 50, in millimetri tra 50 e 50.000.
+/// Fattore per passare dalle unità della scena ai millimetri: la scena è sempre in millimetri
+/// (i file in metri si convertono all'apertura). `None` per una scena vuota.
 pub fn unit_to_mm(scene: &SceneGraph) -> Option<f32> {
-    let bbox = scene.compute_bounding_box();
-    if !bbox.is_valid() {
-        return None;
-    }
-    let size = (bbox.max - bbox.min).max_element();
-    if (0.05..50.0).contains(&size) {
-        Some(1000.0)
-    } else if (50.0..50_000.0).contains(&size) {
-        Some(1.0)
-    } else {
-        None
-    }
+    scene.compute_bounding_box().is_valid().then_some(1.0)
 }
 
 impl GestoreApp {
@@ -218,7 +220,7 @@ impl GestoreApp {
                 }
             }
             scene.revision += 1;
-            let size = |normals| crate::exporter::estimate_size(&scene, None, ExportOptions { compact, normals });
+            let size = |normals| crate::exporter::estimate_size(&scene, None, ExportOptions { compact, normals, meters: true });
             let summary = Summary {
                 before: outcome.triangles_before,
                 after: outcome.triangles_after,
@@ -358,10 +360,10 @@ mod tests {
         let after = app.project.reduction.summary.as_ref().unwrap().after;
         assert!((1900..=2100).contains(&after), "{after}");
 
-        // La stima è la dimensione vera del file
+        // La stima è la dimensione vera del file (in metri, come l'export)
         let path = std::env::temp_dir().join("gestore_wrl_riduzione_test.wrl");
         let scene = app.scene_graph.as_ref().unwrap();
-        crate::exporter::export_with(scene, None, &path, ExportOptions { compact: true, normals: false }).unwrap();
+        crate::exporter::export_with(scene, None, &path, ExportOptions { compact: true, normals: false, meters: true }).unwrap();
         assert_eq!(std::fs::metadata(&path).unwrap().len(), app.project.reduction.summary.as_ref().unwrap().size_without_normals);
         let again = crate::parser::parse_wrl(&std::fs::read(&path).unwrap());
         assert_eq!(again.shapes_data[0].face_count as u64, after);

@@ -524,7 +524,7 @@ DEF Assieme Transform { translation 10 0 0 children [
         );
         for binary in [false, true] {
             let path = std::env::temp_dir().join(format!("gestore_iv_rilettura_{binary}.iv"));
-            crate::exporter::iv::export_iv(&scene, None, &path, binary, true, [0.5, 0.5, 0.5, 1.0]).unwrap();
+            crate::exporter::iv::export_iv(&scene, None, &path, binary, true, false, [0.5, 0.5, 0.5, 1.0]).unwrap();
             let again = crate::parser::parse_wrl(&std::fs::read(&path).unwrap());
             assert!(again.load_warnings.is_empty(), "{:?}", again.load_warnings);
             assert_eq!(again.shapes_data.len(), 2);

@@ -224,8 +224,8 @@ pub fn export_hsf(
         Some(n) => (vec![n], false),
         None => (scene.roots.clone(), files > 1),
     };
-    // Unità della scena → metri: le scocche aperte da file in metri restano in metri
-    let to_meters = crate::reduction::unit_to_mm(scene).unwrap_or(1.0) * MM_TO_METERS;
+    // La scena è in millimetri (i file in metri si convertono all'apertura): l'HSF in metri
+    let to_meters = MM_TO_METERS;
     let mut ctx = Ctx {
         scene,
         has_visible: compute_has_visible(scene),
@@ -342,9 +342,9 @@ DEF Assieme Transform { translation 10 0 0 children [
             assert!(names.iter().any(|n| n == wanted), "manca {wanted}: {names:?}");
         }
         assert!(!names.iter().any(|n| n == "Nascosto"));
-        // La scena misura 11 unità: è in metri, il file non ha scala e si riapre in millimetri
+        // La scena è in millimetri: il file è in metri e si riapre con le stesse misure
         let piastra = again.shapes_data.iter().find(|s| s.world_vertices.len() == 4).unwrap();
-        assert!(piastra.world_vertices.iter().any(|v| (v[0] - 11_000.0).abs() < 1e-2 && (v[1] - 1000.0).abs() < 1e-2));
+        assert!(piastra.world_vertices.iter().any(|v| (v[0] - 11.0).abs() < 1e-4 && (v[1] - 1.0).abs() < 1e-4), "{:?}", piastra.world_vertices);
         assert_eq!(piastra.indices.len(), 6);
         let c = piastra.color.unwrap();
         assert!((c[0] - 1.0).abs() < 0.01 && (c[1] - 0.5).abs() < 0.01 && (c[3] - 0.75).abs() < 0.01, "{c:?}");

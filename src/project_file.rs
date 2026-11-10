@@ -15,11 +15,21 @@
 //! modificato = 1731150000               (secondi Unix)
 //! step = mesh 0.1 30 0                  (solo per gli STEP: vista | mesh deviazione angolo relativa)
 //! scala = 1000
-//! nascosti = 3-10 15                    (nodi, numerati dalla radice del file)
+//! gruppo = 812 Lato sinistro             (gruppo creato in Dima 3D: numero fisso e nome)
+//! figli = 4 7 812 9                     (contenuto di un gruppo cambiato, in ordine)
+//! nascosti = 3-10 15                    (nodi, con il loro numero fisso: la posizione
+//!                                        all'apertura, contando dalla radice del file)
 //! eliminati = 22
 //! colore = 12 1 0.5 0 1
 //! nome = 14 Nuovo nome
 //! posizione = 7 m0 … m15                (mesh del file, matrice per colonne)
+//!
+//! [copia]                               (pezzi incollati: si rifà la copia, poi le modifiche)
+//! di = 0                                (modello o copia da cui viene, in ordine nel progetto)
+//! nodi = 3 8                            (nodi copiati, numerati dalla radice di quel modello)
+//! saltati = 5                           (rami già eliminati al momento della copia)
+//! titolo = Copia di Staffa
+//! nascosti = …                          (come per i file, numerati dalla radice della copia)
 //! ```
 
 use std::path::{Component, Path, PathBuf};
@@ -27,11 +37,13 @@ use std::path::{Component, Path, PathBuf};
 use glam::{Mat4, Quat, Vec3};
 
 use crate::clusterer::ClusterConfig;
+use crate::scene_graph::copy::CopyOf;
 use crate::scene_graph::SceneGraph;
 use crate::settings::{StepLoad, StepMesh};
 
 pub const EXTENSION: &str = "dima3d";
-const VERSION: u32 = 1;
+/// 2: copie incollate, gruppi creati e pezzi spostati nell'albero.
+const VERSION: u32 = 2;
 
 /// Vista salvata: centro, distanza e orientamento della camera.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -57,6 +69,15 @@ pub struct FileEntry {
     pub colors: Vec<(u32, [f32; 4])>,
     pub names: Vec<(u32, Option<String>)>,
     pub placements: Vec<(u32, Mat4)>,
+    /// Copia incollata: `source` è l'indice nel progetto del modello (o della copia) da cui viene;
+    /// `path` resta vuoto
+    pub copy: Option<CopyOf>,
+    /// Nome della radice della copia al momento della copia
+    pub title: String,
+    /// Gruppi creati in Dima 3D: numero fisso e nome
+    pub groups: Vec<(u32, String)>,
+    /// Contenitori cambiati: numero fisso → numeri fissi dei figli, in ordine
+    pub children: Vec<(u32, Vec<u32>)>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -144,34 +165,70 @@ fn floats<const N: usize>(text: &str) -> Option<[f32; N]> {
 impl ProjectFile {
     /// Stato della scena da salvare.
     pub fn capture(scene: &SceneGraph, cluster: ClusterConfig, camera: Option<CameraView>) -> ProjectFile {
-        let starts: Vec<u32> = scene.sources.iter().map(|s| s.node).collect();
+        // Modelli da salvare: quelli aperti e quelli da cui vengono le copie aperte (anche se
+        // chiusi dopo la copia: servono per rifarla). Una copia si salva solo se si salva il suo.
+        let alive = |i: usize| scene.info.get(scene.sources[i].node as usize).is_some_and(|n| !n.deleted);
+        let mut needed: Vec<bool> = (0..scene.sources.len()).map(alive).collect();
+        for i in (0..scene.sources.len()).rev() {
+            if let (true, Some(c)) = (needed[i], &scene.sources[i].copy_of) {
+                needed[c.source] = true;
+            }
+        }
+        let mut entry_of: Vec<Option<usize>> = vec![None; scene.sources.len()];
         let mut files = Vec::new();
         for (i, source) in scene.sources.iter().enumerate() {
-            let Some(path) = &source.path else { continue };
-            if scene.info.get(source.node as usize).is_none_or(|n| n.deleted) {
+            if !needed[i] {
                 continue;
             }
-            let first = source.node;
-            let end = starts.get(i + 1).copied().unwrap_or(scene.nodes.len() as u32);
-            let (size, modified) = file_stamp(path);
+            let copy = match &source.copy_of {
+                Some(c) => match entry_of.get(c.source).copied().flatten() {
+                    Some(of) => Some(CopyOf { source: of, ..c.clone() }),
+                    None => continue,
+                },
+                None => None,
+            };
+            let (path, size, modified) = match (&source.path, &copy) {
+                (Some(path), None) => {
+                    let (size, modified) = file_stamp(path);
+                    (path.clone(), size, modified)
+                }
+                (None, Some(_)) => (PathBuf::new(), 0, 0),
+                _ => continue,
+            };
+            entry_of[i] = Some(files.len());
             let mut entry = FileEntry {
-                path: path.clone(),
+                path,
                 relative: None,
                 size,
                 modified,
                 step: source.step,
                 scale: source.scale,
+                title: if copy.is_some() { source.name.clone() } else { String::new() },
+                copy,
                 ..Default::default()
             };
-            for n in first..end {
+            let mut nodes = scene.file_nodes(i);
+            nodes.sort_by_key(|&n| scene.info[n as usize].origin);
+            let origin = |n: u32| scene.info[n as usize].origin;
+            for &n in &nodes {
                 let (node, info) = (&scene.nodes[n as usize], &scene.info[n as usize]);
-                let rel = n - first;
+                let rel = info.origin;
                 if info.deleted {
+                    // Un gruppo creato e poi eliminato (o annullato) non serve a niente
+                    if info.created {
+                        continue;
+                    }
                     // Solo la cima di ogni ramo eliminato: il resto si elimina con lei
                     if info.parent == crate::scene_graph::NO_PARENT || !scene.info[info.parent as usize].deleted {
                         entry.deleted.push(rel);
                     }
                     continue;
+                }
+                if info.created {
+                    entry.groups.push((rel, node.name().unwrap_or("Gruppo").to_string()));
+                }
+                if info.restructured {
+                    entry.children.push((rel, node.children().iter().map(|&c| origin(c)).collect()));
                 }
                 if !node.is_visible() {
                     entry.hidden.push(rel);
@@ -205,12 +262,21 @@ impl ProjectFile {
             out.push_str(&format!("camera = {} {} {} {} {} {} {} {}\n", t.x, t.y, t.z, c.distance, q.x, q.y, q.z, q.w));
         }
         for f in &self.files {
-            out.push_str("\n[file]\n");
-            if let Some(rel) = relative_to(&f.path, base) {
-                out.push_str(&format!("percorso = {}\n", rel.display()));
+            if let Some(c) = &f.copy {
+                out.push_str("\n[copia]\n");
+                out.push_str(&format!("di = {}\nnodi = {}\n", c.source, ranges(&c.nodes)));
+                if !c.skip.is_empty() {
+                    out.push_str(&format!("saltati = {}\n", ranges(&c.skip)));
+                }
+                out.push_str(&format!("titolo = {}\n", f.title.replace(['\r', '\n'], " ")));
+            } else {
+                out.push_str("\n[file]\n");
+                if let Some(rel) = relative_to(&f.path, base) {
+                    out.push_str(&format!("percorso = {}\n", rel.display()));
+                }
+                out.push_str(&format!("assoluto = {}\n", f.path.display()));
+                out.push_str(&format!("dimensione = {}\nmodificato = {}\n", f.size, f.modified));
             }
-            out.push_str(&format!("assoluto = {}\n", f.path.display()));
-            out.push_str(&format!("dimensione = {}\nmodificato = {}\n", f.size, f.modified));
             match f.step {
                 Some(StepLoad::View) => out.push_str("step = vista\n"),
                 Some(StepLoad::Mesh(m)) => out.push_str(&format!("step = mesh {} {} {}\n", m.deviation, m.angle, u8::from(m.relative))),
@@ -218,6 +284,13 @@ impl ProjectFile {
             }
             if f.scale != 1.0 {
                 out.push_str(&format!("scala = {}\n", f.scale));
+            }
+            for (n, name) in &f.groups {
+                out.push_str(&format!("gruppo = {n} {}\n", name.replace(['\r', '\n'], " ")));
+            }
+            for (n, list) in &f.children {
+                let list: Vec<String> = list.iter().map(u32::to_string).collect();
+                out.push_str(&format!("figli = {n} {}\n", list.join(" ")).replace("  \n", "\n").replace(" \n", "\n"));
             }
             if !f.hidden.is_empty() {
                 out.push_str(&format!("nascosti = {}\n", ranges(&f.hidden)));
@@ -255,6 +328,10 @@ impl ProjectFile {
                 out.files.push(FileEntry { scale: 1.0, ..Default::default() });
                 continue;
             }
+            if line == "[copia]" {
+                out.files.push(FileEntry { scale: 1.0, copy: Some(CopyOf::default()), ..Default::default() });
+                continue;
+            }
             let Some((key, value)) = line.split_once('=') else { return Err(bad(i)) };
             let (key, value) = (key.trim(), value.trim());
             if key == "versione" {
@@ -279,6 +356,22 @@ impl ProjectFile {
                         distance: d,
                         orientation: Quat::from_xyzw(qx, qy, qz, qw).normalize(),
                     });
+                }
+                (Some(f), "di") => {
+                    let of: usize = value.parse().map_err(|_| bad(i))?;
+                    f.copy.as_mut().ok_or_else(|| bad(i))?.source = of;
+                }
+                (Some(f), "nodi") => f.copy.as_mut().ok_or_else(|| bad(i))?.nodes = parse_ranges(value).ok_or_else(|| bad(i))?,
+                (Some(f), "saltati") => f.copy.as_mut().ok_or_else(|| bad(i))?.skip = parse_ranges(value).ok_or_else(|| bad(i))?,
+                (Some(f), "titolo") => f.title = value.to_string(),
+                (Some(f), "gruppo") => {
+                    let (n, name) = value.split_once(' ').unwrap_or((value, ""));
+                    f.groups.push((n.parse().map_err(|_| bad(i))?, name.trim().to_string()));
+                }
+                (Some(f), "figli") => {
+                    let numbers: Vec<u32> = value.split_whitespace().map(str::parse).collect::<Result<_, _>>().map_err(|_| bad(i))?;
+                    let (&parent, list) = numbers.split_first().ok_or_else(|| bad(i))?;
+                    f.children.push((parent, list.to_vec()));
                 }
                 (Some(f), "percorso") => f.relative = Some(PathBuf::from(value)),
                 (Some(f), "assoluto") => f.path = PathBuf::from(value),
@@ -317,7 +410,14 @@ impl ProjectFile {
         if !seen_header {
             return Err("Non è un progetto di Dima 3D".to_string());
         }
-        for f in &mut out.files {
+        for (index, f) in out.files.iter_mut().enumerate() {
+            if let Some(c) = &f.copy {
+                // Una copia viene da un elemento scritto prima nel progetto
+                if c.source >= index || c.nodes.is_empty() {
+                    return Err("Nel progetto c'è una copia senza provenienza valida".to_string());
+                }
+                continue;
+            }
             if f.path.as_os_str().is_empty() && f.relative.is_none() {
                 return Err("Nel progetto c'è un file senza percorso".to_string());
             }
@@ -336,10 +436,11 @@ impl ProjectFile {
     /// es. file cambiato).
     pub fn apply_entry(entry: &FileEntry, scene: &mut SceneGraph, source: usize) -> usize {
         let Some(file) = scene.sources.get(source) else { return 0 };
-        let first = file.node;
-        let end = scene.sources.get(source + 1).map_or(scene.nodes.len() as u32, |s| s.node);
         let meshes = file.meshes.clone();
-        let node = |rel: u32| first.checked_add(rel).filter(|&n| n < end);
+        // Numero fisso → nodo (la struttura salvata è già stata ricostruita)
+        let file_nodes = scene.file_nodes(source);
+        let map = scene.origin_map(source);
+        let node = |rel: u32| map.get(&rel).copied();
         let mut skipped = 0;
         if entry.scale != 1.0 && file.scale > 0.0 {
             let factor = entry.scale / file.scale;
@@ -348,9 +449,10 @@ impl ProjectFile {
             }
         }
         let hidden: std::collections::HashSet<u32> = entry.hidden.iter().copied().collect();
-        for n in first..end {
+        for &n in &file_nodes {
+            let origin = scene.info[n as usize].origin;
             if let Some(x) = scene.nodes.get_mut(n as usize) {
-                x.set_visible(!hidden.contains(&(n - first)));
+                x.set_visible(!hidden.contains(&origin));
             }
         }
         skipped += entry.hidden.iter().filter(|&&n| node(n).is_none()).count();
@@ -425,11 +527,22 @@ mod tests {
             colors: vec![(2, [1.0, 0.5, 0.25, 1.0])],
             names: vec![(0, Some("Nome nuovo con spazi".into())), (5, None)],
             placements: vec![(3, Mat4::from_rotation_z(0.3) * Mat4::from_translation(Vec3::new(1.5, -2.0, 1e-7)))],
+            copy: None,
+            title: String::new(),
+            groups: vec![(812, "Lato sinistro".into())],
+            children: vec![(4, vec![7, 812, 9]), (812, vec![])],
+        };
+        let copy = FileEntry {
+            scale: 1.0,
+            hidden: vec![2],
+            copy: Some(CopyOf { source: 1, nodes: vec![3, 4, 5, 9], skip: vec![6] }),
+            title: "Copia di Staffa".into(),
+            ..Default::default()
         };
         let p = ProjectFile {
             cluster: ClusterConfig { tolerance: 0.75, min_matching_vertices: 20 },
             camera: Some(CameraView { target: Vec3::new(1.0, 2.0, 3.0), distance: 4500.0, orientation: Quat::from_rotation_y(0.4) }),
-            files: vec![file.clone(), FileEntry { path: PathBuf::from(r"E:\b.stl"), scale: 1.0, ..Default::default() }],
+            files: vec![file.clone(), FileEntry { path: PathBuf::from(r"E:\b.stl"), scale: 1.0, ..Default::default() }, copy.clone()],
         };
         let text = p.to_text(project);
         assert!(text.contains(r"percorso = modelli\pezzo uno.wrl"), "{text}");
@@ -444,7 +557,13 @@ mod tests {
         assert_eq!((f.size, f.modified, f.step, f.scale), (file.size, file.modified, file.step, file.scale));
         assert_eq!((&f.hidden, &f.deleted, &f.colors, &f.names), (&file.hidden, &file.deleted, &file.colors, &file.names));
         assert_eq!(f.placements, file.placements, "le matrici tornano identiche");
+        assert_eq!((&f.groups, &f.children), (&file.groups, &file.children));
         assert_eq!(back.files[1].path, PathBuf::from(r"E:\b.stl"));
+        assert!(text.contains("[copia]\ndi = 1\nnodi = 3-5 9\nsaltati = 6\ntitolo = Copia di Staffa"), "{text}");
+        assert_eq!(back.files[2], copy);
+        // Una copia può venire solo da un elemento scritto prima
+        let bad = text.replace("di = 1", "di = 2");
+        assert!(ProjectFile::from_text(&bad, project).is_err());
         assert!(ProjectFile::from_text("ciao", project).is_err());
         assert!(ProjectFile::from_text("versione = 99", project).is_err());
     }

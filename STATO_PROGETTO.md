@@ -2,7 +2,7 @@
 
 > Applicazione desktop nativa Rust per la visualizzazione, analisi e manipolazione interattiva  
 > di file VRML V2.0 (`.wrl`) di grandi dimensioni (fino a 600+ MB).  
-> **Aggiornato:** 2026-11-08 · **Fatti:** visualizzazione, albero, colori, export, rendering veloce, rotazione OpenInventor (confermata dall'utente), Step 1 completo (exe provato dall'utente su un altro PC), lettura VRML 1.0, interfaccia dello Step 2, normali originali (`normalIndex`), antialiasing 4x, illuminazione solidale alla camera, selezione con contorno, viste standard in coordinate veicolo, più matematiche nella stessa scena con conversione delle unità, apertura dei file JT, HSF, IV e STEP (con le opzioni di mesh) · cubo di orientamento, proprietà e misure, piano di sezione, export in background, rifiniture (blocco 6) · **Prossimo:** piano completato; nuove richieste dall'utente (sezione 8)
+> **Aggiornato:** 2026-11-10 (versione 0.2.0: Step 10) · **Fatti:** visualizzazione, albero, colori, export, rendering veloce, rotazione OpenInventor (confermata dall'utente), Step 1 completo (exe provato dall'utente su un altro PC), lettura VRML 1.0, interfaccia dello Step 2, normali originali (`normalIndex`), antialiasing 4x, illuminazione solidale alla camera, selezione con contorno, viste standard in coordinate veicolo, più matematiche nella stessa scena con conversione delle unità, apertura dei file JT, HSF, IV e STEP (con le opzioni di mesh) · cubo di orientamento, proprietà e misure, piano di sezione, export in background, rifiniture (blocco 6) · **Prossimo:** piano completato; nuove richieste dall'utente (sezione 8)
 
 ---
 
@@ -886,6 +886,40 @@ sposta finché la distanza dal riferimento è quella misurata.
       `licenses/genera_licenze_rust.py` (`cargo metadata`, solo dipendenze dell'exe per Windows; testi identici
       una volta sola; per i pacchetti senza file di licenza riga di copyright con gli autori e testo standard).
 - [x] `pacchetto.ps1` salvato con BOM: PowerShell 5.1 leggeva le lettere accentate del LEGGIMI come ANSI.
+
+### Step 10 — Scena, scostamento e unità (richieste dell'utente 2026-11-10, versione 0.2.0)
+
+Fatto:
+- [x] Copia e incolla (Ctrl+C / Ctrl+V, tasto destro nella vista 3D e nell'albero, `scene_graph/copy.rs`): la copia è
+      un nuovo «file» in fondo all'albero, nella stessa posizione; testo sorgente condiviso con l'originale (export);
+      nel progetto come `[copia]` (istruzione per rifarla + modifiche). Spazio = nascondi/mostra la selezione.
+- [x] Menu del tasto destro nella vista 3D: Copia, Incolla, Nascondi/Mostra, Isola, Inquadra, Elimina.
+- [x] Scostamento «Tra due oggetti» dalla geometria (`scene_graph/register.rs`, metodo di Horn) quando i due oggetti sono
+      lo stesso pezzo: funziona anche con i pezzi solo caricati o con la posizione già scritta nelle coordinate.
+      Verificato su un file del visualizzatore usato in azienda: stesso risultato dei Transform.
+- [x] Export WRL con i sistemi di riferimento degli oggetti come `Transform` dentro il `DEF … Group` dell'oggetto (come i
+      file del visualizzatore): lo script dello scostamento ritrova l'offset nell'export di Dima 3D.
+- [x] HSF: opcode `?` (condizioni del segmento) e polilinee in doppia precisione; prima alcuni file si leggevano a metà
+      o restavano vuoti. Tutti i 19 file di prova dell'utente si leggono fino in fondo.
+- [x] Unità: la scena è in mm; WRL/IV senza unità con coordinate entro ±20 si convertono da metri all'apertura (avviso
+      nella barra di stato, annullabile dal menu «Unità di misura» del file). Export: WRL e HSF in metri, IV in mm
+      (opzione «In metri (non scalare)»), STL in mm. Coordinate in metri al micron.
+- [x] Albero: trascinare uno o più pezzi dentro un gruppo dello stesso file; «Nuovo gruppo con la selezione». Ogni nodo
+      ha un numero fisso (`NodeInfo::origin`); il progetto (versione 2 del formato) salva gruppi creati (`gruppo`) e
+      contenuto dei gruppi cambiati (`figli`). L'ordine dei numeri non è più quello dell'albero: chi visita i figli
+      prima dei padri usa `SceneGraph::tree_order` (`scene_graph/tree_edit.rs`).
+- [x] Toolbar: «Modifiche non esportate» non copre più i pulsanti quando la finestra è stretta (resta l'icona ⚠).
+
+Da fare (richieste dell'utente 2026-11-10):
+- [ ] **Esporta selezionati**: export dei soli elementi selezionati (oggi si esporta tutto il visibile, o un file intero
+      dal suo nodo nell'albero).
+- [ ] **Segno della X nello scostamento**: l'utente deve invertire la X dell'offset calcolato perché il pezzo vada nella
+      direzione giusta (succedeva anche con lo script). Ipotesi da verificare con una prova con Y e rotazioni diverse da
+      zero: le basi del robot (cabina) hanno l'asse X opposto a quello del veicolo (scocca con X verso il retro), cioè
+      una rotazione di 180° attorno a Z. In quel caso cambiano segno anche Y e gli angoli A e B, non solo X; se invece
+      cambia solo X è una specchiatura. Poi: opzione «Coordinate robot / veicolo» nel calcolo, invece di correggere a mano.
+- [ ] Avviso «N Shell senza geometria ignorate» negli HSF: non si perde niente (corpi vuoti scritti dal CAD). Valutare
+      se toglierlo o spostarlo nei dettagli, perché sembra un errore.
 
 ### Piano di lavoro in autonomia (proposto 2026-11-07, in attesa di approvazione)
 

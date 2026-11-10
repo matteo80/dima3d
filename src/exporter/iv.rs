@@ -16,7 +16,7 @@
 use std::collections::HashMap;
 use std::io::{self, BufWriter, Write};
 
-use super::writer::{compute_has_visible, coordinate_decimals, push_fixed, push_uint, ExportStats};
+use super::writer::{compute_has_visible, coordinate_decimals, push_fixed, push_uint, ExportStats, METERS_DECIMALS};
 use crate::scene_graph::{NodeKind, SceneGraph, SceneNode};
 
 /// Cifre decimali delle normali nel formato di testo (errore massimo ~0,05°).
@@ -198,6 +198,8 @@ struct Ctx<'a> {
     write_file_nodes: bool,
     normals: bool,
     decimals: u32,
+    /// Unità della scena (mm) per unità del file: 1000 per un file in metri
+    unit: f32,
     default_color: [f32; 4],
     names: HashMap<String, u32>,
     stats: ExportStats,
@@ -255,7 +257,14 @@ impl Ctx<'_> {
                     hints.push(("creaseAngle", Value::Float(0.5)));
                 }
                 w.leaf("ShapeHints", &hints)?;
-                w.leaf("Coordinate3", &[("point", Value::Vec3s(&shape.world_vertices, self.decimals))])?;
+                let scaled: Vec<[f32; 3]>;
+                let points = if self.unit == 1.0 {
+                    &shape.world_vertices
+                } else {
+                    scaled = shape.world_vertices.iter().map(|v| v.map(|c| c / self.unit)).collect();
+                    &scaled
+                };
+                w.leaf("Coordinate3", &[("point", Value::Vec3s(points, self.decimals))])?;
                 if with_normals {
                     w.leaf("Normal", &[("vector", Value::Vec3s(&shape.normals, NORMAL_DECIMALS))])?;
                     w.leaf("NormalBinding", &[("value", Value::Enum("PER_VERTEX_INDEXED"))])?;
@@ -307,6 +316,7 @@ pub fn export_iv(
     path: &std::path::Path,
     binary: bool,
     normals: bool,
+    meters: bool,
     default_color: [f32; 4],
 ) -> io::Result<ExportStats> {
     let file = BufWriter::with_capacity(1 << 20, std::fs::File::create(path)?);
@@ -320,7 +330,11 @@ pub fn export_iv(
         has_visible: compute_has_visible(scene),
         write_file_nodes,
         normals,
-        decimals: coordinate_decimals(scene),
+        // In metri i numeri sono mille volte più piccoli: tre cifre decimali in più, fino al
+        // micron (oltre, un f32 di qualche metro non ha più cifre vere)
+        decimals: if meters { (coordinate_decimals(scene) + 3).min(METERS_DECIMALS) } else { coordinate_decimals(scene) },
+        // Si divide per 1000 (e non si moltiplica per 0,001): 2900 diventa 2.9, non 2.9000001
+        unit: if meters { 1000.0 } else { 1.0 },
         default_color,
         names: HashMap::new(),
         stats: ExportStats::default(),
@@ -357,10 +371,25 @@ DEF Assieme Transform { translation 10 0 0 children [
         scene
     }
 
+    /// IV in millimetri (le unità della scena) oppure, con l'opzione, in metri.
+    #[test]
+    fn iv_is_written_in_millimeters_unless_asked_for_meters() {
+        let scene = crate::parser::parse_wrl(
+            b"#VRML V2.0 utf8\nShape { geometry IndexedFaceSet { coord Coordinate { point [ 2900 -900 650, 3100 -900 650, 2900 -900 1600 ] } coordIndex [ 0 1 2 -1 ] } }\n",
+        );
+        let path = std::env::temp_dir().join("dima3d_unita.iv");
+        for (meters, wanted) in [(false, "2900 -900 650"), (true, "2.9 -0.9 0.65")] {
+            export_iv(&scene, None, &path, false, false, meters, [0.5, 0.5, 0.5, 1.0]).unwrap();
+            let text = std::fs::read_to_string(&path).unwrap();
+            assert!(text.contains(wanted), "{meters}: {text}");
+        }
+        let _ = std::fs::remove_file(path);
+    }
+
     #[test]
     fn ascii_has_named_separators_colors_and_world_coordinates() {
         let path = std::env::temp_dir().join("gestore_wrl_test.iv");
-        let stats = export_iv(&scene(), None, &path, false, true, [0.5, 0.5, 0.5, 1.0]).unwrap();
+        let stats = export_iv(&scene(), None, &path, false, true, false, [0.5, 0.5, 0.5, 1.0]).unwrap();
         assert_eq!(stats.shapes_written, 2);
         let text = std::fs::read_to_string(&path).unwrap();
         assert!(text.starts_with("#Inventor V2.1 ascii\n"), "{text}");
@@ -388,7 +417,7 @@ DEF Assieme Transform { translation 10 0 0 children [
         push_string(&mut out, "Material");
         assert_eq!(out, b"\0\0\0\x03DEF\0\0\0\0\x08Material");
         let path = std::env::temp_dir().join("gestore_wrl_test_bin.iv");
-        export_iv(&scene(), None, &path, true, false, [0.5, 0.5, 0.5, 1.0]).unwrap();
+        export_iv(&scene(), None, &path, true, false, false, [0.5, 0.5, 0.5, 1.0]).unwrap();
         let data = std::fs::read(&path).unwrap();
         assert!(data.starts_with(b"#Inventor V2.1 binary  \n"));
         assert_eq!(data.len() % 4, 0);
@@ -415,7 +444,7 @@ mod real_file {
             for (suffix, binary, normals) in [("testo", false, true), ("bin", true, false), ("bin_normali", true, true)] {
                 let out = std::env::temp_dir().join(format!("gestore_iv_{name}_{suffix}.iv"));
                 let t = std::time::Instant::now();
-                let stats = super::export_iv(scene, None, &out, binary, normals, [0.5, 0.5, 0.5, 1.0]).unwrap();
+                let stats = super::export_iv(scene, None, &out, binary, normals, false, [0.5, 0.5, 0.5, 1.0]).unwrap();
                 let size = std::fs::metadata(&out).unwrap().len();
                 println!("{}: {} pezzi, {:.1} MB in {:?}", out.display(), stats.shapes_written, size as f64 / 1e6, t.elapsed());
             }

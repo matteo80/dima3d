@@ -65,6 +65,10 @@ pub struct UiState {
     pub zoom_anchor: Option<viewport::ZoomAnchor>,
     /// Finestra «Posizione»
     pub position: position_panel::PositionPanel,
+    /// Nodi copiati con Ctrl+C, da incollare con Ctrl+V
+    pub clipboard: Vec<u32>,
+    /// Testo da mettere negli appunti di sistema al prossimo frame
+    pub clipboard_text: Option<String>,
 }
 
 /// Un file aggiunto sembra scritto in altre unità rispetto alla scena.
@@ -101,6 +105,8 @@ impl Default for UiState {
             drag: None,
             zoom_anchor: None,
             position: Default::default(),
+            clipboard: Vec::new(),
+            clipboard_text: None,
         }
     }
 }

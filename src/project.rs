@@ -431,6 +431,7 @@ impl GestoreApp {
         let options = self.settings.export_options();
         let stl_ascii = self.settings.export_stl_ascii;
         let iv_binary = self.settings.export_iv_binary;
+        let iv_meters = self.settings.export_iv_meters;
         let default_color = self.settings.default_color;
         let extension = path.extension().map(|e| e.to_string_lossy().to_ascii_lowercase()).unwrap_or_default();
         let Some(scene) = self.scene_graph.take() else { return false };
@@ -439,7 +440,7 @@ impl GestoreApp {
         std::thread::spawn(move || {
             let result = match extension.as_str() {
                 "stl" => crate::exporter::stl::export_stl(&scene, node, &out, stl_ascii),
-                "iv" => crate::exporter::iv::export_iv(&scene, node, &out, iv_binary, options.normals, default_color),
+                "iv" => crate::exporter::iv::export_iv(&scene, node, &out, iv_binary, options.normals, iv_meters, default_color),
                 "hsf" => crate::exporter::hsf::export_hsf(&scene, node, &out, default_color, options.normals),
                 _ => crate::exporter::export_with(&scene, node, &out, options),
             };
@@ -587,7 +588,7 @@ impl GestoreApp {
             return;
         }
         let mut warnings = Vec::new();
-        for f in &mut file.files {
+        for f in file.files.iter_mut().filter(|f| f.copy.is_none()) {
             if !f.path.exists() {
                 // Modello spostato: si chiede dove si trova
                 match locate_missing(&f.path) {
@@ -607,7 +608,7 @@ impl GestoreApp {
                 ));
             }
         }
-        let paths: Vec<PathBuf> = file.files.iter().map(|f| f.path.clone()).collect();
+        let paths: Vec<PathBuf> = file.files.iter().filter(|f| f.copy.is_none()).map(|f| f.path.clone()).collect();
         self.project.restore = Some(Restore { path, file, warnings });
         self.project.step_choice = None;
         self.ui_state.unit_suggestions.clear();
@@ -630,10 +631,39 @@ impl GestoreApp {
         // Le unità le decide il progetto: niente proposte di conversione
         self.ui_state.unit_suggestions.clear();
         let mut skipped = 0;
-        for entry in &restore.file.files {
+        // Prima si rifanno le copie incollate, sui modelli appena aperti e senza modifiche: solo
+        // così nodi e mesh delle copie hanno gli stessi numeri del salvataggio
+        let mut sources: Vec<Option<usize>> = Vec::new();
+        if let Some(scene) = &mut self.scene_graph {
+            for entry in &restore.file.files {
+                let source = match &entry.copy {
+                    None => scene.sources.iter().position(|s| s.path.as_deref() == Some(entry.path.as_path())),
+                    Some(c) => sources.get(c.source).copied().flatten().and_then(|of| {
+                        let copy = crate::scene_graph::copy::CopyOf { source: of, ..c.clone() };
+                        scene.redo_copy(&copy, entry.title.clone()).map(|_| scene.sources.len() - 1)
+                    }),
+                };
+                // Gruppi creati e pezzi spostati: prima delle copie che vengono da questo file
+                if let Some(s) = source {
+                    if !entry.groups.is_empty() || !entry.children.is_empty() {
+                        skipped += scene.apply_structure(s, &entry.groups, &entry.children);
+                    }
+                }
+                if source.is_none() && entry.copy.is_some() {
+                    warnings.push(format!("{}: copia non rifatta (manca il pezzo da cui veniva)", entry.title));
+                }
+                sources.push(source);
+            }
+            if let (Some(renderer), Some(rs)) = (&mut self.renderer, &self.wgpu_render_state) {
+                renderer.append_meshes(&scene.shapes_data, &rs.device);
+            }
+        }
+        for (entry, source) in restore.file.files.iter().zip(sources) {
             let Some(scene) = &self.scene_graph else { break };
-            let Some(source) = scene.sources.iter().position(|s| s.path.as_deref() == Some(entry.path.as_path())) else {
-                warnings.push(format!("{} non si è aperto: le sue modifiche non sono state applicate", entry.path.display()));
+            let Some(source) = source else {
+                if entry.copy.is_none() {
+                    warnings.push(format!("{} non si è aperto: le sue modifiche non sono state applicate", entry.path.display()));
+                }
                 continue;
             };
             let (node, current) = (scene.sources[source].node, scene.sources[source].scale);
@@ -714,7 +744,7 @@ impl GestoreApp {
         });
         let cluster = self.project.loaded_cluster.unwrap_or(self.settings.cluster);
         let file = crate::project_file::ProjectFile::capture(scene, cluster, camera);
-        let unsaved = scene.open_files().filter(|f| f.path.is_none()).count();
+        let unsaved = scene.open_files().filter(|f| f.path.is_none() && f.copy_of.is_none()).count();
         let revision = scene.revision;
         if let Err(e) = std::fs::write(path, file.to_text(path)) {
             self.ui_state.status_message = format!("Progetto non salvato: {e}");
@@ -1104,7 +1134,8 @@ mod tests {
                 assert!(glam::Vec3::from(*x).distance(glam::Vec3::from(*y)) < 1e-3, "{x:?} invece di {y:?}");
             }
         }
-        assert_eq!(other.scene_graph.as_ref().unwrap().sources[0].scale, 1000.0);
+        // Il file di prova ha coordinate da metri: già all'apertura è ×1000, poi ancora ×1000
+        assert_eq!(other.scene_graph.as_ref().unwrap().sources[0].scale, 1_000_000.0);
         assert!(other.project.undo.is_empty(), "il progetto riaperto è il punto di partenza");
 
         // Un modello cambiato dopo il salvataggio: si apre lo stesso, con un avviso (le scene
@@ -1123,6 +1154,184 @@ mod tests {
         fourth.request_open(project.clone());
         assert!(fourth.project.restore.is_none() && fourth.scene_graph.is_none());
         assert!(fourth.ui_state.status_message.contains("non trovo"), "{}", fourth.ui_state.status_message);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// Un frame dell'interfaccia con le scorciatoie da tastiera, come nella finestra vera.
+    fn frame_with_keys(ctx: &egui::Context, app: &mut GestoreApp, events: Vec<egui::Event>) {
+        let input = egui::RawInput {
+            screen_rect: Some(egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(1280.0, 800.0))),
+            events,
+            ..Default::default()
+        };
+        let _ = ctx.run(input, |ctx| {
+            app.handle_shortcuts(ctx);
+            crate::ui::draw_main_layout(ctx, app);
+        });
+    }
+
+    /// Due modelli di prova aperti dalla cartella temporanea `name`.
+    fn two_models(name: &str) -> (GestoreApp, std::path::PathBuf) {
+        use crate::scene_graph::node::multi_file_tests::{FILE_A, FILE_B};
+        let dir = std::env::temp_dir().join(name);
+        std::fs::create_dir_all(&dir).unwrap();
+        let (pa, pb) = (dir.join("telaio.wrl"), dir.join("sportello.wrl"));
+        std::fs::write(&pa, FILE_A).unwrap();
+        std::fs::write(&pb, FILE_B).unwrap();
+        let mut app = GestoreApp::new_headless();
+        app.request_add(vec![pa, pb]);
+        pump(&mut app);
+        (app, dir)
+    }
+
+    fn node_named(app: &GestoreApp, name: &str) -> u32 {
+        let s = app.scene_graph.as_ref().unwrap();
+        (0..s.nodes.len() as u32).find(|&n| !s.info[n as usize].deleted && s.display_name(n) == name).unwrap()
+    }
+
+    /// Ctrl+C / Ctrl+V come li manda egui (eventi Copy e Paste), Spazio per nascondere e
+    /// mostrare, Annulla e Ripeti.
+    #[test]
+    fn copy_paste_and_space_from_the_keyboard() {
+        let (mut app, dir) = two_models("dima3d_prova_copia_tasti");
+        let ctx = egui::Context::default();
+        let telaio = node_named(&app, "Telaio");
+        app.apply(Action::Select { node: Some(telaio), reveal: false });
+
+        // Incolla senza aver copiato: niente
+        frame_with_keys(&ctx, &mut app, vec![egui::Event::Paste("altro".into())]);
+        assert_eq!(app.scene_graph.as_ref().unwrap().sources.len(), 2);
+        assert!(app.ui_state.status_message.contains("Niente da incollare"), "{}", app.ui_state.status_message);
+
+        frame_with_keys(&ctx, &mut app, vec![egui::Event::Copy]);
+        assert_eq!(app.ui_state.clipboard, vec![telaio]);
+        assert!(!app.is_dirty(), "copiare non è una modifica");
+        frame_with_keys(&ctx, &mut app, vec![egui::Event::Paste("Dima 3D: Telaio".into())]);
+        let copy = node_named(&app, "Copia di Telaio");
+        {
+            let s = app.scene_graph.as_ref().unwrap();
+            assert_eq!(s.roots.last(), Some(&copy));
+            assert_eq!(s.info[copy as usize].shape_count, 2);
+            assert_eq!(s.sources.len(), 3);
+        }
+        assert_eq!(app.ui_state.selected_node, Some(copy), "la copia incollata è selezionata");
+        assert!(app.is_dirty());
+
+        // Spazio: nasconde la selezione, di nuovo Spazio la mostra
+        let space = || vec![egui::Event::Key { key: egui::Key::Space, physical_key: None, pressed: true, repeat: false, modifiers: Default::default() }];
+        frame_with_keys(&ctx, &mut app, space());
+        assert!(!app.scene_graph.as_ref().unwrap().nodes[copy as usize].is_visible());
+        frame_with_keys(&ctx, &mut app, space());
+        assert!(app.scene_graph.as_ref().unwrap().nodes[copy as usize].is_visible());
+
+        // Annulla: prima i due Spazio, poi l'incolla
+        app.undo();
+        app.undo();
+        app.undo();
+        {
+            let s = app.scene_graph.as_ref().unwrap();
+            assert!(s.info[copy as usize].deleted);
+            assert!(!s.roots.contains(&copy));
+            assert_eq!(s.open_files().count(), 2);
+        }
+        assert_eq!(app.ui_state.selected_node, None, "la selezione non resta su una copia tolta");
+        app.redo();
+        let s = app.scene_graph.as_ref().unwrap();
+        assert!(!s.info[copy as usize].deleted && s.roots.contains(&copy));
+        assert_eq!(s.display_name(copy), "Copia di Telaio");
+        drop(app);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// Gruppi creati e pezzi spostati nell'albero tornano uguali riaprendo il progetto, con le
+    /// modifiche dei nodi (che il progetto conta con il loro numero fisso).
+    #[test]
+    fn tree_changes_are_saved_in_the_project() {
+        let (mut app, dir) = two_models("dima3d_prova_struttura_progetto");
+        let project = dir.join("struttura.dima3d");
+        let (trave, copia) = (node_named(&app, "Trave"), node_named(&app, "Copia"));
+        let root_a = app.scene_graph.as_ref().unwrap().sources[0].node;
+        app.apply(Action::NewGroup(vec![copia]));
+        let group = app.ui_state.selected_node.unwrap();
+        app.apply(Action::Rename(group, "Lato sinistro".into()));
+        app.apply(Action::SetColor(group, Some([0.2, 0.8, 0.2, 1.0])));
+        app.apply(Action::MoveInto { nodes: vec![trave], into: root_a });
+        app.apply(Action::Hide(trave));
+        // Copia del gruppo nuovo, dopo gli spostamenti
+        app.apply(Action::Copy(vec![group]));
+        app.apply(Action::Paste);
+        assert!(app.write_project(&project));
+        let text = std::fs::read_to_string(&project).unwrap();
+        assert!(text.contains("gruppo = ") && text.contains(" Lato sinistro") && text.contains("figli = "), "{text}");
+        let expected = state(&app);
+        let tree = |app: &GestoreApp| {
+            let s = app.scene_graph.as_ref().unwrap();
+            s.tree_order().iter().map(|&n| (n, s.info[n as usize].parent, s.info[n as usize].shape_count)).collect::<Vec<_>>()
+        };
+        let expected_tree = tree(&app);
+
+        let mut other = GestoreApp::new_headless();
+        other.request_open(project.clone());
+        pump(&mut other);
+        assert!(other.ui_state.load_warnings.is_empty(), "{:?}", other.ui_state.load_warnings);
+        assert_eq!(state(&other).0, expected.0, "nodi");
+        assert_eq!(tree(&other), expected_tree, "albero");
+        drop((app, other));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// Le copie incollate, spostate e modificate tornano uguali riaprendo il progetto, anche la
+    /// copia di una copia e quella di un modello chiuso dopo la copia.
+    #[test]
+    fn copies_are_saved_in_the_project() {
+        let (mut app, dir) = two_models("dima3d_prova_copia_progetto");
+        let project = dir.join("copie.dima3d");
+        // Un pezzo eliminato prima della copia: la copia non lo contiene
+        app.apply(Action::Delete(node_named(&app, "Trave")));
+        app.apply(Action::Copy(vec![node_named(&app, "Telaio")]));
+        app.apply(Action::Paste);
+        let copy = node_named(&app, "Copia di Telaio");
+        app.apply(Action::Move { nodes: vec![copy], matrix: glam::Mat4::from_translation(glam::Vec3::new(0.0, 50.0, 0.0)) });
+        app.apply(Action::SetColor(copy, Some([0.1, 0.9, 0.1, 1.0])));
+        // Copia di un pezzo della copia, rinominata
+        let inner = app.scene_graph.as_ref().unwrap().nodes[copy as usize].children()[0];
+        app.apply(Action::Copy(vec![inner]));
+        app.apply(Action::Paste);
+        let second = *app.scene_graph.as_ref().unwrap().roots.last().unwrap();
+        app.apply(Action::Rename(second, "Seconda copia".into()));
+        // Copia dello sportello, poi il file originale si chiude
+        app.apply(Action::Copy(vec![node_named(&app, "Sportello")]));
+        app.apply(Action::Paste);
+        let root_b = app.scene_graph.as_ref().unwrap().sources[1].node;
+        app.apply(Action::Delete(root_b));
+        app.apply(Action::Hide(node_named(&app, "Copia di Sportello")));
+
+        assert!(app.write_project(&project));
+        assert!(!app.ui_state.status_message.contains("senza file"), "{}", app.ui_state.status_message);
+        let text = std::fs::read_to_string(&project).unwrap();
+        assert_eq!(text.matches("[copia]").count(), 3, "{text}");
+        assert!(text.contains("titolo = Copia di Sportello"), "{text}");
+        let expected = state(&app);
+
+        let mut other = GestoreApp::new_headless();
+        other.request_open(project.clone());
+        pump(&mut other);
+        assert!(other.ui_state.load_warnings.is_empty(), "{:?}", other.ui_state.load_warnings);
+        let got = state(&other);
+        assert_eq!(got.0, expected.0, "nodi");
+        assert_eq!(got.1.len(), expected.1.len());
+        for (a, b) in got.1.iter().zip(&expected.1) {
+            for (x, y) in a.iter().zip(b) {
+                assert!(glam::Vec3::from(*x).distance(glam::Vec3::from(*y)) < 1e-4, "{x:?} invece di {y:?}");
+            }
+        }
+        // Export della scena riaperta: le copie ci sono
+        let out = dir.join("export.wrl");
+        crate::exporter::export_visible_wrl(other.scene_graph.as_ref().unwrap(), &out).unwrap();
+        let again = crate::parser::parse_wrl(&std::fs::read(&out).unwrap());
+        let (visible, _) = other.scene_graph.as_ref().unwrap().shape_visibility_counts();
+        assert_eq!(again.shapes_data.len(), visible);
+        drop((app, other));
         let _ = std::fs::remove_dir_all(&dir);
     }
 

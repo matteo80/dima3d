@@ -20,19 +20,34 @@ pub struct ExportOptions {
     /// Normali scritte nel file (spigoli vivi del CAD). Senza, solo `creaseAngle`: le ricalcola
     /// il visualizzatore e il file è molto più piccolo.
     pub normals: bool,
+    /// File in metri: la scena è in millimetri, coordinate e `Transform` si dividono per 1000
+    /// (come i WRL della stazione e come li legge lo script dello scostamento).
+    pub meters: bool,
 }
 
 impl Default for ExportOptions {
     fn default() -> Self {
-        Self { compact: true, normals: true }
+        Self { compact: true, normals: true, meters: false }
     }
 }
 
 impl ExportOptions {
     /// Copia fedele dei campi originali (il comportamento delle prime versioni).
     #[cfg(test)]
-    pub const VERBATIM: Self = Self { compact: false, normals: true };
+    pub const VERBATIM: Self = Self { compact: false, normals: true, meters: false };
+
+    /// Dalle unità della scena (mm) a quelle del file.
+    fn unit(&self) -> glam::Mat4 {
+        glam::Mat4::from_scale(glam::Vec3::splat(if self.meters { MM_TO_METERS } else { 1.0 }))
+    }
 }
+
+/// Millimetri → metri.
+pub const MM_TO_METERS: f32 = 0.001;
+
+/// Cifre decimali massime delle coordinate in metri: il micron. Un f32 di qualche metro non ne ha
+/// di più, e le cifre in più sarebbero solo residui (2.9000001).
+pub const METERS_DECIMALS: u32 = 6;
 
 /// Esporta i soli elementi visibili in un nuovo file WRL "pulito", copiando i campi originali.
 /// Vedi [`export_with`].
@@ -53,8 +68,10 @@ pub fn export_subtree_wrl(scene: &SceneGraph, node: u32, output_path: &std::path
 /// * La gerarchia dei macro-oggetti viene mantenuta come `DEF Nome Group { children [...] }`
 ///   (i contenitori senza parti visibili vengono omessi): riaprendo il file
 ///   nell'applicazione si ritrova lo stesso albero.
-/// * Le coordinate sono scritte in world-space (le matrici Transform sono già
-///   applicate), quindi non servono più nodi Transform.
+/// * I sistemi di riferimento degli oggetti (i `Transform` del file e gli spostamenti fatti in
+///   Dima 3D) restano come `Transform` dentro il `Group` dell'oggetto, e le coordinate dei pezzi
+///   sono scritte in quei sistemi: lo scostamento tra due oggetti si ricava dai `Transform`, come
+///   nei file del visualizzatore usato in azienda (vedi [`Frames`]).
 /// * L'`appearance` originale viene copiata verbatim quando è autonoma (niente
 ///   DEF/USE al suo interno); altrimenti si usa un materiale neutro.
 /// * Senza `compact` la geometria conserva i campi del file originale (vedi [`super::ifs`]);
@@ -125,6 +142,7 @@ fn write_scene(scene: &SceneGraph, node: Option<u32>, w: &mut impl Write, option
 
     let mut ctx = ExportCtx {
         scene,
+        frames: Frames::new(scene),
         has_visible: &has_visible,
         write_file_nodes,
         options,
@@ -135,7 +153,7 @@ fn write_scene(scene: &SceneGraph, node: Option<u32>, w: &mut impl Write, option
         stats: ExportStats::default(),
     };
     for &root in &roots {
-        ctx.write_node(w, root, 0)?;
+        ctx.write_node(w, root, 0, glam::Mat4::IDENTITY)?;
     }
     Ok(ctx.stats)
 }
@@ -212,18 +230,90 @@ pub(super) fn compute_has_visible(scene: &SceneGraph) -> Vec<bool> {
         .zip(&scene.info)
         .map(|(n, i)| !i.deleted && matches!(n, SceneNode::Shape { visible: true, .. }))
         .collect();
-    // L'arena è in pre-order: i figli hanno indice maggiore del padre
-    for i in (0..flags.len()).rev() {
-        let p = scene.info[i].parent;
-        if flags[i] && p != NO_PARENT && (p as usize) < i {
+    // Al contrario dell'ordine dell'albero i figli vengono prima del padre
+    for &i in scene.tree_order().iter().rev() {
+        let p = scene.info[i as usize].parent;
+        if flags[i as usize] && p != NO_PARENT {
             flags[p as usize] = true;
         }
     }
     flags
 }
 
+/// Sistemi di riferimento da scrivere come `Transform`.
+///
+/// Il sistema di un contenitore è quello letto dal file (`SceneGraph::frames`, con la scala del
+/// file portata nelle coordinate) composto con lo spostamento fatto in Dima 3D, se tutti i suoi
+/// pezzi sono stati spostati allo stesso modo. Le coordinate restano esatte qualunque sistema si
+/// scelga: sono scritte relative al `Transform` effettivamente scritto sopra di loro.
+struct Frames {
+    /// Spostamento comune ai pezzi di ogni nodo (`None`: pezzi spostati in modo diverso, o nessuno)
+    common: Vec<Option<glam::Mat4>>,
+}
+
+impl Frames {
+    fn new(scene: &SceneGraph) -> Frames {
+        let mut common: Vec<Option<Option<glam::Mat4>>> = vec![None; scene.nodes.len()];
+        // Al contrario dell'ordine dell'albero i figli sono già pronti quando si arriva al padre
+        for i in scene.tree_order().into_iter().rev().map(|i| i as usize) {
+            common[i] = match &scene.nodes[i] {
+                SceneNode::Shape { mesh_id, .. } => Some(Some(scene.placement(*mesh_id))),
+                SceneNode::Group { children, .. } | SceneNode::Transform { children, .. } => {
+                    let mut it = children.iter().map(|&c| common[c as usize]).filter(|c| c.is_some());
+                    match it.next() {
+                        None => None,
+                        Some(first) => Some(if it.all(|c| c == first) { first.flatten() } else { None }),
+                    }
+                }
+            };
+        }
+        Frames { common: common.into_iter().map(Option::flatten).collect() }
+    }
+
+    /// Sistema dell'oggetto `n` in coordinate della scena.
+    fn of(&self, scene: &SceneGraph, n: u32) -> glam::Mat4 {
+        let file = scene.frames.get(n as usize).copied().unwrap_or(glam::Mat4::IDENTITY);
+        let scale = scene.source_of_node(n).map_or(1.0, |i| scene.sources[i].scale);
+        let units = glam::Mat4::from_scale(glam::Vec3::splat(scale));
+        let placement = self.common.get(n as usize).copied().flatten().unwrap_or(glam::Mat4::IDENTITY);
+        placement * units * file * units.inverse()
+    }
+}
+
+/// `m` come scala uniforme positiva, rotazione e traslazione (i soli che un `Transform` scrive
+/// senza `scaleOrientation`); `None` se non si può (specchiatura, scala diversa sugli assi).
+fn similarity(m: glam::Mat4) -> Option<(f32, glam::Quat, glam::Vec3)> {
+    let (scale, rotation, translation) = m.to_scale_rotation_translation();
+    let s = scale.x;
+    let uniform = s > 0.0 && (scale - glam::Vec3::splat(s)).abs().max_element() <= s * 1e-5;
+    let rebuilt = glam::Mat4::from_scale_rotation_translation(glam::Vec3::splat(s), rotation, translation);
+    let size = m.to_cols_array().iter().fold(1.0f32, |a, v| a.max(v.abs()));
+    (uniform && rebuilt.abs_diff_eq(m, size * 1e-5) && rotation.is_finite()).then_some((s, rotation, translation))
+}
+
+/// La Shape con coordinate e normali portate nel file da `to_file` (unità del file e sistema
+/// del `Transform` scritto sopra di lei).
+fn localize(shape: &crate::parser::ShapeInfo, to_file: glam::Mat4) -> crate::parser::ShapeInfo {
+    let normal = glam::Mat3::from_mat4(to_file).inverse().transpose();
+    let mut local = shape.clone();
+    for v in &mut local.world_vertices {
+        *v = to_file.transform_point3(glam::Vec3::from(*v)).to_array();
+    }
+    for n in &mut local.normals {
+        *n = (normal * glam::Vec3::from(*n)).normalize_or_zero().to_array();
+    }
+    local.matrix = to_file * shape.matrix;
+    // Il sistema scritto è quello del file: le coordinate originali si possono copiare tali e quali
+    let size = local.matrix.to_cols_array().iter().fold(1.0f32, |a, v| a.max(v.abs()));
+    if local.matrix.abs_diff_eq(glam::Mat4::IDENTITY, size * 1e-6) {
+        local.matrix = glam::Mat4::IDENTITY;
+    }
+    local
+}
+
 struct ExportCtx<'a> {
     scene: &'a SceneGraph,
+    frames: Frames,
     has_visible: &'a [bool],
     /// Scrivere i nodi dei file come Group (con più file); altrimenti solo il loro contenuto
     write_file_nodes: bool,
@@ -240,7 +330,8 @@ struct ExportCtx<'a> {
 }
 
 impl ExportCtx<'_> {
-    fn write_node(&mut self, w: &mut impl Write, idx: u32, depth: usize) -> io::Result<()> {
+    /// `frame`: sistema di riferimento scritto sopra il nodo (i `Transform` degli antenati).
+    fn write_node(&mut self, w: &mut impl Write, idx: u32, depth: usize, frame: glam::Mat4) -> io::Result<()> {
         if !self.has_visible.get(idx as usize).copied().unwrap_or(false) {
             return Ok(());
         }
@@ -251,7 +342,7 @@ impl ExportCtx<'_> {
         let is_file = scene.info.get(idx as usize).is_some_and(|i| i.kind == NodeKind::File);
         if is_file && !self.write_file_nodes {
             for &c in scene.nodes[idx as usize].children() {
-                self.write_node(w, c, depth)?;
+                self.write_node(w, c, depth, frame)?;
             }
             return Ok(());
         }
@@ -267,6 +358,18 @@ impl ExportCtx<'_> {
             SceneNode::Shape { mesh_id, source_start, source_end, .. } => {
                 let Some(shape) = scene.shapes_data.get(*mesh_id as usize) else {
                     return Ok(());
+                };
+                let local;
+                let to_file = frame.inverse() * self.options.unit();
+                let (shape, decimals) = if to_file == glam::Mat4::IDENTITY {
+                    (shape, self.decimals)
+                } else {
+                    local = localize(shape, to_file);
+                    // Coordinate in unità più grandi (es. metri): servono più cifre decimali
+                    let scale = glam::Mat3::from_mat4(to_file).determinant().abs().cbrt();
+                    let extra = -scale.log10().round() as i32;
+                    let most = if self.options.meters { METERS_DECIMALS as i32 } else { 9 };
+                    (&local, (self.decimals as i32 + extra).clamp(0, most) as u32)
                 };
                 writeln!(w, "{ind}DEF {name} Shape {{")?;
 
@@ -321,7 +424,7 @@ impl ExportCtx<'_> {
                 if !original {
                     let pad = if self.options.compact { String::new() } else { format!("{ind}    ") };
                     self.buffer.clear();
-                    write_geometry(&mut self.buffer, &pad, shape, self.options.normals, self.decimals);
+                    write_geometry(&mut self.buffer, &pad, shape, self.options.normals, decimals);
                     w.write_all(&self.buffer)?;
                 }
                 writeln!(w, "{ind}{sub}}}")?;
@@ -331,8 +434,49 @@ impl ExportCtx<'_> {
             SceneNode::Group { children, .. } | SceneNode::Transform { children, .. } => {
                 writeln!(w, "{ind}DEF {name} Group {{")?;
                 writeln!(w, "{ind}{sub}children [")?;
+                // Sistema dell'oggetto diverso da quello scritto sopra: un Transform nel Group.
+                // Mai sul Group di un file: lo spostamento deve stare nel Group dell'oggetto, da
+                // cui lo script dello scostamento comincia a comporre i Transform.
+                let unit = self.options.unit();
+                let relative = frame.inverse() * unit * self.frames.of(scene, idx) * unit.inverse();
+                let size = relative.to_cols_array().iter().fold(1.0f32, |a, v| a.max(v.abs()));
+                let transform = (!is_file && !relative.abs_diff_eq(glam::Mat4::IDENTITY, size * 1e-6))
+                    .then(|| similarity(relative))
+                    .flatten();
+                let inner = match transform {
+                    Some((scale, rotation, translation)) => {
+                        let (axis, angle) = rotation.to_axis_angle();
+                        let pad = format!("{ind}{sub}{sub}");
+                        writeln!(w, "{pad}Transform {{")?;
+                        // Al micron: senza i residui dei calcoli tra matrici (1.6650001)
+                        let decimals = if self.options.meters { 6 } else { 3 };
+                        let mut line = Vec::new();
+                        for v in translation.to_array() {
+                            line.push(b' ');
+                            push_fixed(&mut line, v, decimals);
+                        }
+                        write!(w, "{pad}{sub}translation")?;
+                        w.write_all(&line)?;
+                        writeln!(w)?;
+                        if angle.abs() > 0.0 {
+                            writeln!(w, "{pad}{sub}rotation {} {} {} {angle}", axis.x, axis.y, axis.z)?;
+                        }
+                        if (scale - 1.0).abs() > 1e-7 {
+                            writeln!(w, "{pad}{sub}scale {scale} {scale} {scale}")?;
+                        }
+                        writeln!(w, "{pad}{sub}children [")?;
+                        frame * glam::Mat4::from_scale_rotation_translation(glam::Vec3::splat(scale), rotation, translation)
+                    }
+                    None => frame,
+                };
+                let child_depth = if transform.is_some() { depth + 4 } else { depth + 2 };
                 for &c in children {
-                    self.write_node(w, c, depth + 2)?;
+                    self.write_node(w, c, child_depth, inner)?;
+                }
+                if transform.is_some() {
+                    let pad = format!("{ind}{sub}{sub}");
+                    writeln!(w, "{pad}{sub}]")?;
+                    writeln!(w, "{pad}}}")?;
                 }
                 writeln!(w, "{ind}{sub}]")?;
                 writeln!(w, "{ind}}}")?;
@@ -617,14 +761,87 @@ DEF Assieme Transform {
         assert!(text.contains("DEF A Group"));
         assert!(!text.contains("DEF B Group"));
         assert!(text.contains("diffuseColor 1 0 0"));
-        // Coordinate world-space: x traslata di 10
-        assert!(text.contains("10 0 0, 11 0 0, 10 1 0"));
+        // Il Transform dell'oggetto resta, e le coordinate sono quelle del file
+        assert!(text.contains("translation 10 0 0"), "{text}");
+        assert!(text.contains("0 0 0, 1 0 0, 0 1 0"), "{text}");
 
-        // Il file esportato si riapre con la stessa gerarchia
+        // Il file esportato si riapre con la stessa gerarchia e gli stessi punti
         let again = crate::parser::parse_wrl(&out);
         assert_eq!(again.all_shape_indices().len(), 1);
+        assert_eq!(again.shapes_data[0].world_vertices[0], [10.0, 0.0, 0.0]);
         assert_eq!(again.display_name(again.roots[0]), "Assieme");
         let _ = std::fs::remove_file(path);
+    }
+
+    /// Lo stesso pezzo aperto due volte, la seconda copia spostata in Dima 3D: l'export scrive lo
+    /// spostamento come Transform nel Group dell'oggetto, quindi riaprendo il file lo scostamento
+    /// si ricava dai Transform (come fa lo script), e la geometria è la stessa.
+    #[test]
+    fn export_keeps_object_frames_as_transforms() {
+        use crate::scene_graph::node::multi_file_tests::{file, FILE_B};
+        use crate::scene_graph::placement::Pose;
+        let mut scene = file(FILE_B, "a.wrl");
+        scene.append(file(FILE_B, "b.wrl"));
+        let find = |s: &SceneGraph, nth: usize| {
+            (0..s.nodes.len() as u32).filter(|&n| !s.info[n as usize].deleted && s.display_name(n).starts_with("Sportello")).nth(nth).unwrap()
+        };
+        let (a, b) = (find(&scene, 0), find(&scene, 1));
+        let moved = glam::Mat4::from_translation(glam::Vec3::new(215.0, 0.0, 1665.0)) * glam::Mat4::from_rotation_y(0.209_439);
+        let meshes = scene.meshes_of(&[b]);
+        scene.transform_meshes(&meshes, moved);
+        let offset = |s: &SceneGraph, a: u32, b: u32| Pose::from_matrix(s.object_frame(a)).offset_to(&Pose::from_matrix(s.object_frame(b))).matrix();
+        let before = offset(&scene, a, b);
+
+        for options in [ExportOptions::default(), ExportOptions::VERBATIM] {
+            let path = std::env::temp_dir().join("dima3d_export_transform.wrl");
+            export_with(&scene, None, &path, options).unwrap();
+            let text = std::fs::read_to_string(&path).unwrap();
+            let again = crate::parser::parse_wrl(text.as_bytes());
+            let _ = std::fs::remove_file(&path);
+            // Il Transform sta dentro il Group dell'oggetto spostato
+            let group = text.find("DEF Sportello_2 Group").expect("oggetto spostato");
+            let transform = text[group..].find("Transform").unwrap();
+            assert!(transform < text[group..].find("Shape").unwrap(), "{text}");
+            let (a2, b2) = (find(&again, 0), find(&again, 1));
+            let after = offset(&again, a2, b2);
+            assert!(after.abs_diff_eq(before, 1e-2), "{options:?}: {:?} invece di {:?}", Pose::from_matrix(after), Pose::from_matrix(before));
+            assert_eq!(again.shapes_data.len(), scene.shapes_data.len());
+            for (p, q) in scene.shapes_data.iter().zip(&again.shapes_data) {
+                for (x, y) in p.world_vertices.iter().zip(&q.world_vertices) {
+                    assert!(glam::Vec3::from(*x).distance(glam::Vec3::from(*y)) < 1e-3, "{options:?}: {x:?} {y:?}");
+                }
+            }
+        }
+    }
+
+    /// Export in metri (i WRL della stazione): coordinate e `Transform` divisi per 1000, come li
+    /// legge lo script dello scostamento (che moltiplica le `translation` per 1000).
+    #[test]
+    fn export_in_meters_divides_coordinates_and_transforms() {
+        use crate::scene_graph::placement::Pose;
+        let wrl = br#"#VRML V2.0 utf8
+DEF Pezzo Group { children [ Transform { translation 215 0 1665 rotation 0 1 0 0.209439 children [
+    Shape { geometry IndexedFaceSet { coord Coordinate { point [ 4775.5 0 -102.5, 4800 0 -102.5, 4775.5 10 -102.5 ] } coordIndex [ 0 1 2 -1 ] } }
+] } ] }
+"#;
+        let scene = crate::parser::parse_wrl(wrl);
+        let pezzo = (0..scene.nodes.len() as u32).find(|&n| scene.display_name(n) == "Pezzo").unwrap();
+        for options in [ExportOptions { meters: true, ..Default::default() }, ExportOptions { meters: true, ..ExportOptions::VERBATIM }] {
+            let path = std::env::temp_dir().join("dima3d_export_metri.wrl");
+            export_with(&scene, None, &path, options).unwrap();
+            let text = std::fs::read_to_string(&path).unwrap();
+            let _ = std::fs::remove_file(&path);
+            assert!(text.contains("translation 0.215 0 1.665\n"), "{options:?}\n{text}");
+            let again = crate::parser::parse_wrl(text.as_bytes());
+            let pezzo2 = (0..again.nodes.len() as u32).find(|&n| again.display_name(n) == "Pezzo").unwrap();
+            let pose = Pose::from_matrix(again.object_frame(pezzo2));
+            let expected = Pose::from_matrix(scene.object_frame(pezzo));
+            assert!((pose.xyz * 1000.0 - expected.xyz).length() < 1e-2, "{pose:?} {expected:?}");
+            assert!((pose.abc - expected.abc).length() < 1e-3);
+            for (a, b) in scene.shapes_data[0].world_vertices.iter().zip(&again.shapes_data[0].world_vertices) {
+                assert!((glam::Vec3::from(*a) - glam::Vec3::from(*b) * 1000.0).length() < 1e-2, "{a:?} {b:?}");
+            }
+        }
     }
 
     /// Con due file: l'export dell'insieme ha un Group per file; i `USE` di ogni file trovano
@@ -735,15 +952,16 @@ DEF Assieme Transform { translation 10 0 0 children [
 "#;
         let scene = crate::parser::parse_wrl(wrl);
         let path = std::env::temp_dir().join("gestore_wrl_export_compatto.wrl");
-        let options = ExportOptions { compact: true, normals: true };
+        let options = ExportOptions { compact: true, normals: true, meters: false };
         export_with(&scene, None, &path, options).unwrap();
         let out = std::fs::read(&path).unwrap();
         assert_eq!(estimate_size(&scene, None, options), out.len() as u64);
         let text = String::from_utf8_lossy(&out);
         assert!(!text.contains("\n  "), "niente rientri:\n{text}");
         assert!(text.contains("DEF Assieme Group") && text.contains("DEF A Group"));
-        // Ingombro ~6: 6 decimali (passo di un milionesimo)
-        assert!(text.contains("10.123457 0 5\n"), "{text}");
+        // Ingombro ~6: 6 decimali (passo di un milionesimo); coordinate nel sistema dell'oggetto
+        assert!(text.contains("translation 10 0 0\n"), "{text}");
+        assert!(text.contains("\n0.123457 0 5\n"), "{text}");
 
         let again = crate::parser::parse_wrl(&out);
         assert_eq!(again.shapes_data.len(), 2);
@@ -760,7 +978,7 @@ DEF Assieme Transform { translation 10 0 0 children [
             }
         }
 
-        let lighter = ExportOptions { compact: true, normals: false };
+        let lighter = ExportOptions { compact: true, normals: false, meters: false };
         export_with(&scene, None, &path, lighter).unwrap();
         let out = std::fs::read(&path).unwrap();
         let text = String::from_utf8_lossy(&out);

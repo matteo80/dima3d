@@ -612,10 +612,48 @@ DEF A Group { children [ Shape { geometry IndexedFaceSet {
             k.sort();
             k
         };
-        let (a, b) = (keys(&scene.shapes_data), keys(&again.shapes_data));
-        assert_eq!(a.len(), b.len());
-        let different = a.iter().zip(&b).filter(|(x, y)| x != y).count();
-        assert_eq!(different, 0, "{different} shape diverse dopo l'export");
+        // Con matrice identità le coordinate tornano identiche al bit. Gli oggetti con un sistema
+        // proprio si scrivono come Transform + coordinate locali: rileggendo, la matrice si
+        // ricostruisce dal testo e l'ultima cifra può cambiare. Si abbinano le Shape per vertici
+        // arrotondati e si misura lo scarto.
+        let coarse = |shapes: &[ShapeInfo]| {
+            let size = shapes.iter().flat_map(|s| s.world_vertices.iter()).fold(1e-6f32, |m, v| m.max(v[0].abs()).max(v[1].abs()).max(v[2].abs()));
+            let step = size * 1e-4;
+            let mut k: Vec<(Vec<[i64; 3]>, Vec<u32>, u32, Option<[i64; 4]>, usize)> = shapes
+                .iter()
+                .enumerate()
+                .map(|(i, s)| {
+                    let q = s.world_vertices.iter().map(|v| v.map(|c| (c / step).round() as i64)).collect();
+                    let color = s.color.map(|c| c.map(|v| (v * 1e5).round() as i64));
+                    (q, s.indices.clone(), s.face_count, color, i)
+                })
+                .collect();
+            k.sort();
+            (k, size)
+        };
+        let ((ka, size), (kb, _)) = (coarse(&scene.shapes_data), coarse(&again.shapes_data));
+        assert_eq!(ka.len(), kb.len());
+        let mut identical = 0;
+        let mut worst = 0.0f32;
+        for (x, y) in ka.iter().zip(&kb) {
+            assert_eq!((&x.1, x.2, x.3), (&y.1, y.2, y.3), "triangoli o colore diversi");
+            let (p, q) = (&scene.shapes_data[x.4], &again.shapes_data[y.4]);
+            assert_eq!(p.world_vertices.len(), q.world_vertices.len());
+            let mut same = true;
+            for (u, v) in p.world_vertices.iter().zip(&q.world_vertices) {
+                if u.map(f32::to_bits) != v.map(f32::to_bits) {
+                    same = false;
+                    worst = worst.max(glam::Vec3::from(*u).distance(glam::Vec3::from(*v)));
+                }
+            }
+            identical += usize::from(same);
+        }
+        println!(
+            "Shape identiche al bit: {identical}/{}; le altre entro {worst:.2e} (ingombro {size:.1}, scarto relativo {:.1e})",
+            ka.len(),
+            worst / size
+        );
+        assert!(worst <= size * 1e-6, "scarto {worst} troppo grande");
 
         // Le normali definiscono la resa: si confrontano a meno di un piccolo angolo,
         // abbinando le Shape tramite i vertici (le istanze identiche sono interscambiabili)

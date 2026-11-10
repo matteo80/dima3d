@@ -173,6 +173,46 @@ mod tests {
         }
     }
 
+    /// «Modifiche non esportate» non finisce sopra i pulsanti a sinistra (es. «Vista»): se non c'è
+    /// posto resta solo l'icona di avviso.
+    #[test]
+    fn unsaved_changes_label_never_covers_the_buttons() {
+        for width in [1100.0, 1250.0, 1399.0, 1400.0, 1500.0, 1700.0] {
+            let mut app = GestoreApp::new_headless();
+            let scene = crate::parser::parse_wrl(include_bytes!("../../esempi/test_colori.wrl"));
+            app.project.on_loaded(scene.revision);
+            let root = scene.roots[0];
+            app.scene_graph = Some(scene);
+            app.apply(crate::app::Action::Hide(root));
+            assert!(app.is_dirty());
+            let ctx = egui::Context::default();
+            let screen = egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(width, 800.0));
+            let mut rects: Vec<(String, egui::Rect)> = Vec::new();
+            for _ in 0..2 {
+                rects.clear();
+                let out = ctx.run(egui::RawInput { screen_rect: Some(screen), ..Default::default() }, |ctx| {
+                    crate::ui::draw_main_layout(ctx, &mut app);
+                });
+                for c in &out.shapes {
+                    if let egui::epaint::Shape::Text(t) = &c.shape {
+                        rects.push((t.galley.text().to_string(), t.galley.rect.translate(t.pos.to_vec2())));
+                    }
+                }
+            }
+            let toolbar_y = rects.iter().find(|(t, _)| t.starts_with(icon::INFO)).expect("Info").1.center().y;
+            let row: Vec<&(String, egui::Rect)> = rects.iter().filter(|(_, r)| (r.center().y - toolbar_y).abs() < 6.0).collect();
+            let warning = row
+                .iter()
+                .find(|(t, _)| t == "Modifiche non esportate" || t.starts_with(icon::WARNING_CIRCLE))
+                .unwrap_or_else(|| panic!("avviso assente a {width}"));
+            for (t, r) in &row {
+                if t != &warning.0 {
+                    assert!(!r.intersects(warning.1.shrink(0.5)), "a {width} px «{}» copre «{t}»", warning.0);
+                }
+            }
+        }
+    }
+
     /// Il pulsante Info apre la finestra con nome, versione e la nota sul codice scritto con AI;
     /// «Chiudi» la chiude.
     #[test]

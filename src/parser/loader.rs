@@ -73,6 +73,14 @@ pub fn load_blocking(
     };
     let finish = |mut scene: SceneGraph| {
         scene.into_file(file_label(shown_as), Some(shown_as.to_path_buf()));
+        // Dima 3D lavora in millimetri. HSF e STEP dichiarano le unità (il lettore e il
+        // convertitore danno millimetri); gli altri, se hanno coordinate da metri, si convertono
+        let step = shown_as
+            .extension()
+            .is_some_and(|e| e.eq_ignore_ascii_case("stp") || e.eq_ignore_ascii_case("step"));
+        if !scene.units_mm && !step && scene.file_in_meters(0) {
+            scene.scale_file(0, 1000.0);
+        }
         scene.load_warnings.extend(warnings);
         let _ = sender.send(LoadEvent::Finished(scene));
     };
@@ -97,7 +105,7 @@ pub fn load_blocking(
                 Ok(buffer) => {
                     let mut scene = super::shape_extractor::parse_wrl_with_config(&buffer, cluster, progress);
                     if scene.source_data.is_empty() {
-                        scene.source_data = SourceData::Memory(buffer);
+                        scene.source_data = SourceData::Memory(Arc::new(buffer));
                     }
                     finish(scene);
                 }
@@ -156,6 +164,39 @@ mod tests {
     }
 
     /// Un file VRML 1.0 si apre, e per l'export resta il testo convertito, non quello originale.
+    /// Dima 3D lavora in millimetri: un WRL con coordinate da metri (come quelli della stazione)
+    /// si converte all'apertura, uno con coordinate da millimetri resta com'è.
+    #[test]
+    fn files_in_meters_are_converted_to_millimeters() {
+        let load = |name: &str, points: &str| {
+            let path = std::env::temp_dir().join(name);
+            let wrl = format!(
+                "#VRML V2.0 utf8\nShape {{ geometry IndexedFaceSet {{ coord Coordinate {{ point [ {points} ] }} coordIndex [ 0 1 2 -1 ] }} }}\n"
+            );
+            std::fs::write(&path, wrl).unwrap();
+            let (tx, rx) = std::sync::mpsc::channel();
+            load_wrl_async(path.clone(), tx);
+            let scene = loop {
+                match rx.recv().unwrap() {
+                    LoadEvent::Finished(scene) => break scene,
+                    LoadEvent::Error(e) => panic!("{e}"),
+                    _ => {}
+                }
+            };
+            let _ = std::fs::remove_file(path);
+            scene
+        };
+        // Sportello in metri, nel sistema del veicolo
+        let meters = load("dima3d_unita_metri.wrl", "2.9 -0.9 0.65, 3.1 -0.9 0.65, 2.9 -0.9 1.6");
+        assert_eq!(meters.sources[0].scale, 1000.0);
+        let v = meters.shapes_data[0].world_vertices[0];
+        assert!((v[0] - 2900.0).abs() < 1e-2 && (v[2] - 650.0).abs() < 1e-2, "{v:?}");
+        // Lo stesso in millimetri
+        let millimeters = load("dima3d_unita_mm.wrl", "2900 -900 650, 3100 -900 650, 2900 -900 1600");
+        assert_eq!(millimeters.sources[0].scale, 1.0);
+        assert_eq!(millimeters.shapes_data[0].world_vertices[0], [2900.0, -900.0, 650.0]);
+    }
+
     #[test]
     fn test_vrml1_opens_and_keeps_the_converted_text() {
         let file_path = std::env::temp_dir().join("test_loader_vrml1.wrl");

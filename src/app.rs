@@ -69,6 +69,14 @@ pub enum Action {
     Move { nodes: Vec<u32>, matrix: glam::Mat4 },
     /// Riporta i sotto-alberi dei nodi alla posizione del caricamento.
     ResetPosition(Vec<u32>),
+    /// Copia i nodi negli appunti interni (vedi `scene_graph::copy`).
+    Copy(Vec<u32>),
+    /// Incolla gli appunti interni: un nuovo «file» per ogni file di provenienza.
+    Paste,
+    /// Sposta i nodi nell'albero dentro un gruppo dello stesso file (la geometria resta ferma).
+    MoveInto { nodes: Vec<u32>, into: u32 },
+    /// Raccoglie i nodi in un gruppo nuovo, poi apre la rinomina.
+    NewGroup(Vec<u32>),
 }
 
 impl Action {
@@ -93,6 +101,8 @@ impl Action {
                 | Action::ReloadFiles
                 | Action::SaveColor(_)
                 | Action::ForgetColor(_)
+                | Action::Copy(_)
+                | Action::Paste
         )
     }
 }
@@ -214,6 +224,22 @@ impl GestoreApp {
         }
         if let Action::RemeshStep(n) = action {
             self.ask_remesh_step(n);
+            return;
+        }
+        if let Action::Copy(nodes) = action {
+            self.copy_nodes(nodes);
+            return;
+        }
+        if action == Action::Paste {
+            self.paste();
+            return;
+        }
+        if let Action::NewGroup(nodes) = action {
+            self.new_group(nodes);
+            return;
+        }
+        if let Action::MoveInto { nodes, into } = action {
+            self.move_into(nodes, into);
             return;
         }
         if let Action::ScaleFile(n, factor) = action {
@@ -344,7 +370,12 @@ impl GestoreApp {
             | Action::IsolateMany(_)
             | Action::FocusMany(_)
             | Action::Move { .. }
-            | Action::ResetPosition(_) => {}
+            | Action::ResetPosition(_)
+            // Gestite in `apply`
+            | Action::Copy(_)
+            | Action::Paste
+            | Action::NewGroup(_)
+            | Action::MoveInto { .. } => {}
             Action::SelectMany { nodes, primary, anchor } => {
                 self.ui_state.status_message = format!("Selezionati: {} elementi", nodes.len());
                 self.ui_state.selected_node = Some(primary);
@@ -489,7 +520,7 @@ impl GestoreApp {
     }
 
     /// Scorciatoie da tastiera (attive solo se nessun campo di testo ha il focus).
-    fn handle_shortcuts(&mut self, ctx: &egui::Context) {
+    pub(crate) fn handle_shortcuts(&mut self, ctx: &egui::Context) {
         if ctx.wants_keyboard_input() || self.project.pending.is_some() || self.project.busy() {
             return;
         }
@@ -531,6 +562,26 @@ impl GestoreApp {
         }
         if redo {
             self.redo();
+            return;
+        }
+        // Copia e incolla: egui trasforma Ctrl+C / Ctrl+V in eventi (Ctrl+V solo se negli appunti
+        // di sistema c'è del testo: per questo la copia ce ne mette)
+        let (copy, paste) = ctx.input(|inp| {
+            let cmd = inp.modifiers.command;
+            (
+                inp.events.iter().any(|e| matches!(e, egui::Event::Copy)) || (cmd && inp.key_pressed(egui::Key::C)),
+                inp.events.iter().any(|e| matches!(e, egui::Event::Paste(_))) || (cmd && inp.key_pressed(egui::Key::V)),
+            )
+        });
+        if copy {
+            let nodes = self.ui_state.selected_nodes();
+            if !nodes.is_empty() {
+                self.apply(Action::Copy(nodes));
+            }
+            return;
+        }
+        if paste {
+            self.apply(Action::Paste);
             return;
         }
 
@@ -583,7 +634,8 @@ impl GestoreApp {
         let sel = self.ui_state.selected_node;
         let (h, i, del, esc, f, f2) = ctx.input(|inp| {
             (
-                inp.key_pressed(egui::Key::H),
+                // H o Spazio: nasconde la selezione, o la mostra se è nascosta
+                inp.key_pressed(egui::Key::H) || inp.key_pressed(egui::Key::Space),
                 inp.key_pressed(egui::Key::I),
                 inp.key_pressed(egui::Key::Delete),
                 inp.key_pressed(egui::Key::Escape),
@@ -673,11 +725,136 @@ impl GestoreApp {
         let files = current.open_files().count();
         self.ui_state.status_message =
             format!("Aggiunto: {name} ({new_shapes} shape)  ·  {files} file aperti");
+        if current.sources.last().is_some_and(|s| s.scale == 1000.0) {
+            self.ui_state.status_message.push_str(CONVERTED);
+        }
         if let Some(p) = path {
             let mut s = self.settings.clone();
             s.add_recent(&p);
             self.apply_settings(s);
         }
+    }
+}
+
+impl GestoreApp {
+    /// Copia: ricorda i nodi da incollare (gli appunti sono interni a Dima 3D).
+    pub fn copy_nodes(&mut self, nodes: Vec<u32>) {
+        let Some(scene) = &self.scene_graph else { return };
+        let kept: Vec<u32> = scene.copy_groups(&nodes).into_iter().flat_map(|(_, n)| n).collect();
+        let label = match kept.as_slice() {
+            [] => return,
+            [one] => scene.display_name(*one),
+            many => format!("{} elementi", many.len()),
+        };
+        self.ui_state.status_message = format!("Copiato: {label}  ·  Ctrl+V per incollare");
+        // Un testo anche negli appunti di Windows: senza, egui non segnala Ctrl+V
+        self.ui_state.clipboard_text = Some(format!("Dima 3D: {label}"));
+        self.ui_state.clipboard = kept;
+    }
+
+    /// Sposta i nodi nell'albero (vedi `SceneGraph::move_into`); un solo passo di Annulla, e
+    /// nessuno se non cambia niente.
+    pub fn move_into(&mut self, nodes: Vec<u32>, into: u32) {
+        if self.scene_graph.is_none() || nodes.is_empty() {
+            return;
+        }
+        self.push_undo(None);
+        let Some(scene) = &mut self.scene_graph else { return };
+        let target = scene.display_name(into);
+        let result = scene.move_into(&nodes, into);
+        if let Some(parent) = scene.parent_of(nodes[0]) {
+            self.ui_state.expanded.insert(parent);
+        }
+        let changed = matches!(result, Ok(n) if n > 0);
+        self.ui_state.status_message = match result {
+            Ok(0) => "Già in questo gruppo".to_string(),
+            Ok(1) => format!("Spostato in «{target}»"),
+            Ok(n) => format!("Spostati {n} elementi in «{target}»"),
+            Err(e) => format!("Non spostato: {e}"),
+        };
+        if !changed {
+            self.project.undo.pop();
+        }
+    }
+
+    /// Nuovo gruppo con i nodi dati (vedi `SceneGraph::new_group`): si annulla con Ctrl+Z e
+    /// appena creato si rinomina.
+    pub fn new_group(&mut self, nodes: Vec<u32>) {
+        let Some(scene) = &self.scene_graph else { return };
+        let (first_node, first_mesh, first_macro) =
+            (scene.nodes.len() as u32, scene.shapes_data.len() as u32, scene.macro_components.len());
+        self.push_undo(None);
+        let Some(scene) = &mut self.scene_graph else { return };
+        match scene.new_group(&nodes, "Nuovo gruppo") {
+            Ok(group) => {
+                // Negli stati da annullare il gruppo non c'è ancora
+                for s in &mut self.project.undo {
+                    s.extend_removed(scene, first_node, first_mesh, first_macro);
+                }
+                if let Some(p) = scene.parent_of(group) {
+                    self.ui_state.expanded.insert(p);
+                }
+                self.ui_state.expanded.insert(group);
+                self.apply_without_undo(Action::Select { node: Some(group), reveal: true });
+                self.ui_state.status_message = "Gruppo creato: scrivi il nome e premi Invio".to_string();
+                self.start_rename(group);
+            }
+            Err(e) => {
+                // Niente è cambiato: lo stato salvato per Annulla non serve
+                self.project.undo.pop();
+                self.ui_state.status_message = format!("Gruppo non creato: {e}");
+            }
+        }
+    }
+
+    /// Incolla: una copia dei nodi copiati, nella stessa posizione, come nuovo elemento in fondo
+    /// all'albero (uno per file di provenienza). Si annulla con Ctrl+Z.
+    pub fn paste(&mut self) {
+        if self.ui_state.is_loading || self.project.busy() {
+            return;
+        }
+        let Some(scene) = &self.scene_graph else { return };
+        let groups = scene.copy_groups(&self.ui_state.clipboard);
+        if groups.is_empty() {
+            self.ui_state.status_message = "Niente da incollare: seleziona un pezzo e copialo con Ctrl+C".to_string();
+            return;
+        }
+        self.push_undo(None);
+        let Some(scene) = &mut self.scene_graph else { return };
+        let (first_node, first_mesh, first_macro) =
+            (scene.nodes.len() as u32, scene.shapes_data.len() as u32, scene.macro_components.len());
+        let mut roots = Vec::new();
+        for (source, nodes) in groups {
+            let name = scene.copy_name(&nodes);
+            let mesh = scene.shapes_data.len() as u32;
+            if let Some((root, origins)) = scene.paste_copy(source, &nodes, &Default::default(), name) {
+                self.project.reduction.copy_stash(mesh, &origins);
+                roots.push(root);
+            }
+        }
+        // Negli stati da annullare la copia non c'è ancora
+        for s in &mut self.project.undo {
+            s.extend_removed(scene, first_node, first_mesh, first_macro);
+        }
+        if let (Some(renderer), Some(rs)) = (&mut self.renderer, &self.wgpu_render_state) {
+            renderer.append_meshes(&scene.shapes_data, &rs.device);
+            let all = scene.compute_bounding_box();
+            if all.is_valid() {
+                renderer.camera.scene_bounds = Some(all);
+            }
+        }
+        let pieces: u32 = roots.iter().map(|&r| scene.info[r as usize].shape_count).sum();
+        let names: Vec<String> = roots.iter().map(|&r| scene.display_name(r)).collect();
+        let select = match roots.as_slice() {
+            [] => return,
+            [one] => Action::Select { node: Some(*one), reveal: true },
+            many => Action::SelectMany { nodes: many.to_vec(), primary: many[0], anchor: many[0] },
+        };
+        self.apply_without_undo(select);
+        self.ui_state.status_message = format!(
+            "Incollato: {} ({pieces} pezzi) nella stessa posizione dell'originale: spostalo con la finestra Posizione",
+            names.join(", ")
+        );
     }
 }
 
@@ -774,6 +951,9 @@ impl GestoreApp {
                             "Caricato: {} shape in {} macro-oggetti principali",
                             shape_count, macro_count
                         );
+                        if scene.sources.first().is_some_and(|s| s.scale == 1000.0) {
+                            self.ui_state.status_message.push_str(CONVERTED);
+                        }
                         if far_parts > 0 {
                             self.ui_state.status_message.push_str("  ·  ");
                             self.ui_state.status_message.push_str(&far_parts_message(far_parts));
@@ -783,6 +963,8 @@ impl GestoreApp {
                         self.ui_state.select_single(None);
                         self.ui_state.renaming = None;
                         self.ui_state.expanded.clear();
+                        // Gli appunti puntano ai nodi della scena precedente
+                        self.ui_state.clipboard.clear();
                         self.load_state = LoadState::Ready;
                         self.project.on_loaded(scene.revision);
                         if let Some(p) = self.project.current_path.clone() {
@@ -819,6 +1001,10 @@ impl GestoreApp {
     }
 }
 
+/// File aperto con coordinate da metri e convertito nei millimetri di Dima 3D.
+const CONVERTED: &str =
+    "  ·  convertito da metri a millimetri (per annullare: tasto destro sul file, «Unità di misura»)";
+
 /// Avviso quando l'inquadratura lascia fuori pezzi molto lontani dal gruppo principale.
 fn far_parts_message(count: usize) -> String {
     let parts = if count == 1 { "1 pezzo molto lontano".to_string() } else { format!("{count} pezzi molto lontani") };
@@ -834,6 +1020,9 @@ impl Default for GestoreApp {
 impl eframe::App for GestoreApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         self.poll_loading(ctx);
+        if let Some(text) = self.ui_state.clipboard_text.take() {
+            ctx.copy_text(text);
+        }
 
         // Export o riduzione in corso: a fine lavoro la scena torna al suo posto
         if self.project.export_job.is_some() {

@@ -113,6 +113,8 @@ pub struct Settings {
     pub export_stl_ascii: bool,
     /// Open Inventor esportato in formato binario invece che testo
     pub export_iv_binary: bool,
+    /// IV in metri invece che in millimetri (senza la richiesta di scala della stazione v3)
+    pub export_iv_meters: bool,
     /// Rotella al contrario: in avanti allontana invece di avvicinare
     pub invert_zoom: bool,
     /// Colori salvati dall'utente (sRGB), mostrati per primi nel menu Colore
@@ -143,6 +145,7 @@ impl Default for Settings {
             export_normals: true,
             export_stl_ascii: false,
             export_iv_binary: false,
+            export_iv_meters: false,
             invert_zoom: false,
             saved_colors: Vec::new(),
             step: StepMesh::default(),
@@ -187,7 +190,8 @@ fn parse_floats<const N: usize>(s: &str) -> Option<[f32; N]> {
 impl Settings {
     /// Opzioni dell'export scelte dall'utente.
     pub fn export_options(&self) -> crate::exporter::ExportOptions {
-        crate::exporter::ExportOptions { compact: self.export_compact, normals: self.export_normals }
+        // I WRL si scrivono in metri, come quelli della stazione
+        crate::exporter::ExportOptions { compact: self.export_compact, normals: self.export_normals, meters: true }
     }
 
     /// Aggiunge un colore in cima ai colori salvati (senza duplicati). False se c'era già.
@@ -255,6 +259,7 @@ impl Settings {
                 "export_normali" => s.export_normals = value != "0",
                 "export_stl_testo" => s.export_stl_ascii = value == "1",
                 "export_iv_binario" => s.export_iv_binary = value == "1",
+                "export_iv_metri" => s.export_iv_meters = value == "1",
                 "zoom_invertito" => s.invert_zoom = value == "1",
                 "step_deviazione" => {
                     if let Ok(v) = value.parse::<f32>() {
@@ -294,7 +299,7 @@ impl Settings {
         let [r, g, b] = self.background;
         let [dr, dg, db, da] = self.default_color;
         let mut out = format!(
-            "tema = {}\nsfondo = {r} {g} {b}\ncolore_predefinito = {dr} {dg} {db} {da}\nsfondo_sfumato = {}\nraggruppamento_tolleranza = {}\nraggruppamento_vertici = {}\nassi = {}\nrotazione = {}\nsensibilita_rotazione = {}\nexport_compatto = {}\nexport_normali = {}\nexport_stl_testo = {}\nexport_iv_binario = {}\nzoom_invertito = {}\nstep_deviazione = {}\nstep_angolo = {}\nstep_relativa = {}\n",
+            "tema = {}\nsfondo = {r} {g} {b}\ncolore_predefinito = {dr} {dg} {db} {da}\nsfondo_sfumato = {}\nraggruppamento_tolleranza = {}\nraggruppamento_vertici = {}\nassi = {}\nrotazione = {}\nsensibilita_rotazione = {}\nexport_compatto = {}\nexport_normali = {}\nexport_stl_testo = {}\nexport_iv_binario = {}\nexport_iv_metri = {}\nzoom_invertito = {}\nstep_deviazione = {}\nstep_angolo = {}\nstep_relativa = {}\n",
             match self.theme {
                 ThemeMode::Dark => "scuro",
                 ThemeMode::Light => "chiaro",
@@ -316,6 +321,7 @@ impl Settings {
             u8::from(self.export_normals),
             u8::from(self.export_stl_ascii),
             u8::from(self.export_iv_binary),
+            u8::from(self.export_iv_meters),
             u8::from(self.invert_zoom),
             self.step.deviation,
             self.step.angle,
@@ -376,6 +382,7 @@ mod tests {
             export_normals: false,
             export_stl_ascii: true,
             export_iv_binary: true,
+            export_iv_meters: true,
             invert_zoom: true,
             saved_colors: vec![[0.1, 0.2, 0.3], [1.0, 0.5, 0.0]],
             step: StepMesh { deviation: 0.025, angle: 12.5, relative: true },

@@ -68,6 +68,8 @@ pub struct PositionPanel {
     pub base_a: String,
     pub base_b: String,
     pub result: Option<Pose>,
+    /// Come è stato calcolato il risultato (dalla geometria o dai Transform)
+    pub result_note: Option<String>,
     /// Ultimo messaggio di errore del calcolo
     pub error: Option<String>,
     /// Rotazione su cerniera
@@ -96,6 +98,7 @@ impl Default for PositionPanel {
             base_a: String::new(),
             base_b: String::new(),
             result: None,
+            result_note: None,
             error: None,
             hinge: Hinge::default(),
             guide: false,
@@ -1303,9 +1306,25 @@ pub fn draw(ctx: &egui::Context, app: &mut GestoreApp) {
                                 if ui.button("Calcola").clicked() {
                                     calc_result = Some(match (panel.reference, panel.destination) {
                                         (Some(r), Some(d)) if r != d => {
+                                            let title = format!("{}  ->  {}", node_label(app, Some(r)), node_label(app, Some(d)));
                                             let a = Pose::from_matrix(scene.object_frame(r));
-                                            let b = Pose::from_matrix(scene.object_frame(d));
-                                            Ok((format!("{}  ->  {}", node_label(app, Some(r)), node_label(app, Some(d))), a.offset_to(&b)))
+                                            // Stessa geometria: lo scostamento viene dai vertici, quindi vale anche
+                                            // quando la posizione è scritta nelle coordinate (file caricati separati,
+                                            // export di Dima 3D). Altrimenti dai Transform del file, come lo script.
+                                            match scene.geometric_offset(r, d) {
+                                                Ok(fit) => {
+                                                    let m = a.matrix();
+                                                    panel.result_note = Some("Calcolato dalla geometria: i due oggetti sono lo stesso pezzo".to_string());
+                                                    Ok((title, Pose::from_matrix(m.inverse() * fit.matrix * m)))
+                                                }
+                                                Err(why) => {
+                                                    let b = Pose::from_matrix(scene.object_frame(d));
+                                                    panel.result_note = Some(format!(
+                                                        "Calcolato dai Transform del file (non dalla geometria: {why})"
+                                                    ));
+                                                    Ok((title, a.offset_to(&b)))
+                                                }
+                                            }
                                         }
                                         (Some(_), Some(_)) => Err("Riferimento e destinazione devono essere diversi".to_string()),
                                         _ => Err("Scegli riferimento e destinazione".to_string()),
@@ -1318,6 +1337,7 @@ pub fn draw(ctx: &egui::Context, app: &mut GestoreApp) {
                                     ui.add(egui::TextEdit::singleline(text).desired_width(f32::INFINITY).font(egui::TextStyle::Monospace).hint_text("CONST BASE NOME = X Y Z A B C"));
                                 }
                                 if ui.button("Calcola").clicked() {
+                                    panel.result_note = None;
                                     calc_result = Some(match (parse_const_base(&panel.base_a), parse_const_base(&panel.base_b)) {
                                         (Some((na, a)), Some((nb, b))) => Ok((format!("{na}  ->  {nb}"), a.offset_to(&b))),
                                         (None, _) => Err("BASE di origine non riconosciuto".to_string()),
@@ -1342,6 +1362,9 @@ pub fn draw(ctx: &egui::Context, app: &mut GestoreApp) {
                             ui.add_space(4.0);
                             ui.label(egui::RichText::new("Scostamento").strong());
                             pose_grid(ui, "posizione_risultato", &p);
+                            if let Some(note) = &panel.result_note {
+                                ui.label(egui::RichText::new(note).weak().small());
+                            }
                             ui.horizontal_wrapped(|ui| {
                                 if ui.button(icon_text(ui, icon::COPY, "Copia")).clicked() {
                                     copy = Some(offset_text("Offset", &p));
@@ -1566,6 +1589,45 @@ DEF Destinazione Group { children [
         ui.click(&mut app, "Applica", 0);
         let s = app.scene_graph.as_ref().unwrap();
         assert!(s.object_frame(copy).abs_diff_eq(s.object_frame(dest), 1e-2));
+    }
+
+    /// Lo stesso pezzo caricato due volte, con lo spostamento già scritto nelle coordinate (come
+    /// nell'export di Dima 3D o in due file caricati separati): dai Transform sarebbe 0, dalla
+    /// geometria è lo spostamento vero.
+    #[test]
+    fn offset_of_two_copies_with_the_move_in_the_coordinates() {
+        let mut app = app();
+        let ui = Ui { ctx: egui::Context::default() };
+        let (rif, other) = (node(&app, "Riferimento", 0), node(&app, "Riferimento", 1));
+        let moved = Mat4::from_translation(Vec3::new(-200.0, 0.0, 700.0)) * Mat4::from_rotation_y(0.209_439);
+        {
+            let s = app.scene_graph.as_mut().unwrap();
+            for m in s.meshes_of(&[other]) {
+                crate::scene_graph::placement::transform_shape(&mut s.shapes_data[m as usize], moved);
+            }
+            let by_transform = Pose::from_matrix(s.object_frame(rif)).offset_to(&Pose::from_matrix(s.object_frame(other)));
+            assert!(by_transform.matrix().abs_diff_eq(Mat4::IDENTITY, 1e-3), "dai Transform non si vede: {by_transform:?}");
+        }
+        ui.run(&mut app, vec![]);
+        ui.click(&mut app, "Calcola offset", 0);
+        app.ui_state.select_single(Some(rif));
+        ui.click(&mut app, "Usa selezione", 0);
+        app.ui_state.select_single(Some(other));
+        ui.click(&mut app, "Usa selezione", 1);
+        ui.click(&mut app, "Calcola", 0);
+        let frame = Pose::from_matrix(app.scene_graph.as_ref().unwrap().object_frame(rif)).matrix();
+        let expected = frame.inverse() * moved * frame;
+        let result = app.ui_state.position.result.expect("offset calcolato");
+        assert!(result.matrix().abs_diff_eq(expected, 1e-2), "{result:?} invece di {:?}", Pose::from_matrix(expected));
+        let texts = ui.run(&mut app, vec![]);
+        assert!(texts.iter().any(|(t, _)| t.starts_with("Calcolato dalla geometria")), "metodo indicato");
+
+        // «Applica» sul riferimento con questo offset lo porta sulla copia spostata
+        app.ui_state.position.offset = result;
+        app.ui_state.select_single(Some(rif));
+        ui.click(&mut app, "Applica", 0);
+        let (va, vb) = (first_vertex(&app, rif), first_vertex(&app, other));
+        assert!((va - vb).length() < 1e-2, "{va:?} {vb:?}");
     }
 
     /// Tra due CONST BASE: lo stesso risultato di BaseOffsetCalculator.

@@ -145,6 +145,7 @@ pub fn draw_scene_tree(ui: &mut egui::Ui, app: &mut crate::app::GestoreApp) {
             renaming: &mut app.ui_state.renaming,
             default_color: app.settings.default_color,
             saved_colors: app.settings.saved_colors.clone(),
+            can_paste: !app.ui_state.clipboard.is_empty(),
             actions: &mut actions,
             search: search_mode.then_some(query.as_str()),
         };
@@ -154,12 +155,36 @@ pub fn draw_scene_tree(ui: &mut egui::Ui, app: &mut crate::app::GestoreApp) {
             }
         });
         app.ui_state.tree_view = (output.state.offset.y, output.inner_rect.height());
+
+        // Trascinamento in corso: cosa si sta spostando, accanto al puntatore
+        if let (Some(dragged), Some(pos)) =
+            (egui::DragAndDrop::payload::<DraggedNodes>(ui.ctx()), ui.ctx().pointer_latest_pos())
+        {
+            let text = match dragged.0.as_slice() {
+                [one] => format!("{} Sposta «{}» in un gruppo", icon::ARROW_BEND_DOWN_RIGHT, scene.display_name(*one)),
+                many => format!("{} Sposta {} elementi in un gruppo", icon::ARROW_BEND_DOWN_RIGHT, many.len()),
+            };
+            egui::Area::new(egui::Id::new("albero_trascina"))
+                .fixed_pos(pos + egui::vec2(16.0, 12.0))
+                .order(egui::Order::Tooltip)
+                .interactable(false)
+                .show(ui.ctx(), |ui| {
+                    egui::Frame::popup(ui.style()).show(ui, |ui| {
+                        ui.label(text);
+                    });
+                });
+            ui.ctx().set_cursor_icon(egui::CursorIcon::Grabbing);
+        }
     }
 
     for a in actions {
         app.apply(a);
     }
 }
+
+/// Nodi trascinati nell'albero (tutta la selezione, se la riga ne fa parte).
+#[derive(Debug, Clone, PartialEq)]
+pub struct DraggedNodes(pub Vec<u32>);
 
 /// Nodi tra due righe dell'albero, estremi inclusi.
 fn range_between(rows: &[(u32, u16)], a: u32, b: u32) -> Option<Vec<u32>> {
@@ -266,11 +291,15 @@ fn search_rows(scene: &SceneGraph, query: &str) -> (Vec<(u32, u16)>, usize) {
             matches += 1;
         }
     }
-    // Propaga agli antenati (arena in pre-order: il padre ha indice minore)
-    for i in (0..n).rev() {
-        let p = scene.info[i].parent;
-        if include[i] && p != crate::scene_graph::NO_PARENT {
+    // Propaga agli antenati (un nodo spostato nell'albero può avere un numero minore del padre)
+    for i in 0..n {
+        if !include[i] || scene.info[i].deleted {
+            continue;
+        }
+        let mut p = scene.info[i].parent;
+        while p != crate::scene_graph::NO_PARENT && !include[p as usize] {
             include[p as usize] = true;
+            p = scene.info[p as usize].parent;
         }
     }
     let mut rows = Vec::new();
@@ -288,6 +317,110 @@ fn search_rows(scene: &SceneGraph, query: &str) -> (Vec<(u32, u16)>, usize) {
 
 #[cfg(test)]
 mod tests {
+    use crate::app::{Action, GestoreApp};
+    use crate::ui::tests::frame;
+
+    /// Due file aperti, con tutto l'albero espanso.
+    fn app_two_files() -> GestoreApp {
+        let mut app = GestoreApp::new_headless();
+        let scene = crate::scene_graph::node::multi_file_tests::two_files();
+        app.project.on_loaded(scene.revision);
+        app.ui_state.expanded = (0..scene.nodes.len() as u32).collect();
+        app.scene_graph = Some(scene);
+        app
+    }
+
+    fn node(app: &GestoreApp, name: &str) -> u32 {
+        let s = app.scene_graph.as_ref().unwrap();
+        (0..s.nodes.len() as u32).find(|&n| !s.info[n as usize].deleted && s.display_name(n) == name).unwrap()
+    }
+
+    /// Trascina con il mouse la riga `from` sulla riga `to`.
+    fn drag(ctx: &egui::Context, app: &mut GestoreApp, from: &str, to: &str) -> Vec<String> {
+        let texts = frame(ctx, app, vec![]);
+        let row = |name: &str| {
+            texts
+                .iter()
+                .find(|(t, _)| t.ends_with(&format!(" {name}")))
+                .map(|(_, p)| *p + egui::vec2(12.0, 6.0))
+                .unwrap_or_else(|| panic!("riga {name} non disegnata"))
+        };
+        let (a, b) = (row(from), row(to));
+        let button = |pos, pressed| egui::Event::PointerButton { pos, button: egui::PointerButton::Primary, pressed, modifiers: Default::default() };
+        frame(ctx, app, vec![egui::Event::PointerMoved(a)]);
+        frame(ctx, app, vec![button(a, true)]);
+        let mut during = Vec::new();
+        for k in 1..=6 {
+            let t = k as f32 / 6.0;
+            let texts = frame(ctx, app, vec![egui::Event::PointerMoved(a + (b - a) * t)]);
+            during.extend(texts.into_iter().map(|t| t.0));
+        }
+        frame(ctx, app, vec![button(b, false)]);
+        frame(ctx, app, vec![]);
+        during
+    }
+
+    /// Trascinando una riga su un gruppo dello stesso file il pezzo ci va dentro (un Annulla lo
+    /// rimette); su un altro file no.
+    #[test]
+    fn dragging_a_row_moves_the_piece_into_the_group() {
+        let mut app = app_two_files();
+        let ctx = egui::Context::default();
+        let (trave, telaio) = (node(&app, "Trave"), node(&app, "Telaio"));
+        let root_a = app.scene_graph.as_ref().unwrap().sources[0].node;
+        let during = drag(&ctx, &mut app, "Trave", "a.wrl");
+        assert!(during.iter().any(|t| t.contains("Sposta «Trave»")), "etichetta durante il trascinamento");
+        let s = app.scene_graph.as_ref().unwrap();
+        assert_eq!(s.parent_of(trave), Some(root_a), "{}", app.ui_state.status_message);
+        assert_eq!(app.ui_state.status_message, "Spostato in «a.wrl»");
+        assert!(app.is_dirty());
+
+        app.undo();
+        assert_eq!(app.scene_graph.as_ref().unwrap().parent_of(trave), Some(telaio));
+
+        // In un altro file: rifiutato, niente da annullare
+        let undo = app.project.undo.len();
+        drag(&ctx, &mut app, "Pannello", "Telaio");
+        assert!(app.ui_state.status_message.starts_with("Non spostato"), "{}", app.ui_state.status_message);
+        assert_eq!(app.project.undo.len(), undo);
+    }
+
+    /// «Nuovo gruppo con la selezione»: gruppo nel gruppo comune, rinomina aperta, un Annulla.
+    #[test]
+    fn new_group_collects_the_selection() {
+        let mut app = app_two_files();
+        let (trave, copia, telaio) = (node(&app, "Trave"), node(&app, "Copia"), node(&app, "Telaio"));
+        app.apply(Action::NewGroup(vec![trave, copia]));
+        let group = app.ui_state.selected_node.expect("gruppo selezionato");
+        let s = app.scene_graph.as_ref().unwrap();
+        assert_eq!(s.parent_of(group), Some(telaio));
+        assert_eq!(s.nodes[group as usize].children(), &[trave, copia]);
+        assert_eq!(app.ui_state.renaming.as_ref().map(|r| r.node), Some(group), "rinomina aperta");
+        app.apply(Action::Rename(group, "Lato".into()));
+        assert_eq!(app.scene_graph.as_ref().unwrap().display_name(group), "Lato");
+        app.undo();
+        app.undo();
+        let s = app.scene_graph.as_ref().unwrap();
+        assert!(s.info[group as usize].deleted);
+        assert_eq!(s.parent_of(trave), Some(telaio));
+    }
+
+    /// La ricerca mostra un pezzo spostato sotto il suo nuovo gruppo.
+    #[test]
+    fn search_follows_moved_pieces() {
+        let mut scene = crate::scene_graph::node::multi_file_tests::two_files();
+        let trave = (0..scene.nodes.len() as u32).find(|&n| scene.display_name(n) == "Trave").unwrap();
+        let root_a = scene.sources[0].node;
+        let group = scene.new_group(&[root_a, trave], "Nuovo").err();
+        assert!(group.is_some(), "un file non si raggruppa");
+        let group = scene.new_group(&[trave], "Nuovo").unwrap();
+        let (rows, n) = super::search_rows(&scene, "trave");
+        assert_eq!(n, 1);
+        let names: Vec<String> = rows.iter().map(|&(i, _)| scene.display_name(i)).collect();
+        assert_eq!(names, ["a.wrl", "Telaio", "Nuovo", "Trave"]);
+        assert!(rows.iter().any(|r| r.0 == group));
+    }
+
     #[test]
     fn search_shows_matches_with_ancestors() {
         let scene = crate::parser::parse_wrl(include_bytes!("../../esempi/test_colori.wrl"));
@@ -318,6 +451,8 @@ struct RowCtx<'a> {
     default_color: [f32; 4],
     /// Colori salvati dall'utente, per il menu Colore
     saved_colors: Vec<[f32; 3]>,
+    /// Ci sono pezzi copiati da incollare
+    can_paste: bool,
     actions: &'a mut Vec<Action>,
 }
 
@@ -332,7 +467,7 @@ fn draw_row(ui: &mut egui::Ui, ctx: &mut RowCtx, node_idx: u32, depth: u16) {
     // Il menu contestuale su una riga della selezione multipla vale per tutta la selezione
     let group: Option<&[u32]> = (is_selected && ctx.selection.len() > 1).then_some(ctx.selection);
 
-    ui.horizontal(|ui| {
+    let row = ui.horizontal(|ui| {
         ui.spacing_mut().item_spacing.x = 4.0;
         ui.spacing_mut().button_padding.x = 2.0;
         ui.add_space(depth as f32 * INDENT);
@@ -428,7 +563,12 @@ fn draw_row(ui: &mut egui::Ui, ctx: &mut RowCtx, node_idx: u32, depth: u16) {
         if is_match {
             text = text.underline();
         }
-        let resp = ui.add(egui::SelectableLabel::new(is_selected, text));
+        // Clic per selezionare; tenendo premuto si trascina dentro un altro gruppo
+        let resp = ui.add(egui::SelectableLabel::new(is_selected, text)).interact(egui::Sense::click_and_drag());
+        if info.kind != NodeKind::File {
+            let nodes = if is_selected { ctx.selection.to_vec() } else { vec![node_idx] };
+            resp.dnd_set_drag_payload(DraggedNodes(nodes));
+        }
 
         if has_children {
             ui.label(egui::RichText::new(format!("({})", info.shape_count)).small().weak());
@@ -471,6 +611,7 @@ fn draw_row(ui: &mut egui::Ui, ctx: &mut RowCtx, node_idx: u32, depth: u16) {
         let actions = &mut *ctx.actions;
         let default_color = ctx.default_color;
         let saved_colors = &ctx.saved_colors[..];
+        let can_paste = ctx.can_paste;
         // La stessa azione sulla riga o su tutta la selezione multipla di cui fa parte
         let on_targets = |action: fn(u32) -> Action| match group {
             Some(nodes) => Action::Batch(nodes.iter().map(|&n| action(n)).collect()),
@@ -490,9 +631,9 @@ fn draw_row(ui: &mut egui::Ui, ctx: &mut RowCtx, node_idx: u32, depth: u16) {
                 ui.close_menu();
             }
             let (eye, label, action) = if is_visible {
-                (icon::EYE_SLASH, "Nascondi", on_targets(Action::Hide))
+                (icon::EYE_SLASH, "Nascondi    Spazio", on_targets(Action::Hide))
             } else {
-                (icon::EYE, "Mostra", on_targets(Action::Show))
+                (icon::EYE, "Mostra    Spazio", on_targets(Action::Show))
             };
             if ui.button(icon_text(ui, eye, label)).clicked() {
                 actions.push(action);
@@ -503,6 +644,24 @@ fn draw_row(ui: &mut egui::Ui, ctx: &mut RowCtx, node_idx: u32, depth: u16) {
                     Some(nodes) => Action::FocusMany(nodes.to_vec()),
                     None => Action::Focus(Some(node_idx)),
                 });
+                ui.close_menu();
+            }
+            ui.separator();
+            if ui.button(icon_text(ui, icon::COPY, "Copia    Ctrl+C")).clicked() {
+                actions.push(Action::Copy(group.map_or_else(|| vec![node_idx], <[u32]>::to_vec)));
+                ui.close_menu();
+            }
+            if ui.add_enabled(can_paste, egui::Button::new(icon_text(ui, icon::CLIPBOARD, "Incolla    Ctrl+V"))).clicked() {
+                actions.push(Action::Paste);
+                ui.close_menu();
+            }
+            if info.kind != NodeKind::File
+                && ui
+                    .button(icon_text(ui, icon::FOLDER_SIMPLE_PLUS, "Nuovo gruppo con la selezione"))
+                    .on_hover_text("Raccoglie gli elementi in un gruppo nuovo, nello stesso file. Si possono anche trascinare le righe dentro un gruppo.")
+                    .clicked()
+            {
+                actions.push(Action::NewGroup(group.map_or_else(|| vec![node_idx], <[u32]>::to_vec)));
                 ui.close_menu();
             }
             ui.separator();
@@ -548,5 +707,19 @@ fn draw_row(ui: &mut egui::Ui, ctx: &mut RowCtx, node_idx: u32, depth: u16) {
                 ui.close_menu();
             }
         });
-    });
+    })
+    .response;
+
+    // Destinazione di un trascinamento: la riga si evidenzia, al rilascio si sposta
+    if let Some(dragged) = row.dnd_hover_payload::<DraggedNodes>() {
+        if !dragged.0.contains(&node_idx) {
+            let stroke = egui::Stroke::new(1.5_f32, ui.visuals().selection.stroke.color);
+            ui.painter().rect_stroke(row.rect.expand(1.0), 3.0, stroke, egui::StrokeKind::Inside);
+        }
+    }
+    if let Some(dragged) = row.dnd_release_payload::<DraggedNodes>() {
+        if !dragged.0.contains(&node_idx) {
+            ctx.actions.push(Action::MoveInto { nodes: dragged.0.clone(), into: node_idx });
+        }
+    }
 }

@@ -5,6 +5,9 @@ use crate::settings::{RotationMode, ThemeMode};
 /// Sotto questa larghezza di finestra i pulsanti mostrano solo l'icona.
 const FULL_LABELS_WIDTH: f32 = 1400.0;
 
+/// Avviso a destra nella toolbar.
+const DIRTY: &str = "Modifiche non esportate";
+
 /// Pulsante con icona: il testo sparisce nelle finestre strette e resta nel suggerimento.
 fn tool(ui: &mut egui::Ui, enabled: bool, compact: bool, icon: &str, label: &str, hint: &str) -> bool {
     let text = icon_text(ui, icon, if compact { "" } else { label });
@@ -133,6 +136,18 @@ pub fn draw_toolbar(ui: &mut egui::Ui, app: &mut crate::app::GestoreApp) {
             "Il binario è circa un terzo del testo e si apre molte volte più in fretta (FreeCAD, Coin3D). \
              Il testo si può leggere e modificare con un editor. Pezzi, nomi e colori restano in entrambi; \
              le normali seguono l'opzione «Scrivi le normali».",
+        );
+        ui.checkbox(&mut export_settings.export_iv_meters, "In metri (non scalare)").on_hover_text(
+            "Di solito l'IV si scrive in millimetri: la stazione v3 all'apertura chiede di scalarlo. \
+             Con questa opzione si scrive in metri, come i WRL e gli HSF.",
+        );
+        ui.separator();
+        ui.label(egui::RichText::new("Unità").strong());
+        ui.label(
+            egui::RichText::new(
+                "WRL e HSF si scrivono in metri, IV in millimetri (salvo «In metri»), STL in millimetri.",
+            )
+            .weak(),
         );
         ui.separator();
         ui.label(egui::RichText::new("HSF (scegli .hsf nella finestra Salva)").strong());
@@ -272,8 +287,18 @@ Sposta e ruota un file o i pezzi selezionati (X Y Z, A B C), applica e calcola g
             ui.ctx().request_repaint();
         }
         if app.is_dirty() {
+            // Con la finestra stretta la scritta finirebbe sopra i pulsanti: resta l'icona
             let color = theme::warning_color(ui);
-            ui.label(egui::RichText::new("Modifiche non esportate").small().color(color));
+            let text = egui::RichText::new(DIRTY).small().color(color);
+            let width = egui::WidgetText::from(text.clone())
+                .into_galley(ui, Some(egui::TextWrapMode::Extend), f32::INFINITY, egui::TextStyle::Small)
+                .size()
+                .x;
+            if ui.available_width() >= width + ui.spacing().item_spacing.x {
+                ui.label(text);
+            } else {
+                ui.label(egui::RichText::new(icon::WARNING_CIRCLE).color(color)).on_hover_text(DIRTY);
+            }
         }
     });
 

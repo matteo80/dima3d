@@ -5,7 +5,8 @@ use crate::scene_graph::Aabb;
 #[derive(Clone)]
 pub enum SourceData {
     Empty,
-    Memory(Vec<u8>),
+    /// Condiviso: le copie incollate di un pezzo usano lo stesso testo del file
+    Memory(Arc<Vec<u8>>),
     Mmap(Arc<memmap2::Mmap>),
 }
 
@@ -38,13 +39,13 @@ impl std::ops::Deref for SourceData {
 
 impl From<Vec<u8>> for SourceData {
     fn from(v: Vec<u8>) -> Self {
-        SourceData::Memory(v)
+        SourceData::Memory(Arc::new(v))
     }
 }
 
 impl From<&[u8]> for SourceData {
     fn from(s: &[u8]) -> Self {
-        SourceData::Memory(s.to_vec())
+        SourceData::Memory(Arc::new(s.to_vec()))
     }
 }
 
@@ -53,6 +54,9 @@ impl From<Arc<memmap2::Mmap>> for SourceData {
         SourceData::Mmap(m)
     }
 }
+
+/// Coordinate massime (in valore assoluto) di un file in metri: vedi `SceneGraph::file_in_meters`.
+pub const METERS_REACH: f32 = 20.0;
 
 /// Identificatore univoco di un mesh caricato sulla GPU.
 pub type MeshId = u32;
@@ -179,6 +183,10 @@ pub struct SourceFile {
     pub units_mm: bool,
     /// File STEP: come è stato tassellato (per "Converti in mesh…" dall'albero)
     pub step: Option<crate::settings::StepLoad>,
+    /// Copia incollata di pezzi di un altro file (vedi `copy.rs`); `path` è `None`
+    pub copy_of: Option<crate::scene_graph::copy::CopyOf>,
+    /// Prossimo numero fisso libero per un gruppo creato in questo file (vedi `NodeInfo::origin`)
+    pub next_origin: u32,
 }
 
 /// Informazioni accessorie, allineate 1:1 con `SceneGraph::nodes`.
@@ -194,6 +202,14 @@ pub struct NodeInfo {
     pub color: Option<[f32; 4]>,
     /// Nome cambiato dall'utente (va salvato nel progetto)
     pub renamed: bool,
+    /// Numero fisso del nodo nel suo file: la posizione all'apertura (o alla copia), contando
+    /// dalla radice del file; i gruppi creati in Dima 3D ricevono i numeri successivi. Il progetto
+    /// salva le modifiche con questo numero, che non cambia spostando i nodi nell'albero.
+    pub origin: u32,
+    /// Gruppo creato in Dima 3D (non c'era nel file)
+    pub created: bool,
+    /// Contenitore con figli diversi da quelli del file (pezzi spostati dentro o fuori)
+    pub restructured: bool,
 }
 
 // ─── SceneGraph ───────────────────────────────────────────────────────────────
@@ -298,7 +314,7 @@ impl SceneGraph {
                 ),
             };
             scene.nodes.push(node);
-            scene.info.push(NodeInfo { parent: b.parent, kind, shape_count: 0, deleted: false, color: None, renamed: false });
+            scene.info.push(NodeInfo { parent: b.parent, kind, shape_count: 0, deleted: false, color: None, renamed: false, origin: 0, created: false, restructured: false });
         }
         scene.roots = tree.roots;
 
@@ -375,7 +391,7 @@ impl SceneGraph {
         }
         self.info.insert(
             0,
-            NodeInfo { parent: NO_PARENT, kind: NodeKind::File, shape_count, deleted: false, color: None, renamed: false },
+            NodeInfo { parent: NO_PARENT, kind: NodeKind::File, shape_count, deleted: false, color: None, renamed: false, origin: 0, created: false, restructured: false },
         );
         self.roots = vec![0];
         self.sources = vec![SourceFile {
@@ -387,7 +403,12 @@ impl SceneGraph {
             scale: 1.0,
             units_mm: self.units_mm,
             step: None,
+            copy_of: None,
+            next_origin: self.nodes.len() as u32,
         }];
+        for (i, inf) in self.info.iter_mut().enumerate() {
+            inf.origin = i as u32;
+        }
         self.revision += 1;
     }
 
@@ -483,6 +504,19 @@ impl SceneGraph {
             }
         }
         self.revision += 1;
+    }
+
+    /// Il file sembra scritto in metri: tutte le coordinate entro ±20. Le matematiche sono nel
+    /// sistema del veicolo (o della cabina): in millimetri hanno coordinate di centinaia o
+    /// migliaia, in metri di pochi metri. Un pezzo piccolo disegnato attorno all'origine in
+    /// millimetri sembrerebbe in metri: si corregge dal menu «Unità di misura» del file.
+    pub fn file_in_meters(&self, source: usize) -> bool {
+        let bbox = self.file_bounding_box(source);
+        if !bbox.is_valid() {
+            return false;
+        }
+        let reach = bbox.min.abs().max(bbox.max.abs()).max_element();
+        reach > 0.0 && reach < METERS_REACH
     }
 
     /// Ingombro delle mesh di un file.
@@ -612,7 +646,7 @@ impl SceneGraph {
         };
         let shape_count = u32::from(kind == NodeKind::Shape);
         self.nodes.push(node);
-        self.info.push(NodeInfo { parent: NO_PARENT, kind, shape_count, deleted: false, color: None, renamed: false });
+        self.info.push(NodeInfo { parent: NO_PARENT, kind, shape_count, deleted: false, color: None, renamed: false, origin: 0, created: false, restructured: false });
         idx
     }
 
@@ -920,17 +954,17 @@ impl SceneGraph {
         self.revision += 1;
     }
 
-    /// Ricalcola `shape_count` per tutti i nodi (bottom-up sfruttando il pre-order).
+    /// Ricalcola `shape_count` per tutti i nodi, dal basso verso l'alto lungo l'albero.
     pub fn recompute_shape_counts(&mut self) {
         for (i, node) in self.nodes.iter().enumerate() {
             self.info[i].shape_count =
                 u32::from(matches!(node, SceneNode::Shape { .. }) && !self.info[i].deleted);
         }
-        // In pre-order i figli hanno indice maggiore del padre: scorrendo al contrario
-        // ogni nodo ha già il conteggio definitivo quando lo si somma al padre.
-        for i in (0..self.nodes.len()).rev() {
-            let (parent, count) = (self.info[i].parent, self.info[i].shape_count);
-            if parent != NO_PARENT && (parent as usize) < i {
+        // Al contrario dell'ordine dell'albero ogni nodo ha già il conteggio definitivo quando lo
+        // si somma al padre (l'ordine dei numeri no: un nodo spostato può avere un numero minore)
+        for &i in self.tree_order().iter().rev() {
+            let (parent, count) = (self.info[i as usize].parent, self.info[i as usize].shape_count);
+            if parent != NO_PARENT {
                 self.info[parent as usize].shape_count += count;
             }
         }
@@ -1373,6 +1407,25 @@ impl EditSnapshot {
         self.mesh_to_node.extend_from_slice(&scene.mesh_to_node[m..]);
         self.macro_components.extend_from_slice(&scene.macro_components[first_macro.min(scene.macro_components.len())..]);
         self.placements.extend(scene.moved_placements().into_iter().filter(|(mesh, _)| *mesh >= first_mesh));
+    }
+
+    /// Come `extend_from`, ma i nodi arrivati dopo risultano eliminati in questo stato: così
+    /// Annulla toglie una copia incollata e Ripeti la rimette.
+    pub fn extend_removed(&mut self, scene: &SceneGraph, first_node: u32, first_mesh: u32, first_macro: usize) {
+        let (n, m) = (first_node as usize, first_mesh as usize);
+        if self.nodes.len() != n || self.mesh_to_node.len() != m {
+            return;
+        }
+        self.extend_from(scene, first_node, first_mesh, first_macro);
+        for node in &mut self.nodes[n..] {
+            *node = SceneNode::Group { name: None, children: Vec::new(), visible: false, selected: false };
+        }
+        for info in &mut self.info[n..] {
+            info.deleted = true;
+            info.shape_count = 0;
+        }
+        self.roots.retain(|&r| r < first_node);
+        self.mesh_to_node[m..].fill(NO_PARENT);
     }
 }
 

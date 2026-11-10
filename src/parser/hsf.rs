@@ -395,6 +395,11 @@ impl<'a> Reader<'a> {
                 let n = s.u16()? as usize;
                 s.bytes(n)?;
             }
+            b'?' => {
+                // Condizioni del segmento (es. "cad_default"): un testo, niente geometria
+                let n = s.u8()? as usize;
+                s.bytes(n)?;
+            }
             b'I' => {
                 s.u32()?;
             }
@@ -511,14 +516,14 @@ impl<'a> Reader<'a> {
             }
             0x10 => self.polypolyline()?,
             b'L' => {
-                // Polilinea: un byte di opzioni (0 = float), numero di punti, poi x y z. Si salta:
-                // la scena mostra solo superfici
+                // Polilinea: un byte di opzioni (0 = float, 1 = double), numero di punti, poi
+                // x y z. Si salta: la scena mostra solo superfici
                 let flags = s.u8()?;
-                if flags != 0 {
+                if flags > 1 {
                     return Err(format!("polilinea con opzioni {flags:02x} non supportata"));
                 }
                 let n = s.len_i32("polilinea")?;
-                s.bytes(n * 12)?;
+                s.bytes(n * if flags == 1 { 24 } else { 12 })?;
             }
             b'&' => {
                 let from = s.len_i32("copia")?;
@@ -1291,6 +1296,29 @@ mod tests {
         assert_eq!(shapes[0].indices.len(), 6);
     }
 
+    /// Le condizioni di un segmento (opcode `?`) si saltano: prima il file si leggeva solo fino lì.
+    #[test]
+    fn segment_conditions_are_skipped() {
+        let mut extra = vec![b'?', 11];
+        extra.extend_from_slice(b"cad_default");
+        let (shapes, warnings) = shapes(&sample_with(&extra, &[]));
+        assert!(warnings.is_empty(), "{warnings:?}");
+        assert_eq!(shapes.len(), 1);
+    }
+
+    /// Polilinea con i punti in doppia precisione (opzioni 01): si salta e la lettura prosegue.
+    #[test]
+    fn double_precision_polylines_are_skipped() {
+        let mut extra = vec![b'L', 0x01];
+        extra.extend_from_slice(&2i32.to_le_bytes());
+        for v in [4.5f64, -0.46, 1.95, 4.53, -0.46, 1.96] {
+            extra.extend_from_slice(&v.to_le_bytes());
+        }
+        let (shapes, warnings) = shapes(&sample_with(&extra, &[]));
+        assert!(warnings.is_empty(), "{warnings:?}");
+        assert_eq!(shapes.len(), 1);
+    }
+
     /// File veri dell'utente (non nel repository): `GESTORE_HSF_DIR` = cartella con gli .hsf.
     #[test]
     #[ignore]
@@ -1316,7 +1344,8 @@ mod tests {
                 }
             }
             println!(
-                "{} byte: {} pezzi, {tris} triangoli, {:?}, ingombro {lo:?} {hi:?}, avvisi {warnings:?}",
+                "{}: {} byte: {} pezzi, {tris} triangoli, {:?}, ingombro {lo:?} {hi:?}, avvisi {warnings:?}",
+                p.file_name().unwrap().to_string_lossy(),
                 data.len(),
                 shapes.len(),
                 t.elapsed()
