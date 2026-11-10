@@ -9,7 +9,7 @@ Set-Location $PSScriptRoot
 
 $version = (Select-String -Path Cargo.toml -Pattern '^version\s*=\s*"(.+)"' | Select-Object -First 1).Matches[0].Groups[1].Value
 $zip = Join-Path 'dist' "Dima3D-$version.zip"
-if (-not (Test-Path $zip)) { throw "Manca $zip: esegui prima pacchetto.ps1" }
+if (-not (Test-Path $zip)) { throw "Manca ${zip}: esegui prima pacchetto.ps1" }
 if (-not (Test-Path $Note)) { throw "File delle note non trovato: $Note" }
 
 $gh = Get-Command gh -ErrorAction SilentlyContinue
