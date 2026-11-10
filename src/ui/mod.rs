@@ -1,4 +1,5 @@
 pub mod about;
+pub mod cabin_panel;
 pub mod color_menu;
 pub mod measure;
 pub mod position_panel;
@@ -65,6 +66,10 @@ pub struct UiState {
     pub zoom_anchor: Option<viewport::ZoomAnchor>,
     /// Finestra «Posizione»
     pub position: position_panel::PositionPanel,
+    /// Finestra della cabina aperta
+    pub cabin_open: bool,
+    /// Nodo radice della cabina generata (per sostituirla quando cambiano le misure)
+    pub cabin_node: Option<u32>,
     /// Nodi copiati con Ctrl+C, da incollare con Ctrl+V
     pub clipboard: Vec<u32>,
     /// Testo da mettere negli appunti di sistema al prossimo frame
@@ -105,6 +110,8 @@ impl Default for UiState {
             drag: None,
             zoom_anchor: None,
             position: Default::default(),
+            cabin_open: false,
+            cabin_node: None,
             clipboard: Vec::new(),
             clipboard_text: None,
         }

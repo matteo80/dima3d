@@ -3,7 +3,7 @@ use crate::app::Action;
 use crate::settings::{RotationMode, ThemeMode};
 
 /// Sotto questa larghezza di finestra i pulsanti mostrano solo l'icona.
-const FULL_LABELS_WIDTH: f32 = 1400.0;
+const FULL_LABELS_WIDTH: f32 = 1500.0;
 
 /// Avviso a destra nella toolbar.
 const DIRTY: &str = "Modifiche non esportate";
@@ -198,6 +198,14 @@ Toglie triangoli dove non servono (come MeshLab), con anteprima e dimensione pre
 Sposta e ruota un file o i pezzi selezionati (X Y Z, A B C), applica e calcola gli offset");
     if position.clicked() {
         app.ui_state.position.open = !position_open;
+    }
+    let cabin_open = app.ui_state.cabin_open;
+    let cabin_text = icon_text(ui, icon::CUBE_TRANSPARENT, if compact { "" } else { "Cabina" });
+    let cabin = ui
+        .add_enabled(!loading, egui::Button::new(cabin_text).selected(cabin_open))
+        .on_hover_text("Cabina\nCostruisce la cabina di verniciatura dalle misure: grigliato, pareti, testate con le aperture, soffitto");
+    if cabin.clicked() {
+        app.ui_state.cabin_open = !cabin_open;
     }
     if tool(ui, has_scene && !loading, compact, icon::X, "Chiudi", "Chiude tutti i file aperti (chiede conferma se ci sono modifiche non esportate). Per chiuderne uno solo: tasto destro sul file nell'albero") {
         app.request_close();

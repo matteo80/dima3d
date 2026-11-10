@@ -1079,6 +1079,7 @@ impl eframe::App for GestoreApp {
         crate::project::draw_export_progress(ctx, self);
         crate::ui::reduce_panel::draw(ctx, self);
         crate::ui::position_panel::draw(ctx, self);
+        crate::ui::cabin_panel::draw(ctx, self);
         crate::ui::about::draw(ctx, self);
         crate::update::draw(ctx, self);
         self.update_window_title(ctx);

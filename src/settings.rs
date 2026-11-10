@@ -128,6 +128,8 @@ pub struct Settings {
     pub check_updates: bool,
     /// Versione per cui non avvisare più all'avvio ("Salta questa versione")
     pub skipped_version: String,
+    /// Ultime misure della cabina generata
+    pub cabin: crate::cabin::CabinParams,
 }
 
 /// Sezioni richiudibili della finestra Posizione
@@ -156,6 +158,7 @@ impl Default for Settings {
             position_sections: [true, true, true, true, false],
             check_updates: true,
             skipped_version: String::new(),
+            cabin: crate::cabin::CabinParams::default(),
         }
     }
 }
@@ -269,6 +272,7 @@ impl Settings {
                 "zoom_invertito" => s.invert_zoom = value == "1",
                 "verifica_aggiornamenti" => s.check_updates = value != "0",
                 "versione_saltata" => s.skipped_version = value.to_string(),
+                "cabina" => s.cabin = crate::cabin::CabinParams::from_text(value).unwrap_or_default(),
                 "step_deviazione" => {
                     if let Ok(v) = value.parse::<f32>() {
                         s.step.deviation = v.clamp(*STEP_DEVIATION_RANGE.start(), *STEP_DEVIATION_RANGE.end());
@@ -338,6 +342,7 @@ impl Settings {
         let sections: String = self.position_sections.iter().map(|&o| if o { '1' } else { '0' }).collect();
         out.push_str(&format!("posizione_sezioni = {sections}\n"));
         out.push_str(&format!("verifica_aggiornamenti = {}\n", u8::from(self.check_updates)));
+        out.push_str(&format!("cabina = {}\n", self.cabin.to_text()));
         if !self.skipped_version.is_empty() {
             out.push_str(&format!("versione_saltata = {}\n", self.skipped_version));
         }
@@ -400,6 +405,7 @@ mod tests {
             position_sections: [false, true, false, true, true],
             check_updates: false,
             skipped_version: "0.3.1".to_string(),
+            cabin: crate::cabin::CabinParams { length: 18000.0, glass: false, ..Default::default() },
         };
         s.add_recent(Path::new(r"C:\a b\uno.wrl"));
         s.add_recent(Path::new(r"C:\due.wrl"));

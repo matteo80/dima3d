@@ -936,8 +936,18 @@ Fatto:
       riavvio. Con modifiche non salvate chiede prima. Solo zip delle Release del progetto. «Salta questa versione».
       Pubblicare: `pacchetto.ps1`, commit e push, poi `pubblica.ps1 -Note note.md` (gh release create).
 - [x] Autore in Info e nel LEGGIMI: matteo80 (scelta dell'utente: resta anonimo).
+- [x] **Cabina dalle misure** (`src/cabin.rs`, finestra `ui/cabin_panel.rs`, pulsante «Cabina»): grigliato a barre
+      piatte diviso in moduli, pareti laterali modulari (montanti ogni 2 m, zoccolo sotto il grigliato, pannelli,
+      fascia vetrata facoltativa), testate con le aperture di ingresso e uscita centrate sull'asse, soffitto
+      semitrasparente. Zero all'ingresso, sull'asse, al piano del grigliato (scelte dell'utente). Misure predefinite
+      ricavate dalle cabine dei file di riferimento; ricordate nelle preferenze. La cabina è un file «Cabina» in
+      memoria (VRML 2.0 in mm): albero, Posizione, export come gli altri; «Aggiorna» la sostituisce.
 
 Da fare (richieste dell'utente 2026-11-10):
+- [ ] Cabina nel progetto (.dima3d): oggi non viene salvata ("modelli senza file"); salvare le misure e
+      ricostruirla all'apertura, poi riapplicare spostamenti e modifiche come per le copie.
+- [ ] Cabina: porte laterali e vani per i robot (l'utente per ora non li ha chiesti); poi i robot dai file di
+      configurazione rispetto al robot di riferimento, e la cabina messa nella posizione giusta.
 - [ ] Linee (`IndexedLineSet`) non disegnate: restano nell'avviso (es. contorni a pavimento nelle celle).
 - [ ] **Segno della X nello scostamento**: l'utente deve invertire la X dell'offset calcolato perché il pezzo vada nella
       direzione giusta (succedeva anche con lo script). Ipotesi da verificare con una prova con Y e rotazioni diverse da
