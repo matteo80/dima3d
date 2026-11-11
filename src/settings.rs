@@ -132,6 +132,9 @@ pub struct Settings {
     pub cabin: crate::cabin::CabinParams,
     /// Mostra il centro della cabina con le sue coordinate nella vista
     pub cabin_center: bool,
+    /// Centro cabina fisso, simbolo e robot
+    pub robots: crate::robot::RobotCell,
+    pub dock_robot: crate::ui::dock::DockState,
     /// Finestre agganciabili: dove stanno e quanto sono grandi
     pub dock_position: crate::ui::dock::DockState,
     pub dock_cabin: crate::ui::dock::DockState,
@@ -166,6 +169,8 @@ impl Default for Settings {
             skipped_version: String::new(),
             cabin: crate::cabin::CabinParams::default(),
             cabin_center: false,
+            robots: Default::default(),
+            dock_robot: Default::default(),
             dock_position: Default::default(),
             dock_cabin: Default::default(),
             dock_reduce: Default::default(),
@@ -289,6 +294,15 @@ impl Settings {
                     }
                 }
                 "cabina_centro" => s.cabin_center = value == "1",
+                "robot_centro" => {
+                    let _ = s.robots.set_center_text(value);
+                }
+                "robot" => {
+                    if let Some(r) = crate::robot::RobotParams::from_text(value) {
+                        s.robots.robots.push(r);
+                    }
+                }
+                "aggancio_robot" => s.dock_robot = crate::ui::dock::DockState::from_text(value).unwrap_or_default(),
                 "aggancio_posizione" => s.dock_position = crate::ui::dock::DockState::from_text(value).unwrap_or_default(),
                 "aggancio_cabina" => s.dock_cabin = crate::ui::dock::DockState::from_text(value).unwrap_or_default(),
                 "aggancio_riduci" => s.dock_reduce = crate::ui::dock::DockState::from_text(value).unwrap_or_default(),
@@ -364,6 +378,11 @@ impl Settings {
         out.push_str(&format!("cabina = {}\n", self.cabin.to_text()));
         out.push_str(&format!("cabina_scritta = {}\n", self.cabin.label.to_text()));
         out.push_str(&format!("cabina_centro = {}\n", u8::from(self.cabin_center)));
+        out.push_str(&format!("robot_centro = {}\n", self.robots.center_text()));
+        for r in &self.robots.robots {
+            out.push_str(&format!("robot = {}\n", r.to_text()));
+        }
+        out.push_str(&format!("aggancio_robot = {}\n", self.dock_robot.to_text()));
         out.push_str(&format!("aggancio_posizione = {}\n", self.dock_position.to_text()));
         out.push_str(&format!("aggancio_cabina = {}\n", self.dock_cabin.to_text()));
         out.push_str(&format!("aggancio_riduci = {}\n", self.dock_reduce.to_text()));
@@ -436,6 +455,16 @@ mod tests {
                 ..Default::default()
             },
             cabin_center: true,
+            robots: crate::robot::RobotCell {
+                center: [10000.0, 0.0, -20.0],
+                marker: true,
+                marker_size: 400.0,
+                robots: vec![
+                    crate::robot::RobotParams { name: "R11".into(), xyz: [-2000.0, 1800.0, 0.0], abc: [0.0, 0.0, -90.0], plate: true, ..Default::default() },
+                    crate::robot::RobotParams { name: "Robot 2".into(), ..Default::default() },
+                ],
+            },
+            dock_robot: crate::ui::dock::DockState { side: crate::ui::dock::Side::Left, width: 350.0, height: 0.0 },
             dock_position: crate::ui::dock::DockState { side: crate::ui::dock::Side::Right, width: 330.0, height: 0.0 },
             dock_cabin: Default::default(),
             dock_reduce: crate::ui::dock::DockState { side: crate::ui::dock::Side::Bottom, width: 0.0, height: 210.0 },

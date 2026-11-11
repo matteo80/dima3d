@@ -189,6 +189,7 @@ impl SceneGraph {
             copy_of: Some(CopyOf { source, nodes: nodes.iter().map(|&n| self.info[n as usize].origin).collect(), skip: skipped }),
             next_origin: self.nodes.len() as u32 - root,
             cabin: None,
+            robots: None,
         };
         self.sources.push(copy);
         self.revision += 1;

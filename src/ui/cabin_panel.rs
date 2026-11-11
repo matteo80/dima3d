@@ -106,6 +106,7 @@ pub fn draw_center(
     center: glam::Vec3,
     m: glam::Mat4,
     size: f32,
+    cabin_offset: Option<glam::Vec3>,
     to_screen: impl Fn(glam::Vec3) -> Option<egui::Pos2>,
 ) {
     let painter = ui.painter_at(rect);
@@ -122,7 +123,10 @@ pub fn draw_center(
         }
     }
     painter.circle(origin, 5.0, egui::Color32::WHITE, egui::Stroke::new(1.5_f32, egui::Color32::BLACK));
-    let text = format!("Centro cabina\n{}", center_text(center, m));
+    let mut text = format!("Centro cabina\n{}", center_text(center, m));
+    if let Some(offset) = cabin_offset {
+        text.push_str(&format!("\nCabina spostata di\n{:+.1} {:+.1} {:+.1}", offset.x, offset.y, offset.z));
+    }
     let galley = painter.layout_no_wrap(text, egui::FontId::monospace(12.0), egui::Color32::WHITE);
     let at = origin + egui::vec2(12.0, 12.0);
     painter.rect_filled(
@@ -149,7 +153,9 @@ pub fn draw(ctx: &egui::Context, app: &mut GestoreApp, pass: super::dock::Pass) 
     let busy = app.ui_state.is_loading || app.project.busy();
     let mut center = app.settings.cabin_center;
     let current_center = app.cabin_center();
-    let center_coordinates = current_center.map(|(c, m)| center_text(c, m));
+    let mut cell = app.settings.robots.clone();
+    let cell_center = cell.center();
+    let mut apply_cell = false;
     let mut move_to: Option<glam::Vec3> = None;
     let window = super::dock::Dockable {
         id: "finestra_cabina",
@@ -260,55 +266,57 @@ pub fn draw(ctx: &egui::Context, app: &mut GestoreApp, pass: super::dock::Pass) 
                 });
                 ui.collapsing("Scritta", |ui| label_section(ui, &mut p.label));
                 ui.collapsing("Centro cabina", |ui| {
-                    ui.checkbox(&mut center, "Mostra il centro nella vista").on_hover_text(
-                        "Assi della cabina a metà lunghezza, sull'asse, al piano del grigliato, con le coordinate: \
-                         seguono la cabina quando la sposti con Posizione",
+                    ui.label(
+                        egui::RichText::new(
+                            "Punto fisso della scena: simbolo e robot stanno qui. Spostando la cabina il centro resta fermo.",
+                        )
+                        .weak(),
                     );
-                    ui.checkbox(&mut p.center_marker, "Simbolo nel centro (si esporta con la cabina)").on_hover_text(
-                        "Sfera gialla con gli assi X (rosso, verso l'uscita), Y (verde) e Z (blu): fa parte della cabina, \
-                         si vede, si seleziona e si esporta con lei. Si applica con «Aggiorna la cabina»",
+                    ui.checkbox(&mut center, "Mostra il centro nella vista")
+                        .on_hover_text("Assi del centro cabina con le sue coordinate e lo scostamento della cabina");
+                    ui.horizontal(|ui| {
+                        for (name, v) in ["X", "Y", "Z"].into_iter().zip(cell.center.iter_mut()) {
+                            ui.label(name);
+                            ui.add(egui::DragValue::new(v).speed(10.0).suffix(" mm").max_decimals(1));
+                        }
+                    });
+                    ui.checkbox(&mut cell.marker, "Simbolo nel centro (si esporta)").on_hover_text(
+                        "Sfera gialla con gli assi X (rosso), Y (verde) e Z (blu), nel file «Centro e robot»: \
+                         si vede, si seleziona e si esporta. Si applica con «Applica centro e robot»",
                     );
-                    if p.center_marker {
+                    if cell.marker {
                         egui::Grid::new("cabina_simbolo").num_columns(2).show(ui, |ui| {
-                            mm(ui, "Misura del simbolo", "Lunghezza degli assi", &mut p.marker_size);
+                            mm(ui, "Misura del simbolo", "Lunghezza degli assi", &mut cell.marker_size);
                         });
                     }
-                    match center_coordinates {
-                        Some(text) => {
-                            ui.label(egui::RichText::new(text).monospace());
-                        }
-                        None => {
-                            ui.label(egui::RichText::new("Costruisci la cabina per vederne il centro.").weak());
-                        }
+                    if ui
+                        .add_enabled(!busy, egui::Button::new(icon_text(ui, icon::HAMMER, "Applica centro e robot")))
+                        .on_hover_text("Mette nella scena simbolo e robot nel centro scritto qui (sostituisce quelli di prima)")
+                        .clicked()
+                    {
+                        apply_cell = true;
                     }
-                    // Nuove coordinate del centro: la cabina si sposta (senza ruotare) fin lì
-                    if let Some((current, _)) = current_center {
-                        let key = egui::Id::new("cabina_centro_nuovo");
-                        let mut target: glam::Vec3 = ui.data(|d| d.get_temp(key)).unwrap_or(current);
-                        ui.label("Porta il centro in (coordinate della scena):");
-                        ui.horizontal(|ui| {
-                            for (name, v) in [("X", &mut target.x), ("Y", &mut target.y), ("Z", &mut target.z)] {
-                                ui.label(name);
-                                ui.add(egui::DragValue::new(v).speed(10.0).suffix(" mm").max_decimals(1));
-                            }
-                        });
-                        ui.horizontal(|ui| {
-                            let changed = (target - current).length() > 0.001;
+                    ui.separator();
+                    match current_center {
+                        Some((middle, m)) => {
+                            let offset = middle - cell_center;
+                            ui.label(egui::RichText::new(format!(
+                                "Metà della cabina\n{}\nScostamento dal centro\nX {:+.1}\nY {:+.1}\nZ {:+.1}",
+                                center_text(middle, m),
+                                offset.x,
+                                offset.y,
+                                offset.z
+                            )).monospace());
                             if ui
-                                .add_enabled(changed && !busy, egui::Button::new("Sposta la cabina"))
-                                .on_hover_text("Sposta la cabina in modo che il suo centro vada in queste coordinate (Ctrl+Z per tornare indietro)")
+                                .add_enabled(!busy && offset.length() > 0.001, egui::Button::new("Porta la cabina sul centro"))
+                                .on_hover_text("Sposta la cabina (senza ruotarla) in modo che la sua metà vada sul centro (Ctrl+Z per tornare indietro)")
                                 .clicked()
                             {
-                                move_to = Some(target - current);
+                                move_to = Some(-offset);
                             }
-                            if ui.add_enabled(changed, egui::Button::new("Annulla")).clicked() {
-                                target = current;
-                            }
-                        });
-                        if move_to.is_some() {
-                            ui.data_mut(|d| d.remove::<glam::Vec3>(key));
-                        } else {
-                            ui.data_mut(|d| d.insert_temp(key, target));
+                        }
+                        None => {
+                            ui.label(egui::RichText::new("Costruisci la cabina per vederne lo scostamento.").weak());
                         }
                     }
                 });
@@ -336,19 +344,23 @@ pub fn draw(ctx: &egui::Context, app: &mut GestoreApp, pass: super::dock::Pass) 
                 }
             });
         });
-    if p != app.settings.cabin || center != app.settings.cabin_center || dock != app.settings.dock_cabin {
+    if p != app.settings.cabin || center != app.settings.cabin_center || dock != app.settings.dock_cabin || cell != app.settings.robots {
         let mut settings = app.settings.clone();
         settings.cabin = p.clone();
         settings.cabin_center = center;
         settings.dock_cabin = dock;
+        settings.robots = cell.clone();
         app.apply_settings(settings);
+    }
+    if apply_cell {
+        app.build_robot_cell(cell);
     }
     if build {
         app.build_cabin(p);
     }
     if let (Some(delta), Some(node)) = (move_to, app.cabin_node()) {
         app.apply(crate::app::Action::Move { nodes: vec![node], matrix: glam::Mat4::from_translation(delta) });
-        app.ui_state.status_message = "Cabina spostata: il centro è nelle coordinate scelte".to_string();
+        app.ui_state.status_message = "Cabina spostata: la sua metà è sul centro cabina".to_string();
     }
     if !open {
         app.ui_state.cabin_open = false;

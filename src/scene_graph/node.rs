@@ -189,6 +189,15 @@ pub struct SourceFile {
     pub next_origin: u32,
     /// Cabina generata dalle misure (vedi `crate::cabin`); `path` è `None`
     pub cabin: Option<crate::cabin::CabinParams>,
+    /// Centro cabina e robot generati (vedi `crate::robot`); `path` è `None`
+    pub robots: Option<crate::robot::RobotCell>,
+}
+
+impl SourceFile {
+    /// File generato dal programma (cabina, centro e robot): niente da leggere dal disco.
+    pub fn generated(&self) -> bool {
+        self.cabin.is_some() || self.robots.is_some()
+    }
 }
 
 /// Informazioni accessorie, allineate 1:1 con `SceneGraph::nodes`.
@@ -408,6 +417,7 @@ impl SceneGraph {
             copy_of: None,
             next_origin: self.nodes.len() as u32,
             cabin: None,
+            robots: None,
         }];
         for (i, inf) in self.info.iter_mut().enumerate() {
             inf.origin = i as u32;

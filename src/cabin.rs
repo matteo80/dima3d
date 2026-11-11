@@ -236,9 +236,9 @@ pub struct CabinParams {
     pub wheel_above: f32,
     /// Passo delle gambe del telaio
     pub leg_pitch: f32,
-    /// Simbolo nel centro della cabina (sfera e tre assi), esportato con la cabina
+    /// Simbolo del centro nella cabina (0.2.6–0.2.8): letto dai file vecchi, non più disegnato
+    /// (ora è in `crate::robot`, fisso nella scena)
     pub center_marker: bool,
-    /// Lunghezza degli assi del simbolo
     pub marker_size: f32,
     /// Scritta sulle pareti
     pub label: CabinLabel,
@@ -407,9 +407,6 @@ impl CabinParams {
                 out.push("canalina: il bordo non può essere negativo".into());
             }
         }
-        if self.center_marker && (self.marker_size.is_nan() || self.marker_size <= 0.0) {
-            out.push("simbolo del centro: la misura deve essere maggiore di zero".into());
-        }
         if self.conveyor {
             let positive = [
                 (self.conveyor_width, "larghezza"),
@@ -467,14 +464,14 @@ impl CabinParams {
 
 /// Insieme di parallelepipedi che diventano una sola `Shape`.
 #[derive(Default)]
-struct Boxes {
+pub(crate) struct Boxes {
     points: Vec<[f32; 3]>,
     faces: Vec<Vec<u32>>,
 }
 
 impl Boxes {
     /// Parallelepipedo tra due angoli opposti (si ignorano quelli senza volume).
-    fn add(&mut self, a: [f32; 3], b: [f32; 3]) {
+    pub(crate) fn add(&mut self, a: [f32; 3], b: [f32; 3]) {
         let lo = [a[0].min(b[0]), a[1].min(b[1]), a[2].min(b[2])];
         let hi = [a[0].max(b[0]), a[1].max(b[1]), a[2].max(b[2])];
         if (0..3).any(|i| hi[i] - lo[i] <= 0.01) {
@@ -495,7 +492,7 @@ impl Boxes {
     }
 
     /// Sfera di raggio `r` con centro `c`.
-    fn sphere(&mut self, c: [f32; 3], r: f32) {
+    pub(crate) fn sphere(&mut self, c: [f32; 3], r: f32) {
         const MERIDIANS: u32 = 16;
         const PARALLELS: u32 = 8;
         let base = self.points.len() as u32;
@@ -518,6 +515,31 @@ impl Boxes {
             }
             self.faces.push(vec![ring(PARALLELS - 1, j), ring(PARALLELS - 1, j + 1), top]);
         }
+    }
+
+    /// Cilindro con l'asse da `a` a `b`.
+    pub(crate) fn cylinder(&mut self, a: glam::Vec3, b: glam::Vec3, radius: f32) {
+        const SIDES: u32 = 20;
+        let axis = b - a;
+        if radius <= 0.01 || axis.length() <= 0.01 {
+            return;
+        }
+        let w = axis.normalize();
+        let u = w.any_orthonormal_vector();
+        let v = w.cross(u);
+        let base = self.points.len() as u32;
+        for k in 0..SIDES {
+            let t = k as f32 / SIDES as f32 * std::f32::consts::TAU;
+            let r = (u * t.cos() + v * t.sin()) * radius;
+            self.points.push((a + r).to_array());
+            self.points.push((b + r).to_array());
+        }
+        for k in 0..SIDES {
+            let (p, q) = (base + 2 * k, base + 2 * ((k + 1) % SIDES));
+            self.faces.push(vec![p, q, q + 1, p + 1]);
+        }
+        self.faces.push((0..SIDES).rev().map(|k| base + 2 * k).collect());
+        self.faces.push((0..SIDES).map(|k| base + 2 * k + 1).collect());
     }
 
     /// Cilindro con l'asse lungo Y da `y0` a `y1`, centro dell'asse in (`x`, `z`).
@@ -543,7 +565,7 @@ impl Boxes {
         self.faces.push((0..SIDES).rev().map(|k| base + 2 * k + 1).collect());
     }
 
-    fn write(&self, out: &mut String, name: &str, color: [f32; 3], transparency: f32) {
+    pub(crate) fn write(&self, out: &mut String, name: &str, color: [f32; 3], transparency: f32) {
         if self.faces.is_empty() {
             return;
         }
@@ -736,25 +758,6 @@ pub fn vrml(p: &CabinParams) -> String {
     if p.conveyor {
         conveyor(&mut out, p, channel_band);
     }
-    if p.center_marker {
-        // Centro cabina: sfera e tre assi (X rosso verso l'uscita, Y verde, Z blu in alto)
-        let (c, a) = ([l / 2.0, 0.0, 0.0], p.marker_size);
-        let w = (a * 0.04).max(2.0);
-        out.push_str("DEF Centro_cabina Group { children [\n");
-        let mut ball = Boxes::default();
-        ball.sphere(c, a * 0.12);
-        ball.write(&mut out, "Centro_sfera", [0.95, 0.85, 0.1], 0.0);
-        for (name, end, color) in [
-            ("Centro_asse_X", [c[0] + a, w, w], [0.9, 0.2, 0.2]),
-            ("Centro_asse_Y", [c[0] + w, a, w], [0.2, 0.75, 0.2]),
-            ("Centro_asse_Z", [c[0] + w, w, a], [0.2, 0.4, 0.95]),
-        ] {
-            let mut axis = Boxes::default();
-            axis.add([c[0] - w, -w, -w], end);
-            axis.write(&mut out, name, color, 0.0);
-        }
-        out.push_str("] }\n");
-    }
     if let Some((y0, y1)) = channel_band {
         // Sul piano della tavola se ci passa dentro, altrimenti su quello del grigliato
         let inside = conveyor_band.is_some_and(|(a, b)| y0 < b && y1 > a);
@@ -899,6 +902,21 @@ impl crate::app::GestoreApp {
         Some((m.transform_point3(glam::Vec3::new(p.length / 2.0, 0.0, 0.0)), m))
     }
 
+    /// Aggiunge alla scena un file generato (cabina, centro e robot). Con la scena vuota si apre
+    /// come un file, con lo stesso percorso del caricamento.
+    pub(crate) fn add_generated(&mut self, scene: crate::scene_graph::SceneGraph) {
+        if self.scene_graph.is_some() {
+            self.add_loaded_file(scene);
+        } else {
+            let (tx, rx) = std::sync::mpsc::channel();
+            let _ = tx.send(crate::parser::LoadEvent::Finished(scene));
+            self.project.loading_path = None;
+            self.project.loading_adds = false;
+            self.ui_state.is_loading = true;
+            self.load_rx = Some(rx);
+        }
+    }
+
     /// Costruisce la cabina con le misure date: sostituisce quella generata prima, se c'è.
     pub fn build_cabin(&mut self, params: CabinParams) {
         let problems = params.problems();
@@ -918,20 +936,12 @@ impl crate::app::GestoreApp {
         if let Some(old) = replaced {
             self.apply(crate::app::Action::Delete(old));
         }
-        let scene = scene(&params);
-        if self.scene_graph.is_some() {
-            self.add_loaded_file(scene);
+        let had_scene = self.scene_graph.is_some();
+        self.add_generated(scene(&params));
+        if had_scene {
             if let (Some(m), Some(node)) = (placement.filter(|m| *m != glam::Mat4::IDENTITY), self.cabin_node()) {
                 self.apply(crate::app::Action::Move { nodes: vec![node], matrix: m });
             }
-        } else {
-            // Scena vuota: la cabina si apre come un file, con lo stesso percorso del caricamento
-            let (tx, rx) = std::sync::mpsc::channel();
-            let _ = tx.send(crate::parser::LoadEvent::Finished(scene));
-            self.project.loading_path = None;
-            self.project.loading_adds = false;
-            self.ui_state.is_loading = true;
-            self.load_rx = Some(rx);
         }
         self.ui_state.status_message = format!(
             "Cabina {}: {} × {} × {} mm",
@@ -1180,20 +1190,11 @@ mod tests {
         assert!(deep.problems().iter().any(|e| e.contains("quota del grigliato")));
     }
 
-    /// Simbolo del centro: a metà lunghezza, sull'asse, a Z = 0; solo con la casella.
+    /// Il simbolo del centro non è più nella cabina (sta fisso in «Centro e robot»).
     #[test]
-    fn center_marker_sits_in_the_center() {
-        let p = CabinParams { center_marker: true, ..CabinParams::default() };
-        assert!(p.problems().is_empty());
-        let scene = scene(&p);
-        let (lo, hi) = part(&scene, "Centro_sfera").expect("sfera");
-        let c = (lo + hi) / 2.0;
-        assert!((c - glam::Vec3::new(p.length / 2.0, 0.0, 0.0)).length() < 1.0, "{c}");
-        let (_, hi) = part(&scene, "Centro_asse_X").unwrap();
-        assert!((hi.x - (p.length / 2.0 + p.marker_size)).abs() < 0.5);
-        let (_, hi) = part(&scene, "Centro_asse_Z").unwrap();
-        assert!((hi.z - p.marker_size).abs() < 0.5);
-        assert!(part(&super::scene(&CabinParams::default()), "Centro_sfera").is_none());
+    fn cabin_has_no_center_marker() {
+        let scene = scene(&CabinParams { center_marker: true, ..CabinParams::default() });
+        assert!(part(&scene, "Centro_sfera").is_none());
     }
 
     #[test]

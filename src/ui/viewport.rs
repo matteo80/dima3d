@@ -425,12 +425,14 @@ pub fn draw_viewport(ui: &mut egui::Ui, app: &mut crate::app::GestoreApp) {
         super::measure::draw(ui, rect, m, |v| to_screen(camera, rect, v), size);
         ui.ctx().set_cursor_icon(egui::CursorIcon::Crosshair);
     }
-    // Centro della cabina generata, con le coordinate
+    // Centro cabina: punto fisso, con le coordinate e lo scostamento della cabina
     if app.settings.cabin_center {
-        if let (Some(renderer), Some((center, m)), Some(scene)) = (&app.renderer, app.cabin_center(), &app.scene_graph) {
+        if let (Some(renderer), Some(scene)) = (&app.renderer, &app.scene_graph) {
             let camera = &renderer.camera;
             let size = scene.compute_bounding_box().diagonal();
-            super::cabin_panel::draw_center(ui, rect, center, m, size, |v| to_screen(camera, rect, v));
+            let center = app.settings.robots.center();
+            let offset = app.cabin_center().map(|(middle, _)| middle - center);
+            super::cabin_panel::draw_center(ui, rect, center, glam::Mat4::IDENTITY, size, offset, |v| to_screen(camera, rect, v));
         }
     }
     // Cerniera: punti e asse

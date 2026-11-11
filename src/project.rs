@@ -618,7 +618,7 @@ impl GestoreApp {
             return;
         }
         let mut warnings = Vec::new();
-        for f in file.files.iter_mut().filter(|f| f.copy.is_none() && f.cabin.is_none()) {
+        for f in file.files.iter_mut().filter(|f| f.copy.is_none() && f.cabin.is_none() && f.robots.is_none()) {
             if !f.path.exists() {
                 // Modello spostato: si chiede dove si trova
                 match locate_missing(&f.path) {
@@ -639,7 +639,7 @@ impl GestoreApp {
             }
         }
         let paths: Vec<PathBuf> =
-            file.files.iter().filter(|f| f.copy.is_none() && f.cabin.is_none()).map(|f| f.path.clone()).collect();
+            file.files.iter().filter(|f| f.copy.is_none() && f.cabin.is_none() && f.robots.is_none()).map(|f| f.path.clone()).collect();
         if paths.is_empty() {
             // Solo cabine generate: niente da leggere dal disco, si ricostruisce subito
             self.close_project();
@@ -662,7 +662,7 @@ impl GestoreApp {
         let name = restore.path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
         let mut warnings = restore.warnings;
         // Un progetto con le sole cabine: si parte da una scena vuota
-        if self.scene_graph.is_none() && restore.file.files.iter().any(|f| f.cabin.is_some()) {
+        if self.scene_graph.is_none() && restore.file.files.iter().any(|f| f.cabin.is_some() || f.robots.is_some()) {
             self.scene_graph = Some(crate::scene_graph::SceneGraph::default());
         }
         if self.scene_graph.is_none() {
@@ -682,6 +682,11 @@ impl GestoreApp {
                     None if entry.cabin.is_some() => {
                         // Cabina generata: si ricostruisce con le stesse misure
                         scene.append(crate::cabin::scene(&entry.cabin.clone().unwrap_or_default()));
+                        Some(scene.sources.len() - 1)
+                    }
+                    None if entry.robots.is_some() => {
+                        // Centro e robot: si rifanno con le stesse coordinate
+                        scene.append(crate::robot::scene(&entry.robots.clone().unwrap_or_default()));
                         Some(scene.sources.len() - 1)
                     }
                     None => scene.sources.iter().position(|s| s.path.as_deref() == Some(entry.path.as_path())),
@@ -791,7 +796,7 @@ impl GestoreApp {
         });
         let cluster = self.project.loaded_cluster.unwrap_or(self.settings.cluster);
         let file = crate::project_file::ProjectFile::capture(scene, cluster, camera);
-        let unsaved = scene.open_files().filter(|f| f.path.is_none() && f.copy_of.is_none() && f.cabin.is_none()).count();
+        let unsaved = scene.open_files().filter(|f| f.path.is_none() && f.copy_of.is_none() && !f.generated()).count();
         let revision = scene.revision;
         if let Err(e) = std::fs::write(path, file.to_text(path)) {
             self.ui_state.status_message = format!("Progetto non salvato: {e}");
@@ -1201,6 +1206,39 @@ mod tests {
         assert_eq!(state(&started).0, expected.0, "{}", started.ui_state.status_message);
         assert!(started.cabin_node().is_some(), "cabina aperta: {}", started.ui_state.status_message);
         drop((app, other, only, reopened, started));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// Centro e robot si salvano nel progetto e si rifanno all'apertura, insieme alla cabina.
+    #[test]
+    fn robots_are_saved_in_the_project() {
+        use crate::robot::{RobotCell, RobotParams};
+        let dir = std::env::temp_dir().join("dima3d_prova_robot");
+        std::fs::create_dir_all(&dir).unwrap();
+        let cell = RobotCell {
+            center: [10000.0, 0.0, 0.0],
+            marker: true,
+            marker_size: 500.0,
+            robots: vec![RobotParams { name: "R11".into(), xyz: [-2000.0, 1800.0, 0.0], abc: [0.0, 0.0, -90.0], plate: true, ..Default::default() }],
+        };
+        let mut app = GestoreApp::new_headless();
+        app.build_cabin(crate::cabin::CabinParams::default());
+        pump(&mut app);
+        app.build_robot_cell(cell.clone());
+        let project = dir.join("con_robot.dima3d");
+        assert!(app.write_project(&project));
+        let text = std::fs::read_to_string(&project).unwrap();
+        assert!(text.contains("[robot]
+centro = 10000 0 0 1 500
+robot = -2000 1800 0 0 0 -90 1 1000 1000 | R11"), "{text}");
+        let expected = state(&app);
+        let mut other = GestoreApp::new_headless();
+        other.request_open(project.clone());
+        pump(&mut other);
+        assert_eq!(state(&other).0, expected.0, "{}", other.ui_state.status_message);
+        let s = other.scene_graph.as_ref().unwrap();
+        assert_eq!(s.open_files().filter(|f| f.robots.is_some()).last().unwrap().robots, Some(cell));
+        drop((app, other));
         let _ = std::fs::remove_dir_all(&dir);
     }
 

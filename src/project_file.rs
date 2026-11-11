@@ -33,6 +33,10 @@
 //!
 //! [cabina]                              (cabina generata: si ricostruisce, poi le modifiche)
 //! misure = 20000 5700 …                 (vedi `CabinParams::to_text`)
+//!
+//! [robot]                               (centro cabina e robot generati)
+//! centro = x y z simbolo misura
+//! robot = x y z a b c pannello px py | nome   (uno per robot)
 //! ```
 
 use std::path::{Component, Path, PathBuf};
@@ -46,7 +50,8 @@ use crate::settings::{StepLoad, StepMesh};
 
 pub const EXTENSION: &str = "dima3d";
 /// 2: copie incollate, gruppi creati e pezzi spostati nell'albero. 3: cabina generata.
-const VERSION: u32 = 3;
+/// 4: centro cabina e robot.
+const VERSION: u32 = 4;
 
 /// Vista salvata: centro, distanza e orientamento della camera.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -83,6 +88,8 @@ pub struct FileEntry {
     pub children: Vec<(u32, Vec<u32>)>,
     /// Cabina generata: le sue misure; `path` resta vuoto
     pub cabin: Option<crate::cabin::CabinParams>,
+    /// Centro cabina e robot generati; `path` resta vuoto
+    pub robots: Option<crate::robot::RobotCell>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -192,7 +199,8 @@ impl ProjectFile {
                 },
                 None => None,
             };
-            let (path, size, modified) = match (&source.path, &copy, &source.cabin) {
+            let generated = source.generated().then_some(());
+            let (path, size, modified) = match (&source.path, &copy, &generated) {
                 (Some(path), None, _) => {
                     let (size, modified) = file_stamp(path);
                     (path.clone(), size, modified)
@@ -210,6 +218,7 @@ impl ProjectFile {
                 scale: source.scale,
                 title: if copy.is_some() { source.name.clone() } else { String::new() },
                 cabin: if copy.is_none() { source.cabin.clone() } else { None },
+                robots: if copy.is_none() { source.robots.clone() } else { None },
                 copy,
                 ..Default::default()
             };
@@ -281,6 +290,12 @@ impl ProjectFile {
                 if !c.label.text.trim().is_empty() {
                     out.push_str(&format!("scritta = {}\n", c.label.to_text()));
                 }
+            } else if let Some(r) = &f.robots {
+                out.push_str("\n[robot]\n");
+                out.push_str(&format!("centro = {}\n", r.center_text()));
+                for robot in &r.robots {
+                    out.push_str(&format!("robot = {}\n", robot.to_text()));
+                }
             } else {
                 out.push_str("\n[file]\n");
                 if let Some(rel) = relative_to(&f.path, base) {
@@ -344,6 +359,10 @@ impl ProjectFile {
                 out.files.push(FileEntry { scale: 1.0, copy: Some(CopyOf::default()), ..Default::default() });
                 continue;
             }
+            if line == "[robot]" {
+                out.files.push(FileEntry { scale: 1.0, robots: Some(Default::default()), ..Default::default() });
+                continue;
+            }
             if line == "[cabina]" {
                 out.files.push(FileEntry { scale: 1.0, cabin: Some(Default::default()), ..Default::default() });
                 continue;
@@ -387,6 +406,15 @@ impl ProjectFile {
                     let label = crate::cabin::CabinLabel::from_text(value).ok_or_else(|| bad(i))?;
                     if let Some(c) = &mut f.cabin {
                         c.label = label;
+                    }
+                }
+                (Some(f), "centro") if f.robots.is_some() => {
+                    f.robots.as_mut().and_then(|r| r.set_center_text(value)).ok_or_else(|| bad(i))?;
+                }
+                (Some(f), "robot") if f.robots.is_some() => {
+                    let robot = crate::robot::RobotParams::from_text(value).ok_or_else(|| bad(i))?;
+                    if let Some(r) = &mut f.robots {
+                        r.robots.push(robot);
                     }
                 }
                 (Some(f), "gruppo") => {
@@ -443,7 +471,7 @@ impl ProjectFile {
                 }
                 continue;
             }
-            if f.cabin.is_some() {
+            if f.cabin.is_some() || f.robots.is_some() {
                 continue;
             }
             if f.path.as_os_str().is_empty() && f.relative.is_none() {
@@ -560,6 +588,7 @@ mod tests {
             groups: vec![(812, "Lato sinistro".into())],
             children: vec![(4, vec![7, 812, 9]), (812, vec![])],
             cabin: None,
+            robots: None,
         };
         let copy = FileEntry {
             scale: 1.0,

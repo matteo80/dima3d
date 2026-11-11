@@ -962,6 +962,14 @@ Fatto:
       %LOCALAPPDATA%\Programs\Dima3D senza permessi da amministratore, menu Start, desktop facoltativo,
       associazione dei .dima3d facoltativa, disinstallazione. `pacchetto.ps1` lo crea, `pubblica.ps1` lo carica nella
       Release accanto allo zip; dopo un aggiornamento dal programma si aggiorna la versione in «App installate».
+- [x] (2026-11-11, 0.2.9) **Centro cabina fisso e robot** (`src/robot.rs`, finestra `ui/robot_panel.rs`, pulsante «Robot»):
+      il centro cabina è un punto fisso della scena (coordinate nella finestra Cabina, overlay con lo scostamento della
+      cabina, «Porta la cabina sul centro»); simbolo e robot nel file generato «Centro e robot» (salvato nel progetto,
+      sezione `[robot]`, formato 4). Robot generici a 6 assi (sagoma di ingombro) con X Y Z A B C dal centro come nei
+      CONST BASE (incollabili), più robot, pannello facoltativo dimensionabile a quota 0 del centro girato come il robot.
+      Il simbolo non è più nella cabina (campi `center_marker`/`marker_size` letti solo per compatibilità).
+- [x] (2026-11-11, 0.2.7–0.2.8) Scritta sulle due testate; avvio davvero ingrandito; doppio clic su un .dima3d apre il
+      progetto; `pubblica.ps1` con controllo privacy prima del caricamento.
 - [x] (2026-11-11) Il programma si apre ingrandito (`main.rs`, `with_maximized`).
 - [x] (2026-11-11) Barra in alto: le scritte dei pulsanti spariscono quando la barra con le scritte (misurata, ricordata
       in memoria di egui) non ci sta più; prima la soglia fissa di 1500 px faceva sovrapporre «Vista» e l'avviso.

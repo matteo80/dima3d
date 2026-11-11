@@ -7,6 +7,7 @@ pub mod position_panel;
 pub mod progress;
 pub mod properties;
 pub mod reduce_panel;
+pub mod robot_panel;
 pub mod scene_tree;
 pub mod theme;
 pub mod toolbar;
@@ -69,6 +70,8 @@ pub struct UiState {
     pub position: position_panel::PositionPanel,
     /// Finestra della cabina aperta
     pub cabin_open: bool,
+    /// Finestra dei robot aperta
+    pub robot_open: bool,
     /// Selezione trascinando nell'albero: riga da cui è partita
     pub tree_sweep: Option<u32>,
     /// Selezione a rettangolo nell'albero (partita dallo spazio vuoto): punto di partenza, con la Y
@@ -115,6 +118,7 @@ impl Default for UiState {
             zoom_anchor: None,
             position: Default::default(),
             cabin_open: false,
+            robot_open: false,
             tree_sweep: None,
             tree_band: None,
             clipboard: Vec::new(),
@@ -527,6 +531,7 @@ pub fn draw_main_layout(ctx: &egui::Context, app: &mut crate::app::GestoreApp) {
     reduce_panel::draw(ctx, app, dock::Pass::Docked);
     position_panel::draw(ctx, app, dock::Pass::Docked);
     cabin_panel::draw(ctx, app, dock::Pass::Docked);
+    robot_panel::draw(ctx, app, dock::Pass::Docked);
 
     // ── CentralPanel: viewport 3D ──────────────────────────────────────────────
     egui::CentralPanel::default().frame(egui::Frame::new()).show(ctx, |ui| {

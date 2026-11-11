@@ -1106,6 +1106,7 @@ impl eframe::App for GestoreApp {
         crate::ui::reduce_panel::draw(ctx, self, crate::ui::dock::Pass::Floating);
         crate::ui::position_panel::draw(ctx, self, crate::ui::dock::Pass::Floating);
         crate::ui::cabin_panel::draw(ctx, self, crate::ui::dock::Pass::Floating);
+        crate::ui::robot_panel::draw(ctx, self, crate::ui::dock::Pass::Floating);
         crate::ui::about::draw(ctx, self);
         crate::update::draw(ctx, self);
         self.update_window_title(ctx);

@@ -216,6 +216,14 @@ Sposta e ruota un file o i pezzi selezionati (X Y Z, A B C), applica e calcola g
     if cabin.clicked() {
         app.ui_state.cabin_open = !cabin_open;
     }
+    let robot_open = app.ui_state.robot_open;
+    let robot_text = icon_text(ui, icon::ROBOT, if compact { "" } else { "Robot" });
+    let robot = ui
+        .add_enabled(!loading, egui::Button::new(robot_text).selected(robot_open))
+        .on_hover_text("Robot\nRobot generici con le coordinate del controllore (X Y Z A B C dal centro cabina), con il pannello a quota 0");
+    if robot.clicked() {
+        app.ui_state.robot_open = !robot_open;
+    }
     if tool(ui, has_scene && !loading, compact, icon::X, "Chiudi", "Chiude tutti i file aperti (chiede conferma se ci sono modifiche non esportate). Per chiuderne uno solo: tasto destro sul file nell'albero") {
         app.request_close();
     }

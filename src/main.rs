@@ -11,6 +11,7 @@ mod project_file;
 mod reduce;
 mod reduction;
 mod renderer;
+mod robot;
 mod scene_graph;
 mod settings;
 mod text3d;
