@@ -950,6 +950,31 @@ Fatto:
       lunghezza, sull'asse, al piano del grigliato; segue la cabina spostata con Posizione.
 - [x] Valori predefiniti della cabina (richiesta dell'utente): vetrata da 1000 a 3000 mm, barre del grigliato a passo
       100 mm e larghe 20 mm.
+- [x] Barre di scorrimento sempre visibili e contrastate (cursore nel colore del testo; `ui/theme.rs`).
+- [x] Albero: trascinando da una riga non selezionata si selezionano le righe su cui si passa; da una riga
+      selezionata si sposta la selezione nei gruppi (scelta dell'utente, come Esplora risorse).
+- [x] Finestre Posizione, Cabina e Riduci facce agganciabili ai bordi (`ui/dock.rs`): mobili e ridimensionabili;
+      trascinate vicino a un bordo mostrano l'anteprima e si agganciano (sinistra, destra, alto, basso); agganciate
+      si allargano dal bordo e si sganciano con il pulsante o trascinando il titolo. Stato nelle preferenze
+      (`aggancio_* = lato larghezza altezza`). Ogni finestra si disegna in due passaggi (agganciata prima della
+      vista, mobile dopo).
+- [x] Installer (`installer/dima3d.iss`, Inno Setup 6 installato per l'utente con winget): installa in
+      %LOCALAPPDATA%\Programs\Dima3D senza permessi da amministratore, menu Start, desktop facoltativo,
+      associazione dei .dima3d facoltativa, disinstallazione. `pacchetto.ps1` lo crea, `pubblica.ps1` lo carica nella
+      Release accanto allo zip; dopo un aggiornamento dal programma si aggiorna la versione in «App installate».
+- [x] (2026-11-11) Il programma si apre ingrandito (`main.rs`, `with_maximized`).
+- [x] (2026-11-11) Barra in alto: le scritte dei pulsanti spariscono quando la barra con le scritte (misurata, ricordata
+      in memoria di egui) non ci sta più; prima la soglia fissa di 1500 px faceva sovrapporre «Vista» e l'avviso.
+- [x] (2026-11-11) Calamita: si aggancia anche portando il bordo della finestra contro il bordo dell'area (come FreeCAD),
+      non solo con il puntatore vicino al bordo (`dock::touched_side`; ignorato per finestre quasi alte/larghe come l'area).
+- [x] (2026-11-11) Albero come FreeCAD: dallo spazio vuoto si trascina un rettangolo che seleziona le righe toccate;
+      clic nello spazio vuoto = niente selezionato (`UiState::tree_band`; `drag_to_scroll(false)` sull'albero).
+- [x] (2026-11-11) Cabina: **grigliato ribassato** (`grid_z` < 0; lo zero resta al piano della tavola), **tavola
+      trasportatore** (rulliera ridisegnata da zero, parametrica: due file di ruote Ø184 a scartamento 1010, passo 1000,
+      sporgenza 40 sopra Z 0, carter con asole, grigliato tra i carter, telaio con gambe fino al fondo, sponde fino al
+      grigliato ribassato) e **canalina** (posizione Y, 200×300, lamiera 10, bordo +20; sul piano della tavola se ci
+      passa dentro). Caselle nella finestra Cabina; preferenze compatibili con quelle della 0.2.5. Il file della tavola
+      mandato dall'utente aveva nomi di cliente e stabilimento nei nodi: usato solo per le misure, non copiato.
 - [x] **Cabina dalle misure** (`src/cabin.rs`, finestra `ui/cabin_panel.rs`, pulsante «Cabina»): grigliato a barre
       piatte diviso in moduli, pareti laterali modulari (montanti ogni 2 m, zoccolo sotto il grigliato, pannelli,
       fascia vetrata facoltativa), testate con le aperture di ingresso e uscita centrate sull'asse, soffitto

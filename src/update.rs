@@ -333,8 +333,34 @@ pub fn install_and_restart(package: &Path) -> Result<(), String> {
         return install_elevated(package, install);
     }
     install_into(package, install)?;
+    update_installed_version(package);
     std::process::Command::new(install.join(EXE)).spawn().map_err(|e| format!("riavvio non riuscito ({e})"))?;
     Ok(())
+}
+
+/// Chiave di disinstallazione scritta dall'installer (Inno Setup, per l'utente).
+const UNINSTALL_KEY: &str = r"HKCU\Software\Microsoft\Windows\CurrentVersion\Uninstall\{D6649788-0CB3-4941-A297-5C1005F07E6E}_is1";
+
+/// Se il programma è stato installato con l'installer, «App installate» di Windows mostra la
+/// versione nuova (la prende dal nome della cartella del pacchetto, `Dima3D-x.y.z`).
+fn update_installed_version(package: &Path) {
+    let Some(version) = package.file_name().and_then(|n| n.to_str()).and_then(|n| n.strip_prefix("Dima3D-")) else {
+        return;
+    };
+    let reg = |args: &[&str]| {
+        let mut command = std::process::Command::new("reg");
+        command.args(args);
+        #[cfg(windows)]
+        {
+            use std::os::windows::process::CommandExt;
+            command.creation_flags(0x0800_0000);
+        }
+        command.output().is_ok_and(|o| o.status.success())
+    };
+    if reg(&["query", UNINSTALL_KEY, "/v", "DisplayVersion"]) {
+        reg(&["add", UNINSTALL_KEY, "/v", "DisplayVersion", "/d", version, "/f"]);
+        reg(&["add", UNINSTALL_KEY, "/v", "DisplayName", "/d", "Dima 3D", "/f"]);
+    }
 }
 
 /// Cancella l'exe della versione precedente lasciato da un aggiornamento.

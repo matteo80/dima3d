@@ -133,27 +133,39 @@ pub fn draw_center(
     painter.galley(at, galley, egui::Color32::WHITE);
 }
 
-pub fn draw(ctx: &egui::Context, app: &mut GestoreApp) {
+pub fn draw(ctx: &egui::Context, app: &mut GestoreApp, pass: super::dock::Pass) {
     if !app.ui_state.cabin_open {
         return;
     }
+    // Agganciata si disegna prima della vista, mobile dopo: l'altro passaggio non fa niente
+    if (pass == super::dock::Pass::Docked) != (app.settings.dock_cabin.side != super::dock::Side::Floating) {
+        return;
+    }
+    let mut dock = app.settings.dock_cabin;
     let mut p: CabinParams = app.settings.cabin.clone();
     let mut open = true;
     let mut build = false;
     let exists = app.cabin_node().is_some();
     let busy = app.ui_state.is_loading || app.project.busy();
     let mut center = app.settings.cabin_center;
-    let center_coordinates = app.cabin_center().map(|(c, m)| center_text(c, m));
-    egui::Window::new(format!("{}  Cabina", icon::CUBE_TRANSPARENT))
-        .id(egui::Id::new("finestra_cabina"))
-        .open(&mut open)
-        .resizable(false)
-        .collapsible(false)
-        .default_pos(egui::pos2(80.0, 120.0))
-        .show(ctx, |ui| {
+    let current_center = app.cabin_center();
+    let center_coordinates = current_center.map(|(c, m)| center_text(c, m));
+    let mut move_to: Option<glam::Vec3> = None;
+    let window = super::dock::Dockable {
+        id: "finestra_cabina",
+        title: format!("{}  Cabina", icon::CUBE_TRANSPARENT),
+        state: &mut dock,
+        open: &mut open,
+        default_width: 360.0,
+        min_width: 300.0,
+        default_height: 560.0,
+        default_pos: egui::pos2(80.0, 120.0),
+    };
+    super::dock::show(ctx, pass, window, |ui| {
             ui.label(
                 egui::RichText::new(
-                    "Zero all'ingresso della cabina, sull'asse, al piano del grigliato. X verso l'uscita, Z in alto.",
+                    "Zero all'ingresso della cabina, sull'asse, al piano del grigliato (della tavola, se il grigliato è \
+                     ribassato). X verso l'uscita, Z in alto.",
                 )
                 .weak(),
             );
@@ -188,7 +200,55 @@ pub fn draw(ctx: &egui::Context, app: &mut GestoreApp) {
                         mm(ui, "Spessore barre", "Spessore delle barre piatte", &mut p.bar_thickness);
                         mm(ui, "Moduli lungo X", "Lunghezza dei moduli del grigliato", &mut p.grid_module_x);
                         mm(ui, "Moduli lungo Y", "Larghezza dei moduli del grigliato", &mut p.grid_module_y);
+                        ui.label("Grigliato ribassato");
+                        let mut lowered = p.grid_z < 0.0;
+                        if ui
+                            .checkbox(&mut lowered, "")
+                            .on_hover_text("Grigliato sotto il piano della tavola, per far lavorare il robot sulle parti basse")
+                            .changed()
+                        {
+                            p.grid_z = if lowered { -500.0 } else { 0.0 };
+                        }
+                        ui.end_row();
+                        if lowered {
+                            mm_signed(
+                                ui,
+                                "Quota grigliato",
+                                "Piano del grigliato rispetto allo zero della cabina (piano della tavola): negativa = più in basso",
+                                &mut p.grid_z,
+                            );
+                        }
                     });
+                });
+                ui.collapsing("Tavola trasportatore", |ui| {
+                    ui.checkbox(&mut p.conveyor, "Tavola sull'asse della cabina").on_hover_text(
+                        "Rulliera dello skid per tutta la lunghezza: ruote che escono dal piano della tavola (Z = 0), \
+                         carter con le asole, grigliato in mezzo, telaio con le gambe fino al fondo",
+                    );
+                    if p.conveyor {
+                        egui::Grid::new("cabina_tavola").num_columns(2).show(ui, |ui| {
+                            mm(ui, "Larghezza", "Ingombro della tavola (carter), centrata sull'asse", &mut p.conveyor_width);
+                            mm(ui, "Scartamento ruote", "Distanza tra le due file di ruote (come i pattini dello skid)", &mut p.wheel_gauge);
+                            mm(ui, "Diametro ruote", "Diametro delle ruote", &mut p.wheel_diameter);
+                            mm(ui, "Passo ruote", "Distanza tra le ruote lungo la cabina", &mut p.wheel_pitch);
+                            mm(ui, "Sporgenza ruote", "Quanto le ruote escono sopra il piano della tavola", &mut p.wheel_above);
+                            mm(ui, "Passo gambe", "Distanza tra le gambe del telaio", &mut p.leg_pitch);
+                        });
+                    }
+                });
+                ui.collapsing("Canalina", |ui| {
+                    ui.checkbox(&mut p.channel, "Canalina nel pavimento").on_hover_text(
+                        "Canale lungo tutta la cabina: sul grigliato, o sul piano della tavola se ci passa dentro",
+                    );
+                    if p.channel {
+                        egui::Grid::new("cabina_canalina").num_columns(2).show(ui, |ui| {
+                            mm_signed(ui, "Posizione Y", "Asse della canalina rispetto all'asse della cabina", &mut p.channel_y);
+                            mm(ui, "Larghezza", "Larghezza esterna", &mut p.channel_width);
+                            mm(ui, "Profondità", "Dal pavimento al fondo", &mut p.channel_depth);
+                            mm(ui, "Spessore", "Spessore delle lamiere", &mut p.channel_wall);
+                            mm(ui, "Bordo", "Quanto le sponde escono sopra il pavimento", &mut p.channel_lip);
+                        });
+                    }
                 });
                 ui.collapsing("Aperture", |ui| {
                     egui::Grid::new("cabina_aperture").num_columns(2).show(ui, |ui| {
@@ -204,12 +264,51 @@ pub fn draw(ctx: &egui::Context, app: &mut GestoreApp) {
                         "Assi della cabina a metà lunghezza, sull'asse, al piano del grigliato, con le coordinate: \
                          seguono la cabina quando la sposti con Posizione",
                     );
+                    ui.checkbox(&mut p.center_marker, "Simbolo nel centro (si esporta con la cabina)").on_hover_text(
+                        "Sfera gialla con gli assi X (rosso, verso l'uscita), Y (verde) e Z (blu): fa parte della cabina, \
+                         si vede, si seleziona e si esporta con lei. Si applica con «Aggiorna la cabina»",
+                    );
+                    if p.center_marker {
+                        egui::Grid::new("cabina_simbolo").num_columns(2).show(ui, |ui| {
+                            mm(ui, "Misura del simbolo", "Lunghezza degli assi", &mut p.marker_size);
+                        });
+                    }
                     match center_coordinates {
                         Some(text) => {
                             ui.label(egui::RichText::new(text).monospace());
                         }
                         None => {
                             ui.label(egui::RichText::new("Costruisci la cabina per vederne il centro.").weak());
+                        }
+                    }
+                    // Nuove coordinate del centro: la cabina si sposta (senza ruotare) fin lì
+                    if let Some((current, _)) = current_center {
+                        let key = egui::Id::new("cabina_centro_nuovo");
+                        let mut target: glam::Vec3 = ui.data(|d| d.get_temp(key)).unwrap_or(current);
+                        ui.label("Porta il centro in (coordinate della scena):");
+                        ui.horizontal(|ui| {
+                            for (name, v) in [("X", &mut target.x), ("Y", &mut target.y), ("Z", &mut target.z)] {
+                                ui.label(name);
+                                ui.add(egui::DragValue::new(v).speed(10.0).suffix(" mm").max_decimals(1));
+                            }
+                        });
+                        ui.horizontal(|ui| {
+                            let changed = (target - current).length() > 0.001;
+                            if ui
+                                .add_enabled(changed && !busy, egui::Button::new("Sposta la cabina"))
+                                .on_hover_text("Sposta la cabina in modo che il suo centro vada in queste coordinate (Ctrl+Z per tornare indietro)")
+                                .clicked()
+                            {
+                                move_to = Some(target - current);
+                            }
+                            if ui.add_enabled(changed, egui::Button::new("Annulla")).clicked() {
+                                target = current;
+                            }
+                        });
+                        if move_to.is_some() {
+                            ui.data_mut(|d| d.remove::<glam::Vec3>(key));
+                        } else {
+                            ui.data_mut(|d| d.insert_temp(key, target));
                         }
                     }
                 });
@@ -237,14 +336,19 @@ pub fn draw(ctx: &egui::Context, app: &mut GestoreApp) {
                 }
             });
         });
-    if p != app.settings.cabin || center != app.settings.cabin_center {
+    if p != app.settings.cabin || center != app.settings.cabin_center || dock != app.settings.dock_cabin {
         let mut settings = app.settings.clone();
         settings.cabin = p.clone();
         settings.cabin_center = center;
+        settings.dock_cabin = dock;
         app.apply_settings(settings);
     }
     if build {
         app.build_cabin(p);
+    }
+    if let (Some(delta), Some(node)) = (move_to, app.cabin_node()) {
+        app.apply(crate::app::Action::Move { nodes: vec![node], matrix: glam::Mat4::from_translation(delta) });
+        app.ui_state.status_message = "Cabina spostata: il centro è nelle coordinate scelte".to_string();
     }
     if !open {
         app.ui_state.cabin_open = false;
@@ -257,8 +361,8 @@ mod tests {
 
     /// Testi disegnati (il primo fotogramma di una finestra serve solo a misurarla).
     fn texts(ctx: &egui::Context, app: &mut GestoreApp) -> Vec<String> {
-        let _ = ctx.run(Default::default(), |ctx| draw(ctx, app));
-        let out = ctx.run(Default::default(), |ctx| draw(ctx, app));
+        let _ = ctx.run(Default::default(), |ctx| draw(ctx, app, crate::ui::dock::Pass::Floating));
+        let out = ctx.run(Default::default(), |ctx| draw(ctx, app, crate::ui::dock::Pass::Floating));
         let mut texts = Vec::new();
         for c in &out.shapes {
             if let egui::epaint::Shape::Text(t) = &c.shape {

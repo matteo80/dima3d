@@ -132,6 +132,10 @@ pub struct Settings {
     pub cabin: crate::cabin::CabinParams,
     /// Mostra il centro della cabina con le sue coordinate nella vista
     pub cabin_center: bool,
+    /// Finestre agganciabili: dove stanno e quanto sono grandi
+    pub dock_position: crate::ui::dock::DockState,
+    pub dock_cabin: crate::ui::dock::DockState,
+    pub dock_reduce: crate::ui::dock::DockState,
 }
 
 /// Sezioni richiudibili della finestra Posizione
@@ -162,6 +166,9 @@ impl Default for Settings {
             skipped_version: String::new(),
             cabin: crate::cabin::CabinParams::default(),
             cabin_center: false,
+            dock_position: Default::default(),
+            dock_cabin: Default::default(),
+            dock_reduce: Default::default(),
         }
     }
 }
@@ -282,6 +289,9 @@ impl Settings {
                     }
                 }
                 "cabina_centro" => s.cabin_center = value == "1",
+                "aggancio_posizione" => s.dock_position = crate::ui::dock::DockState::from_text(value).unwrap_or_default(),
+                "aggancio_cabina" => s.dock_cabin = crate::ui::dock::DockState::from_text(value).unwrap_or_default(),
+                "aggancio_riduci" => s.dock_reduce = crate::ui::dock::DockState::from_text(value).unwrap_or_default(),
                 "step_deviazione" => {
                     if let Ok(v) = value.parse::<f32>() {
                         s.step.deviation = v.clamp(*STEP_DEVIATION_RANGE.start(), *STEP_DEVIATION_RANGE.end());
@@ -354,6 +364,9 @@ impl Settings {
         out.push_str(&format!("cabina = {}\n", self.cabin.to_text()));
         out.push_str(&format!("cabina_scritta = {}\n", self.cabin.label.to_text()));
         out.push_str(&format!("cabina_centro = {}\n", u8::from(self.cabin_center)));
+        out.push_str(&format!("aggancio_posizione = {}\n", self.dock_position.to_text()));
+        out.push_str(&format!("aggancio_cabina = {}\n", self.dock_cabin.to_text()));
+        out.push_str(&format!("aggancio_riduci = {}\n", self.dock_reduce.to_text()));
         if !self.skipped_version.is_empty() {
             out.push_str(&format!("versione_saltata = {}\n", self.skipped_version));
         }
@@ -423,6 +436,9 @@ mod tests {
                 ..Default::default()
             },
             cabin_center: true,
+            dock_position: crate::ui::dock::DockState { side: crate::ui::dock::Side::Right, width: 330.0, height: 0.0 },
+            dock_cabin: Default::default(),
+            dock_reduce: crate::ui::dock::DockState { side: crate::ui::dock::Side::Bottom, width: 0.0, height: 210.0 },
         };
         s.add_recent(Path::new(r"C:\a b\uno.wrl"));
         s.add_recent(Path::new(r"C:\due.wrl"));

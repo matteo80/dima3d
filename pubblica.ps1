@@ -19,6 +19,9 @@ $gh = if ($gh) { $gh.Source } else { 'C:\Program Files\GitHub CLI\gh.exe' }
 $dirty = git status --porcelain
 if ($dirty) { throw 'Ci sono modifiche non salvate in git: fai prima commit e push' }
 
-& $gh release create "v$version" $zip --title "Dima 3D $version" --notes-file $Note
+$assets = @($zip)
+$setup = Join-Path 'dist' "Dima3D-$version-setup.exe"
+if (Test-Path $setup) { $assets += $setup } else { Write-Warning "Manca ${setup}: pubblico solo lo zip" }
+& $gh release create "v$version" @assets --title "Dima 3D $version" --notes-file $Note
 if ($LASTEXITCODE -ne 0) { throw 'Pubblicazione non riuscita' }
 Write-Host "Pubblicata: v$version"

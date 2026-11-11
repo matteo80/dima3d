@@ -547,6 +547,27 @@ fn node_label(app: &GestoreApp, node: Option<u32>) -> String {
     }
 }
 
+/// Testo accorciato al centro (inizio…fine) se supera `max` caratteri.
+fn middle_ellipsis(text: &str, max: usize) -> String {
+    let chars: Vec<char> = text.chars().collect();
+    if chars.len() <= max || max < 5 {
+        return text.to_string();
+    }
+    let head = (max - 1) / 2;
+    let tail = max - 1 - head;
+    format!("{}…{}", chars[..head].iter().collect::<String>(), chars[chars.len() - tail..].iter().collect::<String>())
+}
+
+/// Nome del file aperto che contiene `node`, se la scena ne ha più di uno.
+fn file_label(app: &GestoreApp, node: u32) -> Option<String> {
+    let s = app.scene_graph.as_ref()?;
+    if s.open_files().count() < 2 {
+        return None;
+    }
+    let source = s.source_of_node(node)?;
+    s.sources.get(source).map(|f| f.name.clone())
+}
+
 /// Sezione richiudibile; `open` si aggiorna quando si apre o si chiude (resta nelle impostazioni).
 fn section<R>(ui: &mut egui::Ui, id: &str, title: &str, open: &mut bool, body: impl FnOnce(&mut egui::Ui) -> R) {
     let r = egui::CollapsingHeader::new(egui::RichText::new(title).strong()).id_salt(id).default_open(*open).show(ui, body);
@@ -628,10 +649,15 @@ fn offset_text(title: &str, p: &Pose) -> String {
     )
 }
 
-pub fn draw(ctx: &egui::Context, app: &mut GestoreApp) {
+pub fn draw(ctx: &egui::Context, app: &mut GestoreApp, pass: super::dock::Pass) {
     if !app.ui_state.position.open {
         return;
     }
+    // Agganciata si disegna prima della vista, mobile dopo: l'altro passaggio non fa niente
+    if (pass == super::dock::Pass::Docked) != (app.settings.dock_position.side != super::dock::Side::Floating) {
+        return;
+    }
+    let mut dock = app.settings.dock_position;
     let Some(scene) = &app.scene_graph else { return };
     let busy = app.project.busy() || app.ui_state.is_loading;
     let files: Vec<(u32, String)> = scene.open_files().map(|f| (f.node, f.name.clone())).collect();
@@ -729,20 +755,19 @@ pub fn draw(ctx: &egui::Context, app: &mut GestoreApp) {
     // Su schermi bassi la finestra non deve uscire: il contenuto scorre
     let max_height = (ctx.screen_rect().height() - 120.0).max(150.0);
 
-    egui::Window::new(format!("{}  Posizione", icon::ARROWS_OUT_CARDINAL))
-        .id(egui::Id::new("finestra_posizione"))
-        .open(&mut open)
-        // Si allarga e si stringe trascinando il bordo; il testo va a capo. L'altezza segue il
-        // contenuto, fino a quella dello schermo (poi scorre)
-        .resizable([true, false])
-        .min_width(220.0)
-        .default_width(270.0)
-        .collapsible(true)
-        .constrain(true)
+    // Si allarga e si stringe trascinando il bordo; il testo va a capo. Si aggancia ai bordi
+    let window = super::dock::Dockable {
+        id: "finestra_posizione",
+        title: format!("{}  Posizione", icon::ARROWS_OUT_CARDINAL),
+        state: &mut dock,
+        open: &mut open,
+        default_width: 270.0,
+        min_width: 220.0,
         // Lo spazio per lo scorrimento è alto quanto lo schermo (altrimenti egui lo ferma a 420)
-        .default_height(max_height)
-        .default_pos(ctx.screen_rect().right_top() + egui::vec2(-300.0, 60.0))
-        .show(ctx, |ui| {
+        default_height: max_height,
+        default_pos: ctx.screen_rect().right_top() + egui::vec2(-300.0, 60.0),
+    };
+    super::dock::show(ctx, pass, window, |ui| {
             // Il contenuto prende la larghezza della finestra, non di più: con auto_shrink spento la
             // barra di scorrimento allargava la finestra a ogni disegno fino al bordo dello schermo
             egui::ScrollArea::vertical().max_height(max_height).show(ui, |ui| {
@@ -1293,7 +1318,20 @@ pub fn draw(ctx: &egui::Context, app: &mut GestoreApp) {
                                 egui::Grid::new("posizione_oggetti").num_columns(3).spacing([8.0, 4.0]).show(ui, |ui| {
                                     for (label, slot) in [("Riferimento", &mut panel.reference), ("Destinazione", &mut panel.destination)] {
                                         ui.label(label);
-                                        ui.label(egui::RichText::new(node_label(app, *slot)).strong());
+                                        // Nomi lunghi accorciati al centro (il pulsante resta nella finestra);
+                                        // sotto, il file: due pezzi con lo stesso nome si distinguono
+                                        let full = node_label(app, *slot);
+                                        let file = slot.and_then(|n| file_label(app, n));
+                                        let hover = match &file {
+                                            Some(f) => format!("{full}\nFile: {f}"),
+                                            None => full.clone(),
+                                        };
+                                        ui.vertical(|ui| {
+                                            ui.label(egui::RichText::new(middle_ellipsis(&full, 26)).strong()).on_hover_text(&hover);
+                                            if let Some(f) = &file {
+                                                ui.label(egui::RichText::new(middle_ellipsis(f, 30)).small().weak()).on_hover_text(&hover);
+                                            }
+                                        });
                                         if ui.add_enabled(app.ui_state.selected_node.is_some(), egui::Button::new("Usa selezione").small())
                                             .on_hover_text("L'oggetto selezionato nell'albero")
                                             .clicked()
@@ -1384,9 +1422,10 @@ pub fn draw(ctx: &egui::Context, app: &mut GestoreApp) {
     if panel.guide {
         draw_four_bar_guide(ctx, &mut panel.guide);
     }
-    if sections != app.settings.position_sections {
+    if sections != app.settings.position_sections || dock != app.settings.dock_position {
         let mut s = app.settings.clone();
         s.position_sections = sections;
+        s.dock_position = dock;
         app.apply_settings(s);
     }
 
@@ -1429,6 +1468,15 @@ pub fn draw(ctx: &egui::Context, app: &mut GestoreApp) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn long_names_are_shortened_in_the_middle() {
+        assert_eq!(middle_ellipsis("corto", 26), "corto");
+        let name = "Componente_00001_parte_lunga_ABCDEF";
+        let short = middle_ellipsis(name, 26);
+        assert_eq!(short.chars().count(), 26);
+        assert!(short.starts_with("Componente_0") && short.ends_with("_ABCDEF"), "{short}");
+    }
 
     /// Due oggetti con i loro Transform: il riferimento è ruotato di 90° attorno a Z.
     const SKID: &[u8] = br#"#VRML V2.0 utf8
@@ -1473,7 +1521,7 @@ DEF Destinazione Group { children [
         fn run(&self, app: &mut GestoreApp, events: Vec<egui::Event>) -> Vec<(String, egui::Rect)> {
             let screen = egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(1400.0, 1000.0));
             let out = self.ctx.run(egui::RawInput { screen_rect: Some(screen), events, ..Default::default() }, |ctx| {
-                draw(ctx, app);
+                draw(ctx, app, crate::ui::dock::Pass::Floating);
             });
             fn walk(s: &egui::Shape, out: &mut Vec<(String, egui::Rect)>) {
                 match s {

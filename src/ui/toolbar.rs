@@ -2,8 +2,14 @@ use super::theme::{self, icon, icon_text};
 use crate::app::Action;
 use crate::settings::{RotationMode, ThemeMode};
 
-/// Sotto questa larghezza di finestra i pulsanti mostrano solo l'icona.
+/// Larghezza della barra sotto cui i pulsanti mostrano solo l'icona, finché non si è misurata
+/// quella vera (con le scritte).
 const FULL_LABELS_WIDTH: f32 = 1500.0;
+
+/// Dove si ricorda la larghezza misurata della barra con le scritte.
+fn full_width_id() -> egui::Id {
+    egui::Id::new("toolbar_larghezza_con_scritte")
+}
 
 /// Avviso a destra nella toolbar.
 const DIRTY: &str = "Modifiche non esportate";
@@ -27,7 +33,10 @@ fn group_separator(ui: &mut egui::Ui) {
 /// Disegna la toolbar principale dell'applicazione: File, Modifica, Selezione, Scena.
 pub fn draw_toolbar(ui: &mut egui::Ui, app: &mut crate::app::GestoreApp) {
     theme::flat_buttons(ui);
-    let compact = ui.ctx().screen_rect().width() < FULL_LABELS_WIDTH;
+    // Con le scritte la barra deve starci tutta, compresi i pulsanti a destra: altrimenti si
+    // sovrappongono. La larghezza necessaria si misura quando le scritte ci sono
+    let needed: f32 = ui.ctx().data(|d| d.get_temp(full_width_id())).unwrap_or(FULL_LABELS_WIDTH);
+    let compact = ui.max_rect().width() < needed;
 
     let selection = app.ui_state.selected_node;
     let has_scene = app.scene_graph.is_some();
@@ -298,7 +307,8 @@ Sposta e ruota un file o i pezzi selezionati (X Y Z, A B C), applica e calcola g
         .on_hover_text("Sfondo, rotazione, viste standard e colori generali");
 
     // ── A destra: stato del documento e tema ──────────────────────────────────
-    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+    let left_end = ui.cursor().min.x;
+    let right = ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
         if ui.button(icon_text(ui, icon::INFO, "")).on_hover_text(format!("Info su {}", crate::APP_NAME)).clicked() {
             app.ui_state.about = !app.ui_state.about;
         }
@@ -319,13 +329,20 @@ Sposta e ruota un file o i pezzi selezionati (X Y Z, A B C), applica e calcola g
                 .into_galley(ui, Some(egui::TextWrapMode::Extend), f32::INFINITY, egui::TextStyle::Small)
                 .size()
                 .x;
+            let icon_width = 2.0 * ui.spacing().interact_size.y;
             if ui.available_width() >= width + ui.spacing().item_spacing.x {
                 ui.label(text);
-            } else {
+            } else if ui.available_width() >= icon_width {
                 ui.label(egui::RichText::new(icon::WARNING_CIRCLE).color(color)).on_hover_text(DIRTY);
             }
         }
+        ui.min_rect().width()
     });
+    if !compact {
+        // Pulsanti di destra (senza l'avviso, che va e viene) + margine
+        let needed = left_end - ui.max_rect().left() + right.inner.min(120.0) + 24.0;
+        ui.ctx().data_mut(|d| d.insert_temp(full_width_id(), needed));
+    }
 
     app.apply_settings(settings);
     if let Some(a) = action {

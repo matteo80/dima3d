@@ -44,7 +44,9 @@ Dima 3D $version
 Visualizza, posiziona ed esporta matematiche 3D di grandi dimensioni.
 
 Avvio: doppio clic su dima3d.exe. Non serve installare niente: si può copiare la cartella
-intera su un altro PC (Windows 10 o 11, 64 bit) o su una chiavetta.
+intera su un altro PC (Windows 10 o 11, 64 bit) o su una chiavetta. In alternativa c'è
+l'installer Dima3D-$version-setup.exe (menu Start, disinstallazione da «App installate»,
+nessun permesso da amministratore).
 
 Formati
 - Apertura: WRL (VRML 2.0 e 1.0), STL, HSF, Open Inventor (.iv), JT (con tools\jt2wrl.exe)
@@ -74,3 +76,19 @@ if (Test-Path $zip) { Remove-Item -Force $zip }
 Compress-Archive -Path $dir -DestinationPath $zip
 $mb = [math]::Round((Get-Item $zip).Length / 1MB, 1)
 Write-Host "Pronto: $zip ($mb MB)"
+
+# Installer (Inno Setup 6, se c'è): dist\Dima3D-<versione>-setup.exe
+$iscc = @(
+    (Join-Path $env:LOCALAPPDATA 'Programs\Inno Setup 6\ISCC.exe'),
+    (Join-Path ${env:ProgramFiles(x86)} 'Inno Setup 6\ISCC.exe'),
+    (Join-Path $env:ProgramFiles 'Inno Setup 6\ISCC.exe')
+) | Where-Object { Test-Path $_ } | Select-Object -First 1
+if ($iscc) {
+    & $iscc /Q "/DVersione=$version" 'installer\dima3d.iss'
+    if ($LASTEXITCODE -ne 0) { throw 'Installer non creato' }
+    $setup = Join-Path 'dist' "$name-setup.exe"
+    $mb = [math]::Round((Get-Item $setup).Length / 1MB, 1)
+    Write-Host "Pronto: $setup ($mb MB)"
+} else {
+    Write-Warning 'Inno Setup 6 non trovato: niente installer (winget install JRSoftware.InnoSetup)'
+}

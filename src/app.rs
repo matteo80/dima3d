@@ -1077,9 +1077,10 @@ impl eframe::App for GestoreApp {
         crate::project::draw_step_prompt(ctx, self);
         crate::project::draw_unit_suggestion(ctx, self);
         crate::project::draw_export_progress(ctx, self);
-        crate::ui::reduce_panel::draw(ctx, self);
-        crate::ui::position_panel::draw(ctx, self);
-        crate::ui::cabin_panel::draw(ctx, self);
+        // Finestre mobili (quelle agganciate le disegna `draw_main_layout`, prima della vista)
+        crate::ui::reduce_panel::draw(ctx, self, crate::ui::dock::Pass::Floating);
+        crate::ui::position_panel::draw(ctx, self, crate::ui::dock::Pass::Floating);
+        crate::ui::cabin_panel::draw(ctx, self, crate::ui::dock::Pass::Floating);
         crate::ui::about::draw(ctx, self);
         crate::update::draw(ctx, self);
         self.update_window_title(ctx);

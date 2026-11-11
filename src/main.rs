@@ -34,6 +34,8 @@ fn main() -> eframe::Result<()> {
     let mut viewport = egui::ViewportBuilder::default()
         .with_title(APP_NAME)
         .with_inner_size([1280.0, 800.0])
+        // Si apre ingrandito (a tutto schermo con la barra del titolo)
+        .with_maximized(true)
         .with_min_inner_size([800.0, 600.0]);
     match eframe::icon_data::from_png_bytes(include_bytes!("../assets/icona_256.png")) {
         Ok(icon) => viewport = viewport.with_icon(icon),

@@ -1,5 +1,6 @@
 pub mod about;
 pub mod cabin_panel;
+pub mod dock;
 pub mod color_menu;
 pub mod measure;
 pub mod position_panel;
@@ -68,6 +69,11 @@ pub struct UiState {
     pub position: position_panel::PositionPanel,
     /// Finestra della cabina aperta
     pub cabin_open: bool,
+    /// Selezione trascinando nell'albero: riga da cui è partita
+    pub tree_sweep: Option<u32>,
+    /// Selezione a rettangolo nell'albero (partita dallo spazio vuoto): punto di partenza, con la Y
+    /// misurata dall'inizio delle righe (resta giusta se l'albero scorre)
+    pub tree_band: Option<egui::Pos2>,
     /// Nodi copiati con Ctrl+C, da incollare con Ctrl+V
     pub clipboard: Vec<u32>,
     /// Testo da mettere negli appunti di sistema al prossimo frame
@@ -109,6 +115,8 @@ impl Default for UiState {
             zoom_anchor: None,
             position: Default::default(),
             cabin_open: false,
+            tree_sweep: None,
+            tree_band: None,
             clipboard: Vec::new(),
             clipboard_text: None,
         }
@@ -514,6 +522,11 @@ pub fn draw_main_layout(ctx: &egui::Context, app: &mut crate::app::GestoreApp) {
             // L'albero gestisce da sé lo ScrollArea (virtualizzato con show_rows)
             scene_tree::draw_scene_tree(ui, app);
         });
+
+    // ── Finestre agganciate ai bordi (prima della vista, che prende lo spazio che resta) ──
+    reduce_panel::draw(ctx, app, dock::Pass::Docked);
+    position_panel::draw(ctx, app, dock::Pass::Docked);
+    cabin_panel::draw(ctx, app, dock::Pass::Docked);
 
     // ── CentralPanel: viewport 3D ──────────────────────────────────────────────
     egui::CentralPanel::default().frame(egui::Frame::new()).show(ctx, |ui| {

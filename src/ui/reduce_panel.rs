@@ -28,8 +28,12 @@ fn trim(v: f32) -> String {
     s.trim_end_matches('0').trim_end_matches('.').replace('.', ",")
 }
 
-pub fn draw(ctx: &egui::Context, app: &mut GestoreApp) {
+pub fn draw(ctx: &egui::Context, app: &mut GestoreApp, pass: super::dock::Pass) {
     if let Some(job) = &app.project.reduction.job {
+        // La finestra del lavoro in corso, una volta sola per fotogramma
+        if pass == super::dock::Pass::Docked {
+            return;
+        }
         let progress = job.progress.load(std::sync::atomic::Ordering::Relaxed) as f32 / 1000.0;
         let seconds = job.started.elapsed().as_secs_f32();
         egui::Modal::new(egui::Id::new("riduzione_in_corso")).show(ctx, |ui| {
@@ -47,6 +51,11 @@ pub fn draw(ctx: &egui::Context, app: &mut GestoreApp) {
     if !app.project.reduction.panel.open {
         return;
     }
+    // Agganciata si disegna prima della vista, mobile dopo: l'altro passaggio non fa niente
+    if (pass == super::dock::Pass::Docked) != (app.settings.dock_reduce.side != super::dock::Side::Floating) {
+        return;
+    }
+    let mut dock = app.settings.dock_reduce;
     let Some(scene) = &app.scene_graph else { return };
     let current = app.reduction_scope_triangles();
     let to_mm = unit_to_mm(scene);
@@ -75,14 +84,18 @@ pub fn draw(ctx: &egui::Context, app: &mut GestoreApp) {
         panel.max_error = to_mm.map_or(extent * 1e-5, |f| 0.1 / f);
     }
 
-    egui::Window::new(format!("{}  Riduci facce", icon::TRIANGLE_DASHED))
-        .id(egui::Id::new("riduci_facce"))
-        .open(&mut open)
-        .resizable(false)
-        .collapsible(true)
-        .default_pos(ctx.screen_rect().right_top() + egui::vec2(-430.0, 60.0))
-        .show(ctx, |ui| {
-            ui.set_width(370.0);
+    let window = super::dock::Dockable {
+        id: "riduci_facce",
+        title: format!("{}  Riduci facce", icon::TRIANGLE_DASHED),
+        state: &mut dock,
+        open: &mut open,
+        default_width: 390.0,
+        min_width: 370.0,
+        default_height: 420.0,
+        default_pos: ctx.screen_rect().right_top() + egui::vec2(-430.0, 60.0),
+    };
+    super::dock::show(ctx, pass, window, |ui| {
+            ui.set_min_width(370.0);
             egui::Grid::new("riduci_parametri").num_columns(2).spacing([12.0, 8.0]).show(ui, |ui| {
                 ui.label("Pezzi");
                 ui.horizontal(|ui| {
@@ -237,6 +250,7 @@ pub fn draw(ctx: &egui::Context, app: &mut GestoreApp) {
         });
 
     app.project.reduction.panel.open = open;
+    settings.dock_reduce = dock;
     app.apply_settings(settings);
     if start {
         app.start_reduction();
@@ -258,7 +272,7 @@ mod tests {
         let screen = egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(1280.0, 800.0));
         let out = ctx.run(egui::RawInput { screen_rect: Some(screen), events, ..Default::default() }, |ctx| {
             crate::ui::draw_main_layout(ctx, app);
-            draw(ctx, app);
+            draw(ctx, app, crate::ui::dock::Pass::Floating);
         });
         fn walk(s: &egui::Shape, out: &mut Vec<(String, egui::Pos2)>) {
             match s {

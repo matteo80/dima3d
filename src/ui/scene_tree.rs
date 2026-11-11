@@ -97,7 +97,7 @@ pub fn draw_scene_tree(ui: &mut egui::Ui, app: &mut crate::app::GestoreApp) {
 
         let row_height = ui.spacing().interact_size.y;
         let row_stride = row_height + ui.spacing().item_spacing.y;
-        let mut scroll = egui::ScrollArea::both().auto_shrink([false, false]);
+        let mut scroll = egui::ScrollArea::both().auto_shrink([false, false]).drag_to_scroll(false);
 
         // Frecce: su/giù cambiano riga (con Shift estendono la selezione),
         // sinistra/destra chiudono/aprono il nodo o salgono al padre/scendono al primo figlio.
@@ -148,13 +148,71 @@ pub fn draw_scene_tree(ui: &mut egui::Ui, app: &mut crate::app::GestoreApp) {
             can_paste: !app.ui_state.clipboard.is_empty(),
             actions: &mut actions,
             search: search_mode.then_some(query.as_str()),
+            sweep: &mut app.ui_state.tree_sweep,
         };
+        // Spazio vuoto dell'albero (come in FreeCAD): clic = niente selezionato, trascinando si
+        // disegna un rettangolo e si selezionano le righe che tocca. Registrato prima delle
+        // righe, così sulle righe vincono loro
+        let tree_rect = ui.available_rect_before_wrap();
+        let background = ui.interact(tree_rect, ui.id().with("albero_vuoto"), egui::Sense::click_and_drag());
         let output = scroll.show_rows(ui, row_height, rows.len(), |ui, range| {
             for &(node_idx, depth) in &rows[range] {
                 draw_row(ui, &mut ctx, node_idx, depth);
             }
         });
         app.ui_state.tree_view = (output.state.offset.y, output.inner_rect.height());
+        let content_top = output.inner_rect.top() - output.state.offset.y;
+        if background.clicked() && !ui.input(|i| i.modifiers.ctrl || i.modifiers.shift) {
+            actions.push(Action::Select { node: None, reveal: false });
+        }
+        if background.drag_started() {
+            if let Some(pos) = background.interact_pointer_pos() {
+                app.ui_state.tree_band = Some(egui::pos2(pos.x, pos.y - content_top));
+            }
+        }
+        if let (Some(start), Some(pos)) = (app.ui_state.tree_band, ui.ctx().pointer_latest_pos()) {
+            let band = egui::Rect::from_two_pos(egui::pos2(start.x, start.y + content_top), pos);
+            let visible = band.intersect(output.inner_rect);
+            if visible.is_positive() {
+                let accent = ui.visuals().selection.bg_fill;
+                let painter = ui.painter_at(output.inner_rect);
+                painter.rect_filled(visible, 0.0, accent.gamma_multiply(0.25));
+                painter.rect_stroke(visible, 0.0, egui::Stroke::new(1.0_f32, accent), egui::StrokeKind::Inside);
+            }
+            // Righe toccate dal rettangolo (in verticale: le righe occupano tutta la larghezza)
+            let first = ((band.top() - content_top) / row_stride).floor().max(0.0) as usize;
+            let last = ((band.bottom() - content_top) / row_stride).floor();
+            let mut nodes: Vec<u32> = if last < 0.0 || first >= rows.len() {
+                Vec::new()
+            } else {
+                let last = (last as usize).min(rows.len() - 1);
+                // Fuori dalla riga (nello spazio tra due righe) non conta
+                (first..=last)
+                    .filter(|&i| band.bottom() >= content_top + i as f32 * row_stride && band.top() <= content_top + i as f32 * row_stride + row_height)
+                    .map(|i| rows[i].0)
+                    .collect()
+            };
+            let mut sorted = nodes.clone();
+            sorted.sort_unstable();
+            if sorted != selection {
+                match nodes.len() {
+                    0 => actions.push(Action::Select { node: None, reveal: false }),
+                    _ => {
+                        let primary = nodes[0];
+                        actions.push(Action::SelectMany { nodes: std::mem::take(&mut nodes), primary, anchor: primary });
+                    }
+                }
+            }
+            // Vicino ai bordi l'albero scorre
+            if pos.y > output.inner_rect.bottom() - 8.0 || pos.y < output.inner_rect.top() + 8.0 {
+                ui.ctx().request_repaint();
+            }
+        }
+        // Selezione trascinando: finisce quando si lascia il tasto
+        if !ui.input(|i| i.pointer.primary_down()) {
+            app.ui_state.tree_sweep = None;
+            app.ui_state.tree_band = None;
+        }
 
         // Trascinamento in corso: cosa si sta spostando, accanto al puntatore
         if let (Some(dragged), Some(pos)) =
@@ -370,6 +428,8 @@ mod tests {
         let ctx = egui::Context::default();
         let (trave, telaio) = (node(&app, "Trave"), node(&app, "Telaio"));
         let root_a = app.scene_graph.as_ref().unwrap().sources[0].node;
+        // Si trascina una riga selezionata (da una non selezionata si seleziona)
+        app.ui_state.select_single(Some(trave));
         let during = drag(&ctx, &mut app, "Trave", "a.wrl");
         assert!(during.iter().any(|t| t.contains("Sposta «Trave»")), "etichetta durante il trascinamento");
         let s = app.scene_graph.as_ref().unwrap();
@@ -382,6 +442,7 @@ mod tests {
 
         // In un altro file: rifiutato, niente da annullare
         let undo = app.project.undo.len();
+        app.ui_state.select_single(Some(node(&app, "Pannello")));
         drag(&ctx, &mut app, "Pannello", "Telaio");
         assert!(app.ui_state.status_message.starts_with("Non spostato"), "{}", app.ui_state.status_message);
         assert_eq!(app.project.undo.len(), undo);
@@ -413,7 +474,7 @@ mod tests {
         // Su un pezzo (non selezionato): nel gruppo del pezzo
         app.undo();
         assert_eq!(app.scene_graph.as_ref().unwrap().parent_of(copia), Some(node(&app, "Telaio")));
-        app.ui_state.select_single(None);
+        app.ui_state.select_single(Some(copia));
         drag(&ctx, &mut app, "Copia", "Trave");
         let s = app.scene_graph.as_ref().unwrap();
         assert_eq!(s.parent_of(copia), Some(lato), "{}", app.ui_state.status_message);
@@ -427,6 +488,74 @@ mod tests {
         assert_eq!(again.parent_of(find("Trave")), Some(lato));
         assert_eq!(again.parent_of(find("Copia")), Some(lato));
         assert_eq!(again.display_name(again.parent_of(lato).unwrap()), "Telaio");
+    }
+
+    /// Trascinando da una riga non selezionata si selezionano le righe su cui si passa (anche
+    /// tornando indietro); niente si sposta.
+    #[test]
+    fn dragging_from_an_unselected_row_selects_the_rows() {
+        let mut app = app_two_files();
+        let ctx = egui::Context::default();
+        let before = state_of(&app);
+        drag(&ctx, &mut app, "Telaio", "Pannello");
+        let names = |app: &GestoreApp| -> Vec<String> {
+            let s = app.scene_graph.as_ref().unwrap();
+            app.ui_state.selected_nodes().iter().map(|&n| s.display_name(n)).collect()
+        };
+        let selected = names(&app);
+        for name in ["Telaio", "Trave", "Copia", "b.wrl", "Pannello"] {
+            assert!(selected.iter().any(|n| n == name), "{name} non selezionato: {selected:?}");
+        }
+        assert_eq!(state_of(&app), before, "niente spostato");
+        assert!(app.ui_state.tree_sweep.is_none(), "finita al rilascio");
+        // Al contrario, dal basso verso l'alto
+        app.ui_state.select_single(None);
+        drag(&ctx, &mut app, "Copia", "Trave");
+        let selected = names(&app);
+        assert_eq!(selected.len(), 2, "{selected:?}");
+    }
+
+    /// Come in FreeCAD: dallo spazio vuoto sotto le righe si trascina un rettangolo che seleziona
+    /// le righe toccate; un clic nello spazio vuoto toglie la selezione.
+    #[test]
+    fn band_from_the_empty_space_selects_rows() {
+        let mut app = app_two_files();
+        let ctx = egui::Context::default();
+        let before = state_of(&app);
+        frame(&ctx, &mut app, vec![]);
+        let texts = frame(&ctx, &mut app, vec![]);
+        let row = |name: &str| texts.iter().find(|(t, _)| t.ends_with(&format!(" {name}"))).map(|(_, p)| *p).unwrap();
+        let pannello = row("Pannello");
+        // Spazio vuoto: sotto l'ultima riga, a destra dei nomi
+        let start = pannello + egui::vec2(150.0, 120.0);
+        let end = row("Trave") + egui::vec2(150.0, 6.0);
+        let button = |pos, pressed| egui::Event::PointerButton { pos, button: egui::PointerButton::Primary, pressed, modifiers: Default::default() };
+        frame(&ctx, &mut app, vec![egui::Event::PointerMoved(start)]);
+        frame(&ctx, &mut app, vec![button(start, true)]);
+        for k in 1..=6 {
+            frame(&ctx, &mut app, vec![egui::Event::PointerMoved(start + (end - start) * (k as f32 / 6.0))]);
+        }
+        let s = app.scene_graph.as_ref().unwrap();
+        let selected: Vec<String> = app.ui_state.selected_nodes().iter().map(|&n| s.display_name(n)).collect();
+        for name in ["Trave", "Copia", "b.wrl", "Pannello"] {
+            assert!(selected.iter().any(|n| n == name), "{name} non selezionato: {selected:?}");
+        }
+        assert!(!selected.iter().any(|n| n == "Telaio"), "sopra il rettangolo: {selected:?}");
+        frame(&ctx, &mut app, vec![button(end, false)]);
+        assert!(app.ui_state.tree_band.is_none());
+        assert_eq!(state_of(&app), before, "niente spostato");
+
+        // Clic nello spazio vuoto: niente selezionato
+        for events in [vec![egui::Event::PointerMoved(start)], vec![button(start, true)], vec![button(start, false)], vec![]] {
+            frame(&ctx, &mut app, events);
+        }
+        assert!(app.ui_state.selected_nodes().is_empty());
+    }
+
+    /// Padre di ogni nodo: per controllare che niente si sia spostato nell'albero.
+    fn state_of(app: &GestoreApp) -> Vec<Option<u32>> {
+        let s = app.scene_graph.as_ref().unwrap();
+        (0..s.nodes.len() as u32).map(|n| s.parent_of(n)).collect()
     }
 
     /// «Nuovo gruppo con la selezione»: gruppo nel gruppo comune, rinomina aperta, un Annulla.
@@ -498,6 +627,8 @@ struct RowCtx<'a> {
     /// Ci sono pezzi copiati da incollare
     can_paste: bool,
     actions: &'a mut Vec<Action>,
+    /// Selezione trascinando in corso: riga di partenza
+    sweep: &'a mut Option<u32>,
 }
 
 fn draw_row(ui: &mut egui::Ui, ctx: &mut RowCtx, node_idx: u32, depth: u16) {
@@ -607,11 +738,27 @@ fn draw_row(ui: &mut egui::Ui, ctx: &mut RowCtx, node_idx: u32, depth: u16) {
         if is_match {
             text = text.underline();
         }
-        // Clic per selezionare; tenendo premuto si trascina dentro un altro gruppo
+        // Clic per selezionare. Trascinando da una riga selezionata la selezione si sposta dentro
+        // un altro gruppo; da una riga non selezionata si selezionano le righe su cui si passa
         let resp = ui.add(egui::SelectableLabel::new(is_selected, text)).interact(egui::Sense::click_and_drag());
-        if info.kind != NodeKind::File {
-            let nodes = if is_selected { ctx.selection.to_vec() } else { vec![node_idx] };
-            resp.dnd_set_drag_payload(DraggedNodes(nodes));
+        let movable = is_selected && info.kind != NodeKind::File;
+        if movable && ctx.sweep.is_none() {
+            resp.dnd_set_drag_payload(DraggedNodes(ctx.selection.to_vec()));
+        } else if resp.drag_started() && ctx.sweep.is_none() {
+            *ctx.sweep = Some(node_idx);
+            ctx.actions.push(Action::Select { node: Some(node_idx), reveal: false });
+        }
+        if let (Some(start), Some(pos)) = (*ctx.sweep, ui.ctx().pointer_latest_pos()) {
+            let over = ui.max_rect().y_range().contains(pos.y) && resp.rect.y_range().contains(pos.y);
+            if over && ui.input(|i| i.pointer.primary_down()) {
+                if let Some(nodes) = range_between(ctx.rows, start, node_idx) {
+                    let mut sorted = nodes.clone();
+                    sorted.sort_unstable();
+                    if sorted.as_slice() != ctx.selection {
+                        ctx.actions.push(Action::SelectMany { nodes, primary: node_idx, anchor: start });
+                    }
+                }
+            }
         }
 
         if has_children {

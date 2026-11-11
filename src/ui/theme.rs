@@ -146,7 +146,23 @@ fn style_spacing(style: &mut egui::Style) {
     s.interact_size.y = 22.0;
     s.menu_margin = egui::Margin::same(6);
     s.window_margin = egui::Margin::same(10);
-    s.scroll = egui::style::ScrollStyle::thin();
+    // Barre sempre visibili e ben distinte dallo sfondo: cursore nel colore del testo (chiaro sul
+    // tema scuro, scuro sul chiaro), guida appena visibile; più marcate sotto il mouse
+    s.scroll = egui::style::ScrollStyle {
+        floating: false,
+        bar_width: 10.0,
+        handle_min_length: 24.0,
+        bar_inner_margin: 3.0,
+        bar_outer_margin: 1.0,
+        foreground_color: true,
+        dormant_background_opacity: 0.5,
+        active_background_opacity: 0.7,
+        interact_background_opacity: 0.9,
+        dormant_handle_opacity: 0.45,
+        active_handle_opacity: 0.65,
+        interact_handle_opacity: 0.9,
+        ..egui::style::ScrollStyle::solid()
+    };
 
     let proportional = |size| FontId::new(size, FontFamily::Proportional);
     style.text_styles.insert(TextStyle::Heading, proportional(16.0));
