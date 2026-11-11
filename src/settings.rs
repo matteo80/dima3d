@@ -139,6 +139,7 @@ pub struct Settings {
     pub dock_position: crate::ui::dock::DockState,
     pub dock_cabin: crate::ui::dock::DockState,
     pub dock_reduce: crate::ui::dock::DockState,
+    pub dock_pdf: crate::ui::dock::DockState,
 }
 
 /// Sezioni richiudibili della finestra Posizione
@@ -174,6 +175,7 @@ impl Default for Settings {
             dock_position: Default::default(),
             dock_cabin: Default::default(),
             dock_reduce: Default::default(),
+            dock_pdf: Default::default(),
         }
     }
 }
@@ -306,6 +308,7 @@ impl Settings {
                 "aggancio_posizione" => s.dock_position = crate::ui::dock::DockState::from_text(value).unwrap_or_default(),
                 "aggancio_cabina" => s.dock_cabin = crate::ui::dock::DockState::from_text(value).unwrap_or_default(),
                 "aggancio_riduci" => s.dock_reduce = crate::ui::dock::DockState::from_text(value).unwrap_or_default(),
+                "aggancio_pdf" => s.dock_pdf = crate::ui::dock::DockState::from_text(value).unwrap_or_default(),
                 "step_deviazione" => {
                     if let Ok(v) = value.parse::<f32>() {
                         s.step.deviation = v.clamp(*STEP_DEVIATION_RANGE.start(), *STEP_DEVIATION_RANGE.end());
@@ -386,6 +389,7 @@ impl Settings {
         out.push_str(&format!("aggancio_posizione = {}\n", self.dock_position.to_text()));
         out.push_str(&format!("aggancio_cabina = {}\n", self.dock_cabin.to_text()));
         out.push_str(&format!("aggancio_riduci = {}\n", self.dock_reduce.to_text()));
+        out.push_str(&format!("aggancio_pdf = {}\n", self.dock_pdf.to_text()));
         if !self.skipped_version.is_empty() {
             out.push_str(&format!("versione_saltata = {}\n", self.skipped_version));
         }
@@ -468,6 +472,7 @@ mod tests {
             dock_position: crate::ui::dock::DockState { side: crate::ui::dock::Side::Right, width: 330.0, height: 0.0 },
             dock_cabin: Default::default(),
             dock_reduce: crate::ui::dock::DockState { side: crate::ui::dock::Side::Bottom, width: 0.0, height: 210.0 },
+            dock_pdf: crate::ui::dock::DockState { side: crate::ui::dock::Side::Right, width: 640.0, height: 0.0 },
         };
         s.add_recent(Path::new(r"C:\a b\uno.wrl"));
         s.add_recent(Path::new(r"C:\due.wrl"));

@@ -44,6 +44,22 @@ Write-Host "Controllo privacy: note e $($texts.Count - 1) file di testo del pacc
 $assets = @($zip)
 $setup = Join-Path 'dist' "Dima3D-$version-setup.exe"
 if (Test-Path $setup) { $assets += $setup } else { Write-Warning "Manca ${setup}: pubblico solo lo zip" }
-& $gh release create "v$version" @assets --title "Dima 3D $version" --notes-file $Note
-if ($LASTEXITCODE -ne 0) { throw 'Pubblicazione non riuscita' }
-Write-Host "Pubblicata: v$version"
+
+# Prima la bozza, poi i file uno alla volta con qualche ripetizione (il caricamento su
+# uploads.github.com a volte si interrompe), infine la pubblicazione: mai una Release a metà,
+# che il programma proporrebbe come aggiornamento senza lo zip.
+$tag = "v$version"
+& $gh release create $tag --draft --target main --title "Dima 3D $version" --notes-file $Note
+if ($LASTEXITCODE -ne 0) { throw 'Bozza della Release non creata' }
+foreach ($asset in $assets) {
+    $ok = $false
+    for ($i = 1; $i -le 5 -and -not $ok; $i++) {
+        & $gh release upload $tag $asset --clobber
+        $ok = $LASTEXITCODE -eq 0
+        if (-not $ok) { Write-Warning "Caricamento di $asset non riuscito (tentativo $i)"; Start-Sleep 5 }
+    }
+    if (-not $ok) { throw "Caricamento di $asset non riuscito: la Release resta in bozza su GitHub, riprova pubblica.ps1 dopo averla eliminata (gh release delete $tag)" }
+}
+& $gh release edit $tag --draft=false
+if ($LASTEXITCODE -ne 0) { throw 'Pubblicazione non riuscita: la Release resta in bozza' }
+Write-Host "Pubblicata: $tag"

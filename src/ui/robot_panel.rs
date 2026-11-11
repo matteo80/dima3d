@@ -105,6 +105,7 @@ pub fn draw(ctx: &egui::Context, app: &mut GestoreApp, pass: super::dock::Pass) 
         min_width: 320.0,
         default_height: 520.0,
         default_pos: egui::pos2(120.0, 140.0),
+        scroll: true,
     };
     super::dock::show(ctx, pass, window, |ui| {
         let [cx, cy, cz] = cell.center;

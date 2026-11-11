@@ -37,6 +37,15 @@ if (Test-Path (Join-Path $step 'step2wrl.exe')) {
     Write-Warning 'tools\step2wrl non trovato: il pacchetto non aprirà i file STEP (vedi tools-src\step2wrl\README.md)'
 }
 
+# pdfium per la finestra Misure PDF (https://github.com/bblanchon/pdfium-binaries, pdfium-win-x64)
+$pdfium = 'target\release\tools\pdfium.dll'
+if (Test-Path $pdfium) {
+    New-Item -ItemType Directory -Force (Join-Path $dir 'tools') | Out-Null
+    Copy-Item $pdfium (Join-Path $dir 'tools')
+} else {
+    Write-Warning 'tools\pdfium.dll non trovato: nel pacchetto la finestra Misure PDF non aprirà i PDF'
+}
+
 $readme = @"
 Dima 3D $version
 ================
@@ -53,6 +62,7 @@ Formati
   e STEP (con la cartella tools\step2wrl). La cartella tools deve restare accanto
   all'eseguibile.
 - Export: WRL, STL, Open Inventor (.iv), HSF, scegliendo il tipo nella finestra Salva.
+- Misure PDF: layout in PDF (con tools\pdfium.dll), con calibrazione della scala e misure in mm.
 
 Le preferenze sono salvate in %APPDATA%\Dima3D\impostazioni.txt.
 

@@ -197,6 +197,7 @@ pub fn draw(ctx: &egui::Context, app: &mut GestoreApp, pass: super::dock::Pass) 
         min_width: 300.0,
         default_height: 560.0,
         default_pos: egui::pos2(80.0, 120.0),
+        scroll: true,
     };
     super::dock::show(ctx, pass, window, |ui| {
             // ── Cabina da modificare ──────────────────────────────────────────

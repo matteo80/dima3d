@@ -962,6 +962,15 @@ Fatto:
       %LOCALAPPDATA%\Programs\Dima3D senza permessi da amministratore, menu Start, desktop facoltativo,
       associazione dei .dima3d facoltativa, disinstallazione. `pacchetto.ps1` lo crea, `pubblica.ps1` lo carica nella
       Release accanto allo zip; dopo un aggiornamento dal programma si aggiorna la versione in «App installate».
+- [x] (2026-11-11, 0.2.12) **Misure PDF** (`src/pdf_measure/`, finestra `ui/pdf_panel.rs`, pulsante
+      «Misure PDF»): porting in Rust dello script Python di misura sui layout PDF. Calibrazione della scala su una
+      distanza nota, misura con Delta X, Delta Y e distanza in mm (anche mentre si muove il mouse). Rendering a tile
+      con pdfium (`tools\pdfium.dll`, binari bblanchon/pdfium-binaries chromium/8152, licenze in
+      `licenses/pdfium-licenze.txt`) in un thread che tiene la pagina caricata: 6–17 ms per tile contro ~160 ms dello
+      script su un A0 con 40.000 linee. Finestra agganciabile (`Dockable::scroll = false`: niente scorrimento da
+      agganciata), aggancio in `aggancio_pdf`; da stretta i risultati vanno sotto la vista. Un PDF trascinato sulla
+      finestra principale si apre qui, non come modello 3D. Aggiornamento automatico: `tools/pdfium.dll` in uso viene
+      rinominata `.old` come l'exe. Stesso codice del programma separato «PDF Layout Measure» (fuori dal repository).
 - [x] (2026-11-11, 0.2.11) Finestra Cabina: «Applica centro» (era «Applica centro e robot») mette nella scena solo
       centro e simbolo (`GestoreApp::build_center`); i robot restano quelli applicati dalla finestra Robot e le
       modifiche non applicate restano lì.

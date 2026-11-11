@@ -224,6 +224,15 @@ Sposta e ruota un file o i pezzi selezionati (X Y Z, A B C), applica e calcola g
     if robot.clicked() {
         app.ui_state.robot_open = !robot_open;
     }
+    // Sempre attivo: il layout PDF non dipende dalla scena 3D
+    let pdf_open = app.ui_state.pdf.open;
+    let pdf_text = icon_text(ui, icon::FILE_PDF, if compact { "" } else { "Misure PDF" });
+    let pdf = ui
+        .add(egui::Button::new(pdf_text).selected(pdf_open))
+        .on_hover_text("Misure PDF\nApre un layout in PDF, calibra la scala su una distanza nota e misura Delta X, Delta Y e distanza in mm");
+    if pdf.clicked() {
+        app.ui_state.pdf.open = !pdf_open;
+    }
     if tool(ui, has_scene && !loading, compact, icon::X, "Chiudi", "Chiude tutti i file aperti (chiede conferma se ci sono modifiche non esportate). Per chiuderne uno solo: tasto destro sul file nell'albero") {
         app.request_close();
     }

@@ -19,6 +19,7 @@ const LIBRARIES: &[(&str, &str, &str)] = &[
     ("ab_glyph, lyon", "lettere delle scritte", "Apache 2.0; MIT o Apache 2.0"),
     ("OpenCASCADE 8.0.1", "convertitore STEP", "LGPL 2.1 con eccezione"),
     ("JTReader, SharpCompress", "convertitore JT", "MIT"),
+    ("pdfium, pdfium-render", "Misure PDF", "BSD 3 clausole; MIT o Apache 2.0"),
 ];
 
 pub fn draw(ctx: &egui::Context, app: &mut GestoreApp) {
@@ -76,7 +77,7 @@ pub fn draw(ctx: &egui::Context, app: &mut GestoreApp) {
             });
             ui.label(
                 egui::RichText::new(
-                    "Testi completi delle licenze e note di copyright di tutte le librerie (208 solo per il \
+                    "Testi completi delle licenze e note di copyright di tutte le librerie (216 solo per il \
                      programma) nella cartella «licenses» accanto all'eseguibile.",
                 )
                 .small(),

@@ -251,17 +251,34 @@ fn copy_dir(from: &Path, to: &Path) -> std::io::Result<()> {
     Ok(())
 }
 
+/// DLL che il programma può avere caricata (finestra Misure PDF): come l'exe, Windows non la
+/// lascia sovrascrivere ma la lascia rinominare.
+const LOADED_DLL: &str = "tools/pdfium.dll";
+
 /// Mette i file nuovi al posto di quelli della cartella `install` (dove sta l'exe in uso).
-/// L'exe in uso viene rinominato, non sovrascritto; se qualcosa va storto torna al suo posto.
+/// L'exe in uso (e la DLL di pdfium, se c'è) viene rinominato, non sovrascritto; se qualcosa va
+/// storto torna al suo posto.
 fn install_into(package: &Path, install: &Path) -> Result<(), String> {
     let exe = install.join(EXE);
     let old = install.join(format!("{EXE}.old"));
     let _ = std::fs::remove_file(&old);
     std::fs::rename(&exe, &old).map_err(|e| format!("la cartella del programma non si può modificare ({e})"))?;
+    let dll = install.join(LOADED_DLL);
+    let dll_old = install.join(format!("{LOADED_DLL}.old"));
+    let _ = std::fs::remove_file(&dll_old);
+    let dll_moved = dll.is_file() && std::fs::rename(&dll, &dll_old).is_ok();
     if let Err(e) = copy_dir(package, install) {
         let _ = std::fs::remove_file(&exe);
         let _ = std::fs::rename(&old, &exe);
+        if dll_moved {
+            let _ = std::fs::remove_file(&dll);
+            let _ = std::fs::rename(&dll_old, &dll);
+        }
         return Err(format!("copia dei file nuovi non riuscita ({e})"));
+    }
+    // Pacchetto senza la DLL: resta quella di prima
+    if dll_moved && !dll.is_file() {
+        let _ = std::fs::rename(&dll_old, &dll);
     }
     Ok(())
 }
@@ -367,6 +384,7 @@ fn update_installed_version(package: &Path) {
 pub fn cleanup_previous() {
     if let Some(dir) = std::env::current_exe().ok().and_then(|p| p.parent().map(Path::to_path_buf)) {
         let _ = std::fs::remove_file(dir.join(format!("{EXE}.old")));
+        let _ = std::fs::remove_file(dir.join(format!("{LOADED_DLL}.old")));
     }
     let _ = std::fs::remove_dir_all(std::env::temp_dir().join("Dima3D-aggiornamento"));
 }
@@ -762,6 +780,37 @@ mod tests {
         std::fs::write(install.join(EXE), "in uso").unwrap();
         assert!(install_into(&base.join("non-c-e"), &install).is_err());
         assert_eq!(std::fs::read_to_string(install.join(EXE)).unwrap(), "in uso");
+        let _ = std::fs::remove_dir_all(&base);
+    }
+
+    /// pdfium.dll caricata dalla finestra Misure PDF: si rinomina come l'exe; se il pacchetto
+    /// non ce l'ha resta quella di prima; se la copia non riesce torna al suo posto.
+    #[test]
+    fn install_renames_the_loaded_pdfium_dll() {
+        let base = std::env::temp_dir().join("dima3d_test_aggiornamento_dll");
+        let _ = std::fs::remove_dir_all(&base);
+        let (package, install) = (base.join("Dima3D-9.9.9"), base.join("installato"));
+        std::fs::create_dir_all(package.join("tools")).unwrap();
+        std::fs::create_dir_all(install.join("tools")).unwrap();
+        let dll = install.join(LOADED_DLL);
+        let dll_old = install.join(format!("{LOADED_DLL}.old"));
+        std::fs::write(package.join(EXE), "nuovo").unwrap();
+        std::fs::write(package.join(LOADED_DLL), "pdfium nuova").unwrap();
+        std::fs::write(install.join(EXE), "vecchio").unwrap();
+        std::fs::write(&dll, "pdfium vecchia").unwrap();
+
+        install_into(&package, &install).unwrap();
+        assert_eq!(std::fs::read_to_string(&dll).unwrap(), "pdfium nuova");
+        assert_eq!(std::fs::read_to_string(&dll_old).unwrap(), "pdfium vecchia");
+
+        // Pacchetto senza DLL: resta quella installata
+        std::fs::remove_file(package.join(LOADED_DLL)).unwrap();
+        install_into(&package, &install).unwrap();
+        assert_eq!(std::fs::read_to_string(&dll).unwrap(), "pdfium nuova");
+
+        // Copia non riuscita: la DLL torna al suo posto
+        assert!(install_into(&base.join("non-c-e"), &install).is_err());
+        assert_eq!(std::fs::read_to_string(&dll).unwrap(), "pdfium nuova");
         let _ = std::fs::remove_dir_all(&base);
     }
 }

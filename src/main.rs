@@ -6,6 +6,7 @@ mod cabin;
 mod clusterer;
 mod exporter;
 mod parser;
+mod pdf_measure;
 mod project;
 mod project_file;
 mod reduce;

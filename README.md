@@ -34,6 +34,9 @@ Il nome viene dalla *dima* di officina, la maschera che tiene i pezzi nella posi
   nascosti o eliminati, vista); all'apertura rilegge i modelli originali e riapplica le modifiche
 - **Riduzione delle facce** con anteprima e dimensione prevista del file
 - **Export** delle parti visibili, dell'insieme o di un singolo file in WRL, STL, Open Inventor e HSF
+- **Misure PDF**: layout in PDF con calibrazione della scala su una distanza nota e misure in mm (Delta X, Delta Y,
+  distanza); rendering con [pdfium](https://pdfium.googlesource.com/pdfium/) (`tools\pdfium.dll`, dai binari
+  [pdfium-binaries](https://github.com/bblanchon/pdfium-binaries))
 
 ### Cerniera a 4 perni: come si scelgono i perni
 
@@ -69,6 +72,9 @@ cargo test --release
 L'eseguibile è `target\release\dima3d.exe` e non richiede installazione: il runtime C è incluso.
 I convertitori si compilano a parte: [`tools-src/jt2wrl`](tools-src/jt2wrl/README.md) e
 [`tools-src/step2wrl`](tools-src/step2wrl/README.md); vanno in `tools\` accanto all'eseguibile.
+Nella stessa cartella va `pdfium.dll` per la finestra Misure PDF: si prende da `bin\` dell'archivio
+`pdfium-win-x64.tgz` di [pdfium-binaries](https://github.com/bblanchon/pdfium-binaries/releases)
+(versione provata: chromium/8152).
 
 Per preparare lo zip da distribuire (eseguibile, convertitori, licenze, LEGGIMI):
 
@@ -83,6 +89,7 @@ Lo stato dettagliato del progetto e la roadmap sono in [`STATO_PROGETTO.md`](STA
 ## Licenza
 
 Distribuito con licenza MIT: vedi [`LICENSE`](LICENSE). Le licenze e le note di copyright delle librerie
-incluse sono nella cartella [`licenses`](licenses): `librerie-rust.txt` per le 203 librerie Rust del
+incluse sono nella cartella [`licenses`](licenses): `librerie-rust.txt` per le 216 librerie Rust del
 programma (rigenerabile con `python licenses/genera_licenze_rust.py`), più quelle dei convertitori
-(OpenCASCADE LGPL 2.1 con eccezione, JTReader e SharpCompress MIT, e le loro dipendenze).
+(OpenCASCADE LGPL 2.1 con eccezione, JTReader e SharpCompress MIT, e le loro dipendenze) e di pdfium
+(`pdfium-licenze.txt`: BSD, con le librerie che include).

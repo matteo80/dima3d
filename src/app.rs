@@ -1101,9 +1101,14 @@ impl eframe::App for GestoreApp {
         }
 
         // File trascinati sulla finestra: con una scena aperta si aggiungono, altrimenti il
-        // primo si apre e gli altri si aggiungono
-        let dropped: Vec<std::path::PathBuf> =
-            ctx.input(|i| i.raw.dropped_files.iter().filter_map(|f| f.path.clone()).collect());
+        // primo si apre e gli altri si aggiungono. Un PDF si apre nella finestra Misure PDF.
+        let (pdfs, dropped): (Vec<std::path::PathBuf>, Vec<std::path::PathBuf>) = ctx
+            .input(|i| i.raw.dropped_files.iter().filter_map(|f| f.path.clone()).collect::<Vec<_>>())
+            .into_iter()
+            .partition(|p| crate::ui::pdf_panel::is_pdf(p));
+        if let Some(pdf) = pdfs.into_iter().next() {
+            self.ui_state.pdf.open_file(pdf);
+        }
         if !dropped.is_empty() {
             self.request_add(dropped);
         }
@@ -1119,6 +1124,7 @@ impl eframe::App for GestoreApp {
         crate::ui::position_panel::draw(ctx, self, crate::ui::dock::Pass::Floating);
         crate::ui::cabin_panel::draw(ctx, self, crate::ui::dock::Pass::Floating);
         crate::ui::robot_panel::draw(ctx, self, crate::ui::dock::Pass::Floating);
+        crate::ui::pdf_panel::draw(ctx, self, crate::ui::dock::Pass::Floating);
         crate::ui::about::draw(ctx, self);
         crate::update::draw(ctx, self);
         self.update_window_title(ctx);

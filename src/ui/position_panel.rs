@@ -766,6 +766,7 @@ pub fn draw(ctx: &egui::Context, app: &mut GestoreApp, pass: super::dock::Pass) 
         // Lo spazio per lo scorrimento è alto quanto lo schermo (altrimenti egui lo ferma a 420)
         default_height: max_height,
         default_pos: ctx.screen_rect().right_top() + egui::vec2(-300.0, 60.0),
+        scroll: true,
     };
     super::dock::show(ctx, pass, window, |ui| {
             // Il contenuto prende la larghezza della finestra, non di più: con auto_shrink spento la

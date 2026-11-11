@@ -3,6 +3,7 @@ pub mod cabin_panel;
 pub mod dock;
 pub mod color_menu;
 pub mod measure;
+pub mod pdf_panel;
 pub mod position_panel;
 pub mod progress;
 pub mod properties;
@@ -70,6 +71,8 @@ pub struct UiState {
     pub position: position_panel::PositionPanel,
     /// Finestra della cabina aperta
     pub cabin_open: bool,
+    /// Finestra «Misure PDF» (con il PDF aperto)
+    pub pdf: pdf_panel::PdfPanel,
     /// Finestra dei robot aperta
     pub robot_open: bool,
     /// Cabina su cui lavora la finestra Cabina (`None`: l'ultima costruita)
@@ -121,6 +124,7 @@ impl Default for UiState {
             position: Default::default(),
             cabin_open: false,
             robot_open: false,
+            pdf: Default::default(),
             cabin_target: None,
             tree_sweep: None,
             tree_band: None,
@@ -535,6 +539,7 @@ pub fn draw_main_layout(ctx: &egui::Context, app: &mut crate::app::GestoreApp) {
     position_panel::draw(ctx, app, dock::Pass::Docked);
     cabin_panel::draw(ctx, app, dock::Pass::Docked);
     robot_panel::draw(ctx, app, dock::Pass::Docked);
+    pdf_panel::draw(ctx, app, dock::Pass::Docked);
 
     // ── CentralPanel: viewport 3D ──────────────────────────────────────────────
     egui::CentralPanel::default().frame(egui::Frame::new()).show(ctx, |ui| {

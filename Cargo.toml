@@ -1,6 +1,6 @@
 [package]
 name = "dima3d"
-version = "0.2.11"
+version = "0.2.12"
 edition = "2021"
 license = "MIT"
 
@@ -25,6 +25,8 @@ meshopt = "0.7"
 flate2 = "1"
 ab_glyph = "0.2"
 lyon_tessellation = "1"
+# Misure da PDF: rendering con pdfium (tools\pdfium.dll, caricata quando si apre la finestra)
+pdfium-render = { version = "0.9.5", default-features = false, features = ["pdfium_latest", "thread_safe"] }
 
 [dev-dependencies]
 pollster = "0.4"

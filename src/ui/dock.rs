@@ -93,6 +93,9 @@ pub struct Dockable<'a> {
     pub default_height: f32,
     /// Posizione iniziale da mobile
     pub default_pos: egui::Pos2,
+    /// Da agganciata il contenuto scorre in verticale; `false` per un contenuto che occupa
+    /// esattamente lo spazio della finestra (es. la vista del PDF)
+    pub scroll: bool,
 }
 
 /// Distanza dal bordo entro cui una finestra trascinata si aggancia.
@@ -210,7 +213,11 @@ fn docked<R>(ctx: &egui::Context, side: Side, w: Dockable, add: impl FnOnce(&mut
             }
         }
         ui.separator();
-        egui::ScrollArea::vertical().auto_shrink([false, false]).show(ui, add).inner
+        if w.scroll {
+            egui::ScrollArea::vertical().auto_shrink([false, false]).show(ui, add).inner
+        } else {
+            add(ui)
+        }
     };
     let (state, open) = (w.state, w.open);
     let frame = egui::Frame::side_top_panel(&ctx.style()).inner_margin(egui::Margin::same(8));
