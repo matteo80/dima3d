@@ -169,6 +169,40 @@ impl SceneGraph {
             }
         }
 
+        let at = match &self.nodes[parent as usize] {
+            SceneNode::Group { children, .. } | SceneNode::Transform { children, .. } => children.iter().position(|&c| tops.contains(&c)),
+            _ => None,
+        };
+        let group = self.add_group(parent, source, at, name);
+        for &n in &tops {
+            self.reparent(n, group);
+        }
+        self.recompute_shape_counts();
+        self.revision += 1;
+        Ok(group)
+    }
+
+    /// Gruppo vuoto dentro `target` (un file o un gruppo; se è un pezzo, nel suo gruppo), in fondo
+    /// ai figli: poi ci si trascinano dentro gli elementi. Ritorna il gruppo.
+    pub fn new_empty_group(&mut self, target: u32, name: &str) -> Result<u32, String> {
+        let info = self.info.get(target as usize).copied().ok_or("elemento inesistente")?;
+        if info.deleted {
+            return Err("elemento eliminato".to_string());
+        }
+        let parent = match self.nodes[target as usize] {
+            SceneNode::Shape { .. } => self.parent_of(target).ok_or("pezzo senza gruppo")?,
+            _ => target,
+        };
+        let source = self.source_of_node(parent).ok_or("file non trovato")?;
+        let group = self.add_group(parent, source, None, name);
+        self.recompute_shape_counts();
+        self.revision += 1;
+        Ok(group)
+    }
+
+    /// Nodo di gruppo nuovo e vuoto nel contenitore `parent` (file `source`), alla posizione `at`
+    /// tra i figli (`None`: in fondo), con il sistema di riferimento del contenitore.
+    fn add_group(&mut self, parent: u32, source: usize, at: Option<usize>, name: &str) -> u32 {
         let group = self.nodes.len() as u32;
         let origin = self.sources[source].next_origin;
         self.sources[source].next_origin += 1;
@@ -188,18 +222,12 @@ impl SceneGraph {
             self.frames.resize(group as usize, glam::Mat4::IDENTITY);
             self.frames.push(frame);
         }
-        // Al posto del primo elemento, se è un figlio diretto; altrimenti in fondo
         if let SceneNode::Group { children, .. } | SceneNode::Transform { children, .. } = &mut self.nodes[parent as usize] {
-            let at = children.iter().position(|&c| tops.contains(&c)).unwrap_or(children.len());
+            let at = at.unwrap_or(children.len()).min(children.len());
             children.insert(at, group);
         }
         self.info[parent as usize].restructured = true;
-        for &n in &tops {
-            self.reparent(n, group);
-        }
-        self.recompute_shape_counts();
-        self.revision += 1;
-        Ok(group)
+        group
     }
 
     /// Ricostruisce la struttura salvata in un progetto: gruppi creati (numero fisso, nome) e

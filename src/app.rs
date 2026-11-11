@@ -79,6 +79,8 @@ pub enum Action {
     MoveInto { nodes: Vec<u32>, into: u32 },
     /// Raccoglie i nodi in un gruppo nuovo, poi apre la rinomina.
     NewGroup(Vec<u32>),
+    /// Gruppo vuoto dentro un file o un gruppo (di un pezzo: nel suo gruppo), poi la rinomina.
+    NewEmptyGroup(u32),
 }
 
 impl Action {
@@ -277,6 +279,10 @@ impl GestoreApp {
             self.new_group(nodes);
             return;
         }
+        if let Action::NewEmptyGroup(target) = action {
+            self.create_group(|scene| scene.new_empty_group(target, "Nuovo gruppo"));
+            return;
+        }
         if let Action::MoveInto { nodes, into } = action {
             self.move_into(nodes, into);
             return;
@@ -414,6 +420,7 @@ impl GestoreApp {
             | Action::Copy(_)
             | Action::Paste
             | Action::NewGroup(_)
+            | Action::NewEmptyGroup(_)
             | Action::MoveInto { .. } => {}
             Action::SelectMany { nodes, primary, anchor } => {
                 self.ui_state.status_message = format!("Selezionati: {} elementi", nodes.len());
@@ -824,12 +831,17 @@ impl GestoreApp {
     /// Nuovo gruppo con i nodi dati (vedi `SceneGraph::new_group`): si annulla con Ctrl+Z e
     /// appena creato si rinomina.
     pub fn new_group(&mut self, nodes: Vec<u32>) {
+        self.create_group(|scene| scene.new_group(&nodes, "Nuovo gruppo"));
+    }
+
+    /// Crea un gruppo con `make` (un passo di Annulla), lo seleziona e ne apre la rinomina.
+    fn create_group(&mut self, make: impl FnOnce(&mut crate::scene_graph::SceneGraph) -> Result<u32, String>) {
         let Some(scene) = &self.scene_graph else { return };
         let (first_node, first_mesh, first_macro) =
             (scene.nodes.len() as u32, scene.shapes_data.len() as u32, scene.macro_components.len());
         self.push_undo(None);
         let Some(scene) = &mut self.scene_graph else { return };
-        match scene.new_group(&nodes, "Nuovo gruppo") {
+        match make(scene) {
             Ok(group) => {
                 // Negli stati da annullare il gruppo non c'è ancora
                 for s in &mut self.project.undo {

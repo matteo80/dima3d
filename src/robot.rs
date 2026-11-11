@@ -264,20 +264,49 @@ impl crate::app::GestoreApp {
         self.scene_graph.as_ref()?.open_files().filter(|f| f.robots.is_some()).last().map(|f| f.node)
     }
 
+    /// Centro e robot messi nella scena l'ultima volta.
+    pub fn applied_robot_cell(&self) -> Option<RobotCell> {
+        self.scene_graph.as_ref()?.open_files().filter(|f| f.robots.is_some()).last()?.robots.clone()
+    }
+
     /// Mette nella scena centro e robot (sostituisce quelli di prima); senza niente da mostrare
     /// toglie il file. Le misure restano nelle preferenze.
     pub fn build_robot_cell(&mut self, cell: RobotCell) {
-        let problems = cell.problems();
-        if !problems.is_empty() {
-            self.ui_state.status_message = format!("Robot non aggiornati: {}", problems.join("; "));
-            return;
-        }
-        if self.ui_state.is_loading || self.project.busy() {
+        if !self.robot_cell_ready(&cell) {
             return;
         }
         let mut settings = self.settings.clone();
         settings.robots = cell.clone();
         self.apply_settings(settings);
+        self.place_robot_cell(cell);
+    }
+
+    /// Solo il centro (posizione e simbolo), dalla finestra Cabina: i robot nella scena restano
+    /// quelli applicati dalla finestra Robot, e le modifiche non applicate restano lì.
+    pub fn build_center(&mut self, center: &RobotCell) {
+        let robots = self.applied_robot_cell().map(|c| c.robots).unwrap_or_default();
+        let cell = RobotCell { robots, ..center.clone() };
+        if !self.robot_cell_ready(&cell) {
+            return;
+        }
+        let mut settings = self.settings.clone();
+        settings.robots.center = cell.center;
+        settings.robots.marker = cell.marker;
+        settings.robots.marker_size = cell.marker_size;
+        self.apply_settings(settings);
+        self.place_robot_cell(cell);
+    }
+
+    fn robot_cell_ready(&mut self, cell: &RobotCell) -> bool {
+        let problems = cell.problems();
+        if !problems.is_empty() {
+            self.ui_state.status_message = format!("Robot non aggiornati: {}", problems.join("; "));
+            return false;
+        }
+        !(self.ui_state.is_loading || self.project.busy())
+    }
+
+    fn place_robot_cell(&mut self, cell: RobotCell) {
         let replaced = self.robot_node();
         if let Some(old) = replaced {
             self.apply(crate::app::Action::Delete(old));
@@ -327,6 +356,31 @@ mod tests {
         back.set_center_text(&c.center_text()).unwrap();
         assert_eq!((back.center, back.marker, back.marker_size), (c.center, c.marker, c.marker_size));
         assert!(RobotParams::from_text("1 2 3").is_none());
+    }
+
+    /// Il centro applicato dalla finestra Cabina non tocca i robot: nella scena restano quelli
+    /// applicati prima, nelle preferenze quelli in modifica.
+    #[test]
+    fn center_alone_keeps_the_robots() {
+        let mut app = crate::app::GestoreApp::new_headless();
+        let ctx = egui::Context::default();
+        app.build_robot_cell(cell());
+        app.poll_loading(&ctx);
+        // Un robot in più non ancora applicato
+        let mut editing = cell();
+        editing.robots.push(RobotParams { name: "Nuovo".into(), ..Default::default() });
+        let mut settings = app.settings.clone();
+        settings.robots = editing.clone();
+        app.apply_settings(settings);
+
+        let center = RobotCell { center: [500.0, 0.0, 0.0], marker: true, marker_size: 300.0, robots: Vec::new() };
+        app.build_center(&center);
+        app.poll_loading(&ctx);
+        let applied = app.applied_robot_cell().unwrap();
+        assert_eq!(applied.center, [500.0, 0.0, 0.0]);
+        assert_eq!(applied.robots, cell().robots, "robot nella scena invariati");
+        assert_eq!(app.settings.robots.robots.len(), 3, "le modifiche restano");
+        assert_eq!(app.settings.robots.center, [500.0, 0.0, 0.0]);
     }
 
     /// Simbolo nel centro fisso; robot posizionati dal centro con X Y Z A B C (il braccio, verso

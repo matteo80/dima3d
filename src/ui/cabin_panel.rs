@@ -324,7 +324,7 @@ pub fn draw(ctx: &egui::Context, app: &mut GestoreApp, pass: super::dock::Pass) 
                 ui.collapsing("Centro cabina", |ui| {
                     ui.label(
                         egui::RichText::new(
-                            "Punto fisso della scena: simbolo e robot stanno qui. Spostando la cabina il centro resta fermo.",
+                            "Punto fisso della scena, lo zero delle coordinate dei robot. Spostando la cabina il centro resta fermo.",
                         )
                         .weak(),
                     );
@@ -338,7 +338,7 @@ pub fn draw(ctx: &egui::Context, app: &mut GestoreApp, pass: super::dock::Pass) 
                     });
                     ui.checkbox(&mut cell.marker, "Simbolo nel centro (si esporta)").on_hover_text(
                         "Sfera gialla con gli assi X (rosso), Y (verde) e Z (blu), nel file «Centro e robot»: \
-                         si vede, si seleziona e si esporta. Si applica con «Applica centro e robot»",
+                         si vede, si seleziona e si esporta. Si applica con «Applica centro»",
                     );
                     if cell.marker {
                         egui::Grid::new("cabina_simbolo").num_columns(2).show(ui, |ui| {
@@ -346,8 +346,11 @@ pub fn draw(ctx: &egui::Context, app: &mut GestoreApp, pass: super::dock::Pass) 
                         });
                     }
                     if ui
-                        .add_enabled(!busy, egui::Button::new(icon_text(ui, icon::HAMMER, "Applica centro e robot")))
-                        .on_hover_text("Mette nella scena simbolo e robot nel centro scritto qui (sostituisce quelli di prima)")
+                        .add_enabled(!busy, egui::Button::new(icon_text(ui, icon::HAMMER, "Applica centro")))
+                        .on_hover_text(
+                            "Mette il centro (e il simbolo) nella scena; i robot già nella scena si spostano con lui. \
+                             I robot si cambiano solo nella finestra Robot",
+                        )
                         .clicked()
                     {
                         apply_cell = true;
@@ -409,7 +412,7 @@ pub fn draw(ctx: &egui::Context, app: &mut GestoreApp, pass: super::dock::Pass) 
         app.apply_settings(settings);
     }
     if apply_cell {
-        app.build_robot_cell(cell);
+        app.build_center(&cell);
     }
     if let Some(c) = choice {
         choose_cabin(app, c);

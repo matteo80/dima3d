@@ -578,6 +578,37 @@ mod tests {
         assert_eq!(s.parent_of(trave), Some(telaio));
     }
 
+    /// «Nuovo gruppo vuoto»: in fondo al file (o al gruppo del pezzo cliccato), rinomina aperta;
+    /// ci si sposta dentro un pezzo; un Annulla lo toglie.
+    #[test]
+    fn new_empty_group_in_a_file_or_beside_a_piece() {
+        let mut app = app_two_files();
+        let (trave, telaio) = (node(&app, "Trave"), node(&app, "Telaio"));
+        let root_a = app.scene_graph.as_ref().unwrap().sources[0].node;
+        app.apply(Action::NewEmptyGroup(root_a));
+        let group = app.ui_state.selected_node.expect("gruppo selezionato");
+        {
+            let s = app.scene_graph.as_ref().unwrap();
+            assert_eq!(s.parent_of(group), Some(root_a));
+            assert_eq!(s.nodes[root_a as usize].children().last(), Some(&group), "in fondo al file");
+            assert!(s.nodes[group as usize].children().is_empty());
+            assert_eq!(s.display_name(group), "Nuovo gruppo");
+        }
+        assert_eq!(app.ui_state.renaming.as_ref().map(|r| r.node), Some(group), "rinomina aperta");
+        app.apply(Action::MoveInto { nodes: vec![trave], into: group });
+        assert_eq!(app.scene_graph.as_ref().unwrap().parent_of(trave), Some(group));
+        app.undo();
+        app.undo();
+        let s = app.scene_graph.as_ref().unwrap();
+        assert!(s.info[group as usize].deleted);
+        assert_eq!(s.parent_of(trave), Some(telaio));
+
+        // Su un pezzo: nel suo gruppo
+        app.apply(Action::NewEmptyGroup(trave));
+        let beside = app.ui_state.selected_node.unwrap();
+        assert_eq!(app.scene_graph.as_ref().unwrap().parent_of(beside), Some(telaio));
+    }
+
     /// La ricerca mostra un pezzo spostato sotto il suo nuovo gruppo.
     #[test]
     fn search_follows_moved_pieces() {
@@ -853,6 +884,19 @@ fn draw_row(ui: &mut egui::Ui, ctx: &mut RowCtx, node_idx: u32, depth: u16) {
                     .clicked()
             {
                 actions.push(Action::NewGroup(group.map_or_else(|| vec![node_idx], <[u32]>::to_vec)));
+                ui.close_menu();
+            }
+            if group.is_none()
+                && ui
+                    .button(icon_text(ui, icon::FOLDER_SIMPLE_PLUS, "Nuovo gruppo vuoto"))
+                    .on_hover_text(if info.kind == NodeKind::Shape {
+                        "Aggiunge un gruppo vuoto nel gruppo di questo pezzo: poi ci si trascinano dentro le righe"
+                    } else {
+                        "Aggiunge un gruppo vuoto qui dentro: poi ci si trascinano dentro le righe"
+                    })
+                    .clicked()
+            {
+                actions.push(Action::NewEmptyGroup(node_idx));
                 ui.close_menu();
             }
             ui.separator();

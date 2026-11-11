@@ -1,6 +1,6 @@
 [package]
 name = "dima3d"
-version = "0.2.10"
+version = "0.2.11"
 edition = "2021"
 license = "MIT"
 

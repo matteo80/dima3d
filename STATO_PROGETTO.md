@@ -962,6 +962,13 @@ Fatto:
       %LOCALAPPDATA%\Programs\Dima3D senza permessi da amministratore, menu Start, desktop facoltativo,
       associazione dei .dima3d facoltativa, disinstallazione. `pacchetto.ps1` lo crea, `pubblica.ps1` lo carica nella
       Release accanto allo zip; dopo un aggiornamento dal programma si aggiorna la versione in «App installate».
+- [x] (2026-11-11, 0.2.11) Finestra Cabina: «Applica centro» (era «Applica centro e robot») mette nella scena solo
+      centro e simbolo (`GestoreApp::build_center`); i robot restano quelli applicati dalla finestra Robot e le
+      modifiche non applicate restano lì.
+- [x] (2026-11-11, 0.2.11) Finestra Cabina: «Applica centro» (era «Applica centro e robot») mette nella scena solo
+      centro e simbolo (`GestoreApp::build_center`); i robot restano quelli applicati dalla finestra Robot.
+      Albero: «Nuovo gruppo vuoto» dal menu di un file, gruppo o pezzo (`SceneGraph::new_empty_group`,
+      `Action::NewEmptyGroup`): in fondo al contenitore, rinomina aperta, un Annulla, salvato nel progetto.
 - [x] (2026-11-11, 0.2.10) Finestra Cabina con il selettore della cabina da modificare (come in Posizione): cabine
       generate aperte + «Nuova cabina» (`UiState::cabin_target`, `CabinChoice`); scegliendola (anche dall'albero) le
       misure diventano le sue; «Aggiorna» sostituisce solo quella e ne tiene nome e posizione; nomi «Cabina», «Cabina 2»…

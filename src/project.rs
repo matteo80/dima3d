@@ -1420,6 +1420,10 @@ robot = -2000 1800 0 0 0 -90 1 1000 1000 | R11"), "{text}");
         let group = app.ui_state.selected_node.unwrap();
         app.apply(Action::Rename(group, "Lato sinistro".into()));
         app.apply(Action::SetColor(group, Some([0.2, 0.8, 0.2, 1.0])));
+        // Un gruppo vuoto nel file, rinominato: resta anche vuoto
+        app.apply(Action::NewEmptyGroup(root_a));
+        let empty = app.ui_state.selected_node.unwrap();
+        app.apply(Action::Rename(empty, "Da riempire".into()));
         app.apply(Action::MoveInto { nodes: vec![trave], into: root_a });
         app.apply(Action::Hide(trave));
         // Copia del gruppo nuovo, dopo gli spostamenti
@@ -1427,7 +1431,7 @@ robot = -2000 1800 0 0 0 -90 1 1000 1000 | R11"), "{text}");
         app.apply(Action::Paste);
         assert!(app.write_project(&project));
         let text = std::fs::read_to_string(&project).unwrap();
-        assert!(text.contains("gruppo = ") && text.contains(" Lato sinistro") && text.contains("figli = "), "{text}");
+        assert!(text.contains("gruppo = ") && text.contains(" Lato sinistro") && text.contains(" Da riempire") && text.contains("figli = "), "{text}");
         let expected = state(&app);
         let tree = |app: &GestoreApp| {
             let s = app.scene_graph.as_ref().unwrap();
