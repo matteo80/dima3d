@@ -175,6 +175,15 @@ impl CabinLabel {
     }
 }
 
+/// Cabina su cui lavora la finestra Cabina.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CabinChoice {
+    /// Una cabina nuova: «Costruisci» la aggiunge senza toccare le altre
+    New,
+    /// La cabina con questo nodo radice
+    Node(u32),
+}
+
 /// Misure della cabina, in millimetri.
 #[derive(Debug, Clone, PartialEq)]
 pub struct CabinParams {
@@ -876,27 +885,45 @@ fn label_shapes(p: &CabinParams, out: &mut String) -> Result<(), String> {
 
 /// Scena della cabina, pronta da aprire o aggiungere come file «Cabina».
 pub fn scene(p: &CabinParams) -> crate::scene_graph::SceneGraph {
+    scene_named(p, "Cabina")
+}
+
+/// Come [`scene`], con il nome del file nella scena.
+pub fn scene_named(p: &CabinParams, name: &str) -> crate::scene_graph::SceneGraph {
     let (text, problem) = vrml_with_label(p);
     let mut scene = crate::parser::parse_wrl(text.as_bytes());
     scene.load_warnings.extend(problem.map(|e| format!("scritta non fatta: {e}")));
     // Le misure sono già in millimetri: niente proposte di cambio di unità
     scene.units_mm = true;
-    scene.into_file("Cabina".to_string(), None);
+    scene.into_file(name.to_string(), None);
     scene.sources[0].cabin = Some(p.clone());
     scene
 }
 
 impl crate::app::GestoreApp {
-    /// Nodo radice della cabina generata, se ce n'è una aperta (l'ultima).
-    pub fn cabin_node(&self) -> Option<u32> {
-        self.scene_graph.as_ref()?.open_files().filter(|f| f.cabin.is_some()).last().map(|f| f.node)
+    /// Cabine generate aperte: nodo radice, nome nell'albero e misure, in ordine.
+    pub fn cabins(&self) -> Vec<(u32, String, CabinParams)> {
+        let Some(scene) = &self.scene_graph else { return Vec::new() };
+        scene.open_files().filter_map(|f| f.cabin.as_ref().map(|p| (f.node, scene.display_name(f.node), p.clone()))).collect()
     }
 
-    /// Centro della cabina aperta (a metà lunghezza, sull'asse, al piano del grigliato) nella
+    /// Nodo radice della cabina su cui lavora la finestra Cabina: quella scelta, o l'ultima.
+    /// `None` con «Nuova cabina» o senza cabine.
+    pub fn cabin_node(&self) -> Option<u32> {
+        let cabins = self.cabins();
+        match self.ui_state.cabin_target {
+            Some(CabinChoice::New) => None,
+            Some(CabinChoice::Node(n)) if cabins.iter().any(|c| c.0 == n) => Some(n),
+            _ => cabins.last().map(|c| c.0),
+        }
+    }
+
+    /// Centro della cabina scelta (a metà lunghezza, sull'asse, al piano del grigliato) nella
     /// scena, e la sua matrice di posizione (gli spostamenti fatti con Posizione).
     pub fn cabin_center(&self) -> Option<(glam::Vec3, glam::Mat4)> {
         let scene = self.scene_graph.as_ref()?;
-        let source = scene.open_files().filter(|f| f.cabin.is_some()).last()?;
+        let node = self.cabin_node()?;
+        let source = scene.open_files().find(|f| f.node == node)?;
         let p = source.cabin.as_ref()?;
         let m = scene.placement(source.meshes.start);
         Some((m.transform_point3(glam::Vec3::new(p.length / 2.0, 0.0, 0.0)), m))
@@ -933,13 +960,25 @@ impl crate::app::GestoreApp {
         let replaced = self.cabin_node();
         // La cabina nuova va dove era la vecchia (spostata con Posizione o con il centro)
         let placement = replaced.and(self.cabin_center()).map(|(_, m)| m);
+        // Nome: quello della cabina sostituita, altrimenti «Cabina», «Cabina 2»…
+        let taken: Vec<String> = self.scene_graph.as_ref().map(|s| s.open_files().map(|f| f.name.clone()).collect()).unwrap_or_default();
+        let name = match replaced.and_then(|n| self.scene_graph.as_ref().and_then(|s| s.sources.iter().find(|f| f.node == n))) {
+            Some(f) => f.name.clone(),
+            None => std::iter::once("Cabina".to_string())
+                .chain((2..).map(|k| format!("Cabina {k}")))
+                .find(|n| !taken.contains(n))
+                .unwrap_or_default(),
+        };
+        let had_scene = self.scene_graph.is_some();
         if let Some(old) = replaced {
             self.apply(crate::app::Action::Delete(old));
         }
-        let had_scene = self.scene_graph.is_some();
-        self.add_generated(scene(&params));
+        self.add_generated(scene_named(&params, &name));
         if had_scene {
-            if let (Some(m), Some(node)) = (placement.filter(|m| *m != glam::Mat4::IDENTITY), self.cabin_node()) {
+            // La finestra resta sulla cabina appena fatta
+            let new = self.scene_graph.as_ref().and_then(|s| s.open_files().filter(|f| f.cabin.is_some()).last().map(|f| f.node));
+            self.ui_state.cabin_target = new.map(CabinChoice::Node);
+            if let (Some(m), Some(node)) = (placement.filter(|m| *m != glam::Mat4::IDENTITY), new) {
                 self.apply(crate::app::Action::Move { nodes: vec![node], matrix: m });
             }
         }

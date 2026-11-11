@@ -72,6 +72,8 @@ pub struct UiState {
     pub cabin_open: bool,
     /// Finestra dei robot aperta
     pub robot_open: bool,
+    /// Cabina su cui lavora la finestra Cabina (`None`: l'ultima costruita)
+    pub cabin_target: Option<crate::cabin::CabinChoice>,
     /// Selezione trascinando nell'albero: riga da cui è partita
     pub tree_sweep: Option<u32>,
     /// Selezione a rettangolo nell'albero (partita dallo spazio vuoto): punto di partenza, con la Y
@@ -119,6 +121,7 @@ impl Default for UiState {
             position: Default::default(),
             cabin_open: false,
             robot_open: false,
+            cabin_target: None,
             tree_sweep: None,
             tree_band: None,
             clipboard: Vec::new(),

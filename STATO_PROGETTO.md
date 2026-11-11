@@ -962,6 +962,9 @@ Fatto:
       %LOCALAPPDATA%\Programs\Dima3D senza permessi da amministratore, menu Start, desktop facoltativo,
       associazione dei .dima3d facoltativa, disinstallazione. `pacchetto.ps1` lo crea, `pubblica.ps1` lo carica nella
       Release accanto allo zip; dopo un aggiornamento dal programma si aggiorna la versione in «App installate».
+- [x] (2026-11-11, 0.2.10) Finestra Cabina con il selettore della cabina da modificare (come in Posizione): cabine
+      generate aperte + «Nuova cabina» (`UiState::cabin_target`, `CabinChoice`); scegliendola (anche dall'albero) le
+      misure diventano le sue; «Aggiorna» sostituisce solo quella e ne tiene nome e posizione; nomi «Cabina», «Cabina 2»…
 - [x] (2026-11-11, 0.2.9) **Centro cabina fisso e robot** (`src/robot.rs`, finestra `ui/robot_panel.rs`, pulsante «Robot»):
       il centro cabina è un punto fisso della scena (coordinate nella finestra Cabina, overlay con lo scostamento della
       cabina, «Porta la cabina sul centro»); simbolo e robot nel file generato «Centro e robot» (salvato nel progetto,

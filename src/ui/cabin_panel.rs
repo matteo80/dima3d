@@ -137,6 +137,18 @@ pub fn draw_center(
     painter.galley(at, galley, egui::Color32::WHITE);
 }
 
+/// Passa a un'altra cabina: le misure nella finestra diventano le sue (con «Nuova cabina» restano).
+fn choose_cabin(app: &mut GestoreApp, choice: crate::cabin::CabinChoice) {
+    app.ui_state.cabin_target = Some(choice);
+    if let crate::cabin::CabinChoice::Node(n) = choice {
+        if let Some((_, _, params)) = app.cabins().into_iter().find(|c| c.0 == n) {
+            let mut settings = app.settings.clone();
+            settings.cabin = params;
+            app.apply_settings(settings);
+        }
+    }
+}
+
 pub fn draw(ctx: &egui::Context, app: &mut GestoreApp, pass: super::dock::Pass) {
     if !app.ui_state.cabin_open {
         return;
@@ -146,6 +158,25 @@ pub fn draw(ctx: &egui::Context, app: &mut GestoreApp, pass: super::dock::Pass) 
         return;
     }
     let mut dock = app.settings.dock_cabin;
+    // Cabina scelta nell'albero: la finestra passa su di lei e ne prende le misure
+    let selected = app.ui_state.selected_node;
+    let last_key = egui::Id::new("cabina_ultima_selezione");
+    if ctx.data(|d| d.get_temp::<Option<u32>>(last_key)) != Some(selected) {
+        ctx.data_mut(|d| d.insert_temp(last_key, selected));
+        let picked = selected.and_then(|n| {
+            let scene = app.scene_graph.as_ref()?;
+            let source = scene.sources.get(scene.source_of_node(n)?)?;
+            source.cabin.is_some().then_some(source.node)
+        });
+        if let Some(node) = picked {
+            if app.ui_state.cabin_target != Some(crate::cabin::CabinChoice::Node(node)) {
+                choose_cabin(app, crate::cabin::CabinChoice::Node(node));
+            }
+        }
+    }
+    let cabins = app.cabins();
+    let target = app.cabin_node();
+    let mut choice: Option<crate::cabin::CabinChoice> = None;
     let mut p: CabinParams = app.settings.cabin.clone();
     let mut open = true;
     let mut build = false;
@@ -168,6 +199,31 @@ pub fn draw(ctx: &egui::Context, app: &mut GestoreApp, pass: super::dock::Pass) 
         default_pos: egui::pos2(80.0, 120.0),
     };
     super::dock::show(ctx, pass, window, |ui| {
+            // ── Cabina da modificare ──────────────────────────────────────────
+            ui.horizontal(|ui| {
+                ui.label(egui::RichText::new("Cabina").strong());
+                let label = |(_, name, c): &(u32, String, CabinParams)| format!("{name}  ({} × {} mm)", c.length, c.width);
+                let current = match target {
+                    Some(n) => cabins.iter().find(|c| c.0 == n).map(label).unwrap_or_default(),
+                    None => "Nuova cabina".to_string(),
+                };
+                egui::ComboBox::from_id_salt("cabina_oggetto")
+                    .width((ui.available_width() - 8.0).max(120.0))
+                    .selected_text(current)
+                    .show_ui(ui, |ui| {
+                        for c in &cabins {
+                            if ui.selectable_label(target == Some(c.0), label(c)).clicked() {
+                                choice = Some(crate::cabin::CabinChoice::Node(c.0));
+                            }
+                        }
+                        if ui.selectable_label(target.is_none(), "Nuova cabina").on_hover_text("«Costruisci» aggiunge un'altra cabina senza toccare quelle che ci sono").clicked() {
+                            choice = Some(crate::cabin::CabinChoice::New);
+                        }
+                    })
+                    .response
+                    .on_hover_text("Cabina su cui lavorano misure, «Aggiorna» e centro: scegliendola le misure diventano le sue (anche selezionandola nell'albero)");
+            });
+            ui.separator();
             ui.label(
                 egui::RichText::new(
                     "Zero all'ingresso della cabina, sull'asse, al piano del grigliato (della tavola, se il grigliato è \
@@ -355,6 +411,10 @@ pub fn draw(ctx: &egui::Context, app: &mut GestoreApp, pass: super::dock::Pass) 
     if apply_cell {
         app.build_robot_cell(cell);
     }
+    if let Some(c) = choice {
+        choose_cabin(app, c);
+        return;
+    }
     if build {
         app.build_cabin(p);
     }
@@ -382,6 +442,41 @@ mod tests {
             }
         }
         texts
+    }
+
+    /// Due cabine: «Nuova cabina» ne aggiunge una seconda («Cabina 2»); scegliendone una (dal menu
+    /// o selezionandola nell'albero) le misure diventano le sue e «Aggiorna» cambia solo quella.
+    #[test]
+    fn selector_picks_the_cabin_to_edit() {
+        use crate::cabin::CabinChoice;
+        let mut app = GestoreApp::new_headless();
+        app.ui_state.cabin_open = true;
+        let ctx = egui::Context::default();
+        app.build_cabin(CabinParams::default());
+        app.poll_loading(&ctx);
+        choose_cabin(&mut app, CabinChoice::New);
+        assert!(app.cabin_node().is_none());
+        app.build_cabin(CabinParams { length: 12000.0, ..CabinParams::default() });
+        let cabins = app.cabins();
+        assert_eq!(cabins.iter().map(|c| (c.1.as_str(), c.2.length)).collect::<Vec<_>>(), [("Cabina", 20000.0), ("Cabina 2", 12000.0)]);
+        assert_eq!(app.cabin_node(), Some(cabins[1].0), "resta sulla nuova");
+
+        // Dal menu: la prima, con le sue misure; «Aggiorna» cambia solo lei
+        choose_cabin(&mut app, CabinChoice::Node(cabins[0].0));
+        assert_eq!(app.settings.cabin.length, 20000.0);
+        app.build_cabin(CabinParams { width: 6500.0, ..app.settings.cabin.clone() });
+        let after = app.cabins();
+        assert_eq!(after.iter().map(|c| (c.1.as_str(), c.2.length, c.2.width)).collect::<Vec<_>>(), [("Cabina 2", 12000.0, 5700.0), ("Cabina", 20000.0, 6500.0)]);
+
+        // Dall'albero: un pezzo della seconda cabina → la finestra passa su di lei
+        let s = app.scene_graph.as_ref().unwrap();
+        let second = after.iter().find(|c| c.1 == "Cabina 2").unwrap().0;
+        let piece = (0..s.nodes.len() as u32).find(|&n| s.source_of_node(n).is_some_and(|i| s.sources[i].node == second) && s.display_name(n) == "Soffitto").unwrap();
+        app.ui_state.select_single(Some(piece));
+        let texts = texts(&ctx, &mut app);
+        assert_eq!(app.cabin_node(), Some(second));
+        assert_eq!(app.settings.cabin.length, 12000.0, "misure della cabina selezionata");
+        assert!(texts.iter().any(|t| t.starts_with("Cabina 2  (12000")), "{texts:?}");
     }
 
     /// La finestra si apre con il pulsante giusto; dopo la costruzione il centro cabina mostra le

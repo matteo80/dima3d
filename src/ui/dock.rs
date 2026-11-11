@@ -338,7 +338,7 @@ mod tests {
         let ctx = egui::Context::default();
         frame(&ctx, &mut app, vec![]);
         let texts = frame(&ctx, &mut app, vec![]);
-        let title = texts.iter().find(|(t, _)| t.ends_with("Cabina") && t.len() < 12).expect("titolo").1.center();
+        let title = texts.iter().find(|(t, _)| *t == format!("{}  Cabina", icon::CUBE_TRANSPARENT)).expect("titolo").1.center();
         let target = egui::pos2(1270.0, 400.0);
         let button = |pos, pressed| egui::Event::PointerButton { pos, button: egui::PointerButton::Primary, pressed, modifiers: Default::default() };
         frame(&ctx, &mut app, vec![egui::Event::PointerMoved(title)]);
@@ -352,7 +352,7 @@ mod tests {
         let texts = frame(&ctx, &mut app, vec![]);
         let texts = frame(&ctx, &mut app, vec![]).into_iter().chain(texts).collect::<Vec<_>>();
         // La finestra ora è un pannello sul lato destro
-        let docked_title = texts.iter().find(|(t, _)| t.ends_with("Cabina") && t.len() < 12).expect("titolo agganciato").1;
+        let docked_title = texts.iter().find(|(t, _)| *t == format!("{}  Cabina", icon::CUBE_TRANSPARENT)).expect("titolo agganciato").1;
         assert!(docked_title.left() > 800.0, "a destra: {docked_title:?}");
 
         // «Sgancia»
