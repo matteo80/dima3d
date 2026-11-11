@@ -34,3 +34,6 @@ __pycache__/
 /foto/
 *.dima3d
 /prova matematiche/
+
+# Impostazioni locali di Claude Code
+/.claude/settings.local.json
