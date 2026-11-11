@@ -1188,7 +1188,19 @@ mod tests {
         pump(&mut reopened);
         assert_eq!(state(&reopened).0, expected.0, "{}", reopened.ui_state.status_message);
         assert!(reopened.ui_state.status_message.starts_with("Progetto aperto"), "{}", reopened.ui_state.status_message);
-        drop((app, other, only, reopened));
+
+        // Doppio clic sul progetto in Windows: arriva come argomento all'avvio e si apre come
+        // progetto (prima si leggeva come un modello e la cabina non compariva)
+        let mut started = GestoreApp::new_headless();
+        started.startup_path = Some(alone.clone());
+        let ctx = egui::Context::default();
+        for _ in 0..3 {
+            let _ = ctx.run(Default::default(), |ctx| started.start(ctx));
+        }
+        pump(&mut started);
+        assert_eq!(state(&started).0, expected.0, "{}", started.ui_state.status_message);
+        assert!(started.cabin_node().is_some(), "cabina aperta: {}", started.ui_state.status_message);
+        drop((app, other, only, reopened, started));
         let _ = std::fs::remove_dir_all(&dir);
     }
 

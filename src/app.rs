@@ -124,6 +124,10 @@ pub struct GestoreApp {
     pub project: crate::project::ProjectState,
     /// Verifica e download degli aggiornamenti
     pub update: crate::update::UpdateState,
+    /// Avvio: fotogrammi disegnati finora (si ingrandisce la finestra quando è già visibile) e
+    /// file da aprire passato a riga di comando (doppio clic su un file in Windows)
+    pub startup_frames: u32,
+    pub startup_path: Option<std::path::PathBuf>,
 }
 
 impl GestoreApp {
@@ -152,16 +156,34 @@ impl GestoreApp {
             settings,
             project: Default::default(),
             update: Default::default(),
+            startup_frames: 0,
+            startup_path: None,
         };
         crate::update::cleanup_previous();
         if app.settings.check_updates {
             app.check_for_updates(false);
         }
         // File passato a riga di comando o con "Apri con" di Windows
-        if let Some(path) = std::env::args_os().nth(1) {
-            app.open_wrl_async(path.into());
-        }
+        // Si apre al primo fotogramma, come un file trascinato: così anche un progetto .dima3d
+        // (con le cabine) passa dalla sua apertura e non dal caricamento dei modelli
+        app.startup_path = std::env::args_os().nth(1).map(Into::into);
         app
+    }
+
+    /// Primi fotogrammi: ingrandisce la finestra quando è già visibile (ingrandita alla
+    /// creazione Windows la mostra grande ma non «ingrandita») e apre il file della riga di comando.
+    pub fn start(&mut self, ctx: &egui::Context) {
+        if self.startup_frames > 2 {
+            return;
+        }
+        self.startup_frames += 1;
+        if self.startup_frames == 2 {
+            ctx.send_viewport_cmd(egui::ViewportCommand::Maximized(true));
+        }
+        if let Some(path) = self.startup_path.take() {
+            self.request_open(path);
+        }
+        ctx.request_repaint();
     }
 
     /// Applica le preferenze al renderer e le salva su disco.
@@ -190,6 +212,8 @@ impl GestoreApp {
             settings: crate::settings::Settings::default(),
             project: Default::default(),
             update: Default::default(),
+            startup_frames: 0,
+            startup_path: None,
         }
     }
 
@@ -1039,6 +1063,7 @@ impl Default for GestoreApp {
 
 impl eframe::App for GestoreApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        self.start(ctx);
         self.poll_loading(ctx);
         if let Some(text) = self.ui_state.clipboard_text.take() {
             ctx.copy_text(text);
