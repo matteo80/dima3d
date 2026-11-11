@@ -20,6 +20,8 @@ pub enum LabelWall {
     Right,
     Entry,
     Exit,
+    /// Le due testate, ingresso e uscita
+    Ends,
     All,
 }
 
@@ -33,12 +35,13 @@ enum Wall {
 }
 
 impl LabelWall {
-    pub const ALL: [(LabelWall, &'static str); 6] = [
+    pub const ALL: [(LabelWall, &'static str); 7] = [
         (LabelWall::Sides, "Pareti laterali"),
         (LabelWall::Left, "Parete sinistra"),
         (LabelWall::Right, "Parete destra"),
         (LabelWall::Entry, "Testata di ingresso"),
         (LabelWall::Exit, "Testata di uscita"),
+        (LabelWall::Ends, "Testate di ingresso e uscita"),
         (LabelWall::All, "Tutte le pareti"),
     ];
 
@@ -49,6 +52,7 @@ impl LabelWall {
             LabelWall::Right => "destra",
             LabelWall::Entry => "ingresso",
             LabelWall::Exit => "uscita",
+            LabelWall::Ends => "testate",
             LabelWall::All => "tutte",
         }
     }
@@ -64,6 +68,7 @@ impl LabelWall {
             LabelWall::Right => &[Wall::Right],
             LabelWall::Entry => &[Wall::Entry],
             LabelWall::Exit => &[Wall::Exit],
+            LabelWall::Ends => &[Wall::Entry, Wall::Exit],
             LabelWall::All => &[Wall::Left, Wall::Right, Wall::Entry, Wall::Exit],
         }
     }
@@ -1083,6 +1088,15 @@ mod tests {
             let stroke = top.iter().sum::<f32>() / top.len() as f32;
             assert_eq!(stroke > (min + max) / 2.0, stroke_at_max_x, "{name}: asta a {stroke}, lettera da {min} a {max}");
         }
+
+        // Sulle due testate: una scritta fuori dall'ingresso e una fuori dall'uscita
+        let ends = super::scene(&CabinParams { label: CabinLabel { wall: LabelWall::Ends, ..label.clone() }, ..CabinParams::default() });
+        let (lo, _) = part(&ends, "Scritta_ingresso").expect("scritta sull'ingresso");
+        assert!(lo.x < -p.panel + 0.2);
+        let (_, hi) = part(&ends, "Scritta_uscita").expect("scritta sull'uscita");
+        assert!(hi.x > p.length + p.panel - 0.2);
+        assert!(part(&ends, "Scritta_sinistra").is_none());
+        assert_eq!(CabinLabel::from_text(&CabinLabel { wall: LabelWall::Ends, ..label.clone() }.to_text()).unwrap().wall, LabelWall::Ends);
 
         let missing = CabinParams { label: CabinLabel { font: "C:\\non\\esiste.ttf".into(), ..label }, ..CabinParams::default() };
         assert!(missing.problems().iter().any(|p| p.contains("font non trovato")));
