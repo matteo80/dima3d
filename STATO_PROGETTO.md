@@ -962,6 +962,15 @@ Fatto:
       %LOCALAPPDATA%\Programs\Dima3D senza permessi da amministratore, menu Start, desktop facoltativo,
       associazione dei .dima3d facoltativa, disinstallazione. `pacchetto.ps1` lo crea, `pubblica.ps1` lo carica nella
       Release accanto allo zip; dopo un aggiornamento dal programma si aggiorna la versione in «App installate».
+- [x] (2026-11-12, 0.2.14) **Centro cabina come punto della cabina** (richiesta dell'utente): X Y Z del
+      centro sono nelle coordinate della cabina costruita (dall'ingresso, sull'asse, al grigliato), come nel
+      controllore. «Applica centro» porta la cabina a meno il centro dalla posizione di costruzione
+      (`shift_cabin_to_center`, stesso passo di Annulla del centro) e il file del centro/robot è generato nello
+      zero: il centro resta sul punto scelto della cabina. «Reset» = centro 0 0 0, cabina com'era costruita.
+      Tolti «Metà cabina sul centro» e «Trasla la cabina del centro applicato»; la finestra mostra il punto della
+      cabina che sta nello zero (`center_in_cabin`) e «Centro non applicato» se diverso dai campi. «Applica alla
+      scena» nella finestra Robot sposta la cabina solo se il centro è cambiato. Progetti vecchi: centro e robot
+      ora ricompaiono nello zero (prima erano nel punto X Y Z della scena).
 - [x] (2026-11-12, 0.2.13) **Cerniere salvate** (`scene_graph/hinge.rs`, `ui/hinge_label.rs`): dalla finestra
       Posizione «Salva cerniera» ricorda asse e parte; nella vista, cliccando la parte, un'etichetta con i gradi
       (Chiudi/Apri ai limiti), Ctrl + trascina la apre con il mouse. Asse nelle coordinate di un pezzo della parte

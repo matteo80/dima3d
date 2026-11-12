@@ -961,29 +961,25 @@ impl crate::app::GestoreApp {
         }
     }
 
-    /// Spostamento che porta la cabina scelta a «costruita e traslata di meno il centro
-    /// applicato» (centro X 5300 Z 544 → cabina a X −5300 Z −544): lo stesso offset che si darebbe
-    /// a mano in Posizione, contato dalla posizione di costruzione (premuto due volte non si somma).
-    /// `None` senza cabina o senza centro applicato.
-    pub fn center_shift(&self) -> Option<glam::Mat4> {
-        let center = self.applied_robot_cell()?.center();
-        let (_, m) = self.cabin_center()?;
-        Some(glam::Mat4::from_translation(-center) * m.inverse())
-    }
-
-    /// Trasla la cabina scelta del centro applicato (vedi [`center_shift`](Self::center_shift)).
-    pub fn shift_cabin_by_center(&mut self) {
-        let (Some(delta), Some(node)) = (self.center_shift(), self.cabin_node()) else { return };
-        let Some(center) = self.applied_robot_cell().map(|c| c.center) else { return };
+    /// Porta la cabina scelta a «costruita e traslata di meno il centro» (centro X 5300 Z 544 →
+    /// cabina a X −5300 Z −544): il punto `center` della cabina va nello zero della scena, dove
+    /// stanno il centro e i robot. Contato dalla posizione di costruzione: ripetuto non si somma.
+    /// Senza un passo di Annulla suo: lo chiama chi mette il centro nella scena.
+    pub fn shift_cabin_to_center(&mut self, center: glam::Vec3) {
+        let (Some((_, m)), Some(node)) = (self.cabin_center(), self.cabin_node()) else { return };
+        let delta = glam::Mat4::from_translation(-center) * m.inverse();
         if delta.abs_diff_eq(glam::Mat4::IDENTITY, 1e-4) {
             return;
         }
-        // Un passo di Annulla suo (non fuso con uno spostamento fatto appena prima)
-        self.push_undo(None);
         self.apply_without_undo(crate::app::Action::Move { nodes: vec![node], matrix: delta });
         self.sync_moved_geometry();
-        self.ui_state.status_message =
-            format!("Cabina traslata del centro applicato: X {} Y {} Z {}", -center[0], -center[1], -center[2]);
+    }
+
+    /// Punto della cabina scelta (in coordinate della cabina costruita) che sta nello zero della
+    /// scena: il centro cabina com'è adesso.
+    pub fn center_in_cabin(&self) -> Option<glam::Vec3> {
+        let (_, m) = self.cabin_center()?;
+        Some(m.inverse().transform_point3(glam::Vec3::ZERO))
     }
 
     /// Mette nella scena un file generato al posto di `old` (se c'è) e lo sposta con `placement`:
@@ -1298,24 +1294,34 @@ mod tests {
     }
 
     /// Centro applicato a X 5300 Z 544: la cabina si sposta di X −5300 Z −544 dalla posizione di
-    /// costruzione, anche se era già stata spostata; premuto di nuovo non cambia niente.
+    /// costruzione, anche se era già stata spostata; il centro resta nello zero, cioè nel punto
+    /// X 5300 Z 544 della cabina. Riapplicato non si somma; lo zero rimette la cabina com'era.
     #[test]
     fn cabin_shifts_by_the_applied_center() {
         let mut app = crate::app::GestoreApp::new_headless();
         let ctx = egui::Context::default();
         app.build_cabin(CabinParams::default());
         app.poll_loading(&ctx);
-        assert!(app.center_shift().is_none(), "senza centro applicato");
-        app.build_center(&crate::robot::RobotCell { center: [5300.0, 0.0, 544.0], marker: true, ..Default::default() });
         let node = app.cabin_node().unwrap();
         app.apply(crate::app::Action::Move { nodes: vec![node], matrix: glam::Mat4::from_translation(glam::Vec3::new(700.0, 30.0, 0.0)) });
-        app.shift_cabin_by_center();
+        let center = |x: f32, z: f32| crate::robot::RobotCell { center: [x, 0.0, z], marker: true, ..Default::default() };
+        app.build_center(&center(5300.0, 544.0));
         let (middle, _) = app.cabin_center().unwrap();
         assert!((middle - glam::Vec3::new(10000.0 - 5300.0, 0.0, -544.0)).length() < 0.01, "{middle}");
-        app.shift_cabin_by_center();
+        assert!((app.center_in_cabin().unwrap() - glam::Vec3::new(5300.0, 0.0, 544.0)).length() < 0.01);
+        let s = app.scene_graph.as_ref().unwrap();
+        let ball = s.shapes_data.iter().find(|m| m.name.as_deref() == Some("Centro_sfera")).unwrap();
+        let mid = ball.world_vertices.iter().fold(glam::Vec3::ZERO, |a, &v| a + glam::Vec3::from(v)) / ball.world_vertices.len() as f32;
+        assert!(mid.length() < 1.0, "simbolo nello zero: {mid}");
+        app.build_center(&center(5300.0, 544.0));
         assert!((app.cabin_center().unwrap().0 - middle).length() < 0.01, "non si somma");
+        app.build_center(&center(0.0, 0.0));
+        assert!((app.cabin_center().unwrap().0 - glam::Vec3::new(10000.0, 0.0, 0.0)).length() < 0.01, "reset");
         app.undo();
-        assert!((app.cabin_center().unwrap().0 - glam::Vec3::new(10700.0, 30.0, 0.0)).length() < 0.01);
+        assert!((app.cabin_center().unwrap().0 - middle).length() < 0.01);
+        app.undo();
+        app.undo();
+        assert!((app.cabin_center().unwrap().0 - glam::Vec3::new(10700.0, 30.0, 0.0)).length() < 0.01, "un Annulla per applicazione");
     }
 
     /// Spessore del grigliato: verso l'alto (predefinito) sopra il piano, verso il basso sotto;

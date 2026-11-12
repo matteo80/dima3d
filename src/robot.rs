@@ -90,7 +90,9 @@ impl RobotParams {
 /// Centro cabina fisso, simbolo e robot.
 #[derive(Debug, Clone, PartialEq)]
 pub struct RobotCell {
-    /// Centro cabina nella scena (mm): resta fermo quando si sposta la cabina
+    /// Centro cabina nelle coordinate della cabina costruita (mm, dall'ingresso, sull'asse, al
+    /// piano del grigliato), come nel controllore. Applicato, la cabina si sposta di meno questo
+    /// valore: il centro (e i robot) stanno nello zero della scena.
     pub center: [f32; 3],
     /// Simbolo nel centro (sfera e tre assi), esportato
     pub marker: bool,
@@ -205,10 +207,11 @@ fn marker_shapes(out: &mut String, c: Vec3, a: f32) {
     out.push_str("] }\n");
 }
 
-/// Testo VRML 2.0 di centro e robot, in coordinate della scena.
+/// Testo VRML 2.0 di centro e robot, in coordinate della scena: il centro è lo zero (è la cabina
+/// a spostarsi, vedi `GestoreApp::shift_cabin_to_center`).
 pub fn vrml(cell: &RobotCell) -> String {
     let mut out = String::from("#VRML V2.0 utf8\n# Centro cabina e robot generati da Dima 3D (millimetri)\n");
-    let center = cell.center();
+    let center = Vec3::ZERO;
     if cell.marker {
         marker_shapes(&mut out, center, cell.marker_size);
     }
@@ -274,6 +277,7 @@ impl crate::app::GestoreApp {
 
     /// Mette nella scena centro e robot (sostituisce quelli di prima); senza niente da mostrare
     /// toglie il file. Le misure restano nelle preferenze.
+    /// Con un centro diverso da quello applicato si sposta anche la cabina, come con «Applica centro».
     pub fn build_robot_cell(&mut self, cell: RobotCell) {
         if !self.robot_cell_ready(&cell) {
             return;
@@ -281,11 +285,13 @@ impl crate::app::GestoreApp {
         let mut settings = self.settings.clone();
         settings.robots = cell.clone();
         self.apply_settings(settings);
-        self.place_robot_cell(cell);
+        let shift = self.applied_robot_cell().map_or(cell.center != [0.0; 3], |c| c.center != cell.center);
+        self.place_robot_cell(cell, shift);
     }
 
-    /// Solo il centro (posizione e simbolo), dalla finestra Cabina: i robot nella scena restano
-    /// quelli applicati dalla finestra Robot, e le modifiche non applicate restano lì.
+    /// Solo il centro (posizione e simbolo), dalla finestra Cabina: la cabina si sposta di meno il
+    /// centro dalla posizione di costruzione. I robot nella scena restano quelli applicati dalla
+    /// finestra Robot, e le modifiche non applicate restano lì.
     pub fn build_center(&mut self, center: &RobotCell) {
         let robots = self.applied_robot_cell().map(|c| c.robots).unwrap_or_default();
         let cell = RobotCell { robots, ..center.clone() };
@@ -297,7 +303,7 @@ impl crate::app::GestoreApp {
         settings.robots.marker = cell.marker;
         settings.robots.marker_size = cell.marker_size;
         self.apply_settings(settings);
-        self.place_robot_cell(cell);
+        self.place_robot_cell(cell, true);
     }
 
     fn robot_cell_ready(&mut self, cell: &RobotCell) -> bool {
@@ -309,16 +315,26 @@ impl crate::app::GestoreApp {
         !(self.ui_state.is_loading || self.project.busy())
     }
 
-    fn place_robot_cell(&mut self, cell: RobotCell) {
+    /// Mette centro e robot nella scena; con `shift` sposta anche la cabina (stesso passo di Annulla).
+    fn place_robot_cell(&mut self, cell: RobotCell, shift: bool) {
         let replaced = self.robot_node();
+        let center = cell.center();
         if cell.is_empty() {
             if let Some(old) = replaced {
                 self.apply(crate::app::Action::Delete(old));
+            } else if shift {
+                self.push_undo(None);
+            }
+            if shift {
+                self.shift_cabin_to_center(center);
             }
             self.ui_state.status_message = "Centro e robot tolti dalla scena".to_string();
             return;
         }
         self.replace_generated(replaced, scene(&cell), None);
+        if shift {
+            self.shift_cabin_to_center(center);
+        }
         let n = cell.robots.len();
         let done = if replaced.is_some() { "aggiornat" } else { "aggiunt" };
         self.ui_state.status_message = if n == 0 {
@@ -425,27 +441,28 @@ mod tests {
         assert_eq!(app.cabins()[0].2.width, 6000.0);
     }
 
-    /// Simbolo nel centro fisso; robot posizionati dal centro con X Y Z A B C (il braccio, verso
-    /// +X del robot, gira con C); pannello a quota 0 del centro, sotto il robot, con le sue misure.
+    /// Simbolo nello zero della scena (è la cabina a spostarsi); robot posizionati dal centro con
+    /// X Y Z A B C (il braccio, verso +X del robot, gira con C); pannello a quota 0 del centro,
+    /// sotto il robot, con le sue misure.
     #[test]
     fn robots_and_marker_are_where_the_coordinates_say() {
         let c = cell();
         let scene = scene(&c);
         assert!(scene.load_warnings.is_empty(), "{:?}", scene.load_warnings);
         let (lo, hi) = part(&scene, "Centro_sfera").unwrap();
-        assert!(((lo + hi) / 2.0 - c.center()).length() < 1.0);
+        assert!(((lo + hi) / 2.0).length() < 1.0);
 
-        // R11 a (8000, 1800, 0), C = -90°: il suo X va verso -Y della scena
+        // R11 a (-2000, 1800, 0), C = -90°: il suo X va verso -Y della scena
         let (lo, hi) = part(&scene, "R11_corpo").unwrap();
         assert!(lo.z >= -0.5 && (hi.z - 1790.0).abs() < 1.0, "{lo} {hi}");
         assert!(lo.y < 1800.0 - 1200.0 && hi.y < 1800.0 + 300.0, "braccio verso -Y: {lo} {hi}");
-        assert!((lo.x + hi.x) / 2.0 > 7700.0 && (lo.x + hi.x) / 2.0 < 8300.0, "{lo} {hi}");
+        assert!((lo.x + hi.x) / 2.0 > -2300.0 && (lo.x + hi.x) / 2.0 < -1700.0, "{lo} {hi}");
 
         // Pannello: centrato sotto il robot, a Z 0, girato come lui (1200 lungo -Y, 800 lungo X)
         let (lo, hi) = part(&scene, "R11_pannello").unwrap();
         assert!((hi.z - 0.0).abs() < 0.01 && (lo.z + 10.0).abs() < 0.01);
         assert!(((hi.x - lo.x) - 800.0).abs() < 0.5 && ((hi.y - lo.y) - 1200.0).abs() < 0.5, "{lo} {hi}");
-        assert!(((lo + hi) / 2.0 - Vec3::new(8000.0, 1800.0, -5.0)).length() < 0.5);
+        assert!(((lo + hi) / 2.0 - Vec3::new(-2000.0, 1800.0, -5.0)).length() < 0.5);
 
         // Il secondo robot è alzato di 300 e senza pannello; nome con spazio → DEF valido
         let (lo, _) = part(&scene, "Robot_2_assi").unwrap(); // la base del robot
@@ -456,8 +473,8 @@ mod tests {
         assert!(names.iter().any(|n| n == "R11"), "{names:?}");
     }
 
-    /// Dal programma: aggiunti, aggiornati senza doppioni; spostando la cabina il centro resta
-    /// fermo; senza niente da mostrare il file sparisce.
+    /// Dal programma: aggiunti, aggiornati senza doppioni; con il centro nuovo la cabina va a meno
+    /// il centro, spostandola il centro resta fermo; senza niente da mostrare il file sparisce.
     #[test]
     fn build_from_the_app_and_center_stays_fixed() {
         let mut app = crate::app::GestoreApp::new_headless();
@@ -479,16 +496,19 @@ mod tests {
             s.placement(mesh).transform_point3(mid)
         };
         let before = sphere(&app);
+        assert!(before.length() < 1.0, "centro nello zero: {before}");
+        assert_eq!(app.cabin_center().unwrap().0, Vec3::ZERO, "metà cabina (X 10000) sul centro");
         // La cabina si sposta, il centro no
         let node = app.cabin_node().unwrap();
         app.apply(crate::app::Action::Move { nodes: vec![node], matrix: Mat4::from_translation(Vec3::new(-1500.0, 200.0, 0.0)) });
         assert!((sphere(&app) - before).length() < 0.01);
-        assert_eq!(app.cabin_center().unwrap().0, Vec3::new(8500.0, 200.0, 0.0));
+        assert_eq!(app.cabin_center().unwrap().0, Vec3::new(-1500.0, 200.0, 0.0));
 
         let mut moved = cell();
         moved.robots.push(RobotParams { name: moved.next_name(), ..Default::default() });
         app.build_robot_cell(moved);
         assert_eq!(count(&app), 1, "sostituito");
+        assert_eq!(app.cabin_center().unwrap().0, Vec3::new(-1500.0, 200.0, 0.0), "stesso centro: la cabina resta");
         assert_eq!(app.settings.robots.robots.len(), 3, "ricordati nelle preferenze");
 
         app.build_robot_cell(RobotCell::default());
