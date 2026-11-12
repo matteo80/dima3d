@@ -16,8 +16,10 @@ use glam::{Mat4, Vec3};
 use crate::cabin::Boxes;
 use crate::scene_graph::placement::Pose;
 
-/// Nome del file generato nella scena.
+/// Nome del file generato nella scena, con i robot.
 pub const FILE_NAME: &str = "Centro e robot";
+/// Nome del file generato con il solo centro.
+pub const CENTER_NAME: &str = "Centro cabina";
 
 /// Un robot: nome, posizione dal centro cabina e pannello sotto.
 #[derive(Debug, Clone, PartialEq)]
@@ -253,7 +255,8 @@ pub fn vrml(cell: &RobotCell) -> String {
 pub fn scene(cell: &RobotCell) -> crate::scene_graph::SceneGraph {
     let mut scene = crate::parser::parse_wrl(vrml(cell).as_bytes());
     scene.units_mm = true;
-    scene.into_file(FILE_NAME.to_string(), None);
+    let name = if cell.robots.is_empty() { CENTER_NAME } else { FILE_NAME };
+    scene.into_file(name.to_string(), None);
     scene.sources[0].robots = Some(cell.clone());
     scene
 }
@@ -308,20 +311,21 @@ impl crate::app::GestoreApp {
 
     fn place_robot_cell(&mut self, cell: RobotCell) {
         let replaced = self.robot_node();
-        if let Some(old) = replaced {
-            self.apply(crate::app::Action::Delete(old));
-        }
         if cell.is_empty() {
+            if let Some(old) = replaced {
+                self.apply(crate::app::Action::Delete(old));
+            }
             self.ui_state.status_message = "Centro e robot tolti dalla scena".to_string();
             return;
         }
-        self.add_generated(scene(&cell));
+        self.replace_generated(replaced, scene(&cell), None);
         let n = cell.robots.len();
-        self.ui_state.status_message = format!(
-            "Centro e robot {}: {n} robot{}",
-            if replaced.is_some() { "aggiornati" } else { "aggiunti" },
-            if cell.marker { ", simbolo del centro" } else { "" }
-        );
+        let done = if replaced.is_some() { "aggiornat" } else { "aggiunt" };
+        self.ui_state.status_message = if n == 0 {
+            format!("{CENTER_NAME} {done}o: X {} Y {} Z {}", cell.center[0], cell.center[1], cell.center[2])
+        } else {
+            format!("Centro e robot {done}i: {n} robot{}", if cell.marker { ", simbolo del centro" } else { "" })
+        };
     }
 }
 
@@ -378,9 +382,47 @@ mod tests {
         app.poll_loading(&ctx);
         let applied = app.applied_robot_cell().unwrap();
         assert_eq!(applied.center, [500.0, 0.0, 0.0]);
+        assert!(app.scene_graph.as_ref().unwrap().open_files().any(|f| f.name == FILE_NAME), "con i robot");
         assert_eq!(applied.robots, cell().robots, "robot nella scena invariati");
         assert_eq!(app.settings.robots.robots.len(), 3, "le modifiche restano");
         assert_eq!(app.settings.robots.center, [500.0, 0.0, 0.0]);
+    }
+
+    /// Cabina, centro a 5300 applicato, cabina portata sul centro, «Aggiorna», di nuovo il centro:
+    /// annullando tutto non compaiono doppioni (una cabina e un centro per volta).
+    #[test]
+    fn undo_never_duplicates_generated_files() {
+        let mut app = crate::app::GestoreApp::new_headless();
+        let ctx = egui::Context::default();
+        app.build_cabin(crate::cabin::CabinParams::default());
+        app.poll_loading(&ctx);
+        let counts = |app: &crate::app::GestoreApp| {
+            let s = app.scene_graph.as_ref().unwrap();
+            (s.open_files().filter(|f| f.cabin.is_some()).count(), s.open_files().filter(|f| f.robots.is_some()).count())
+        };
+        let center = |x: f32| RobotCell { center: [x, 0.0, 0.0], marker: true, ..RobotCell::default() };
+        app.build_center(&center(5300.0));
+        let (middle, _) = app.cabin_center().unwrap();
+        app.apply(crate::app::Action::Move { nodes: vec![app.cabin_node().unwrap()], matrix: Mat4::from_translation(Vec3::new(5300.0, 0.0, 0.0) - middle) });
+        app.build_cabin(crate::cabin::CabinParams { width: 6000.0, ..crate::cabin::CabinParams::default() });
+        app.build_center(&center(6000.0));
+        assert_eq!(counts(&app), (1, 1));
+        assert!(app.scene_graph.as_ref().unwrap().open_files().any(|f| f.name == CENTER_NAME), "solo il centro");
+        for step in 0..8 {
+            app.undo();
+            assert_eq!(counts(&app).0, 1, "una cabina dopo {} Annulla", step + 1);
+            assert!(counts(&app).1 <= 1, "al massimo un centro dopo {} Annulla", step + 1);
+        }
+        // Tutto annullato: la cabina com'era costruita, senza centro
+        assert_eq!(counts(&app), (1, 0));
+        assert_eq!(app.cabin_center().unwrap().0, Vec3::new(10000.0, 0.0, 0.0));
+        for _ in 0..8 {
+            app.redo();
+            assert_eq!(counts(&app).0, 1);
+            assert!(counts(&app).1 <= 1);
+        }
+        assert_eq!(app.applied_robot_cell().unwrap().center, [6000.0, 0.0, 0.0]);
+        assert_eq!(app.cabins()[0].2.width, 6000.0);
     }
 
     /// Simbolo nel centro fisso; robot posizionati dal centro con X Y Z A B C (il braccio, verso

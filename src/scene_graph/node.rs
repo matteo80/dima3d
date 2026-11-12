@@ -263,6 +263,8 @@ pub struct SceneGraph {
     /// Sistema di coordinate di ogni nodo al caricamento, in unità del file (vedi
     /// `PathSeg::frame`), allineato a `nodes`; più corto = identità
     pub frames: Vec<glam::Mat4>,
+    /// Cerniere salvate (vedi `hinge.rs`): entrano in Annulla e nel progetto
+    pub hinges: Vec<super::hinge::SavedHinge>,
 }
 
 impl SceneGraph {
@@ -765,6 +767,7 @@ impl SceneGraph {
             mesh_to_node: self.mesh_to_node.clone(),
             macro_components: self.macro_components.clone(),
             placements: self.moved_placements(),
+            hinges: self.hinges.clone(),
         }
     }
 
@@ -775,6 +778,7 @@ impl SceneGraph {
         std::mem::swap(&mut self.roots, &mut s.roots);
         std::mem::swap(&mut self.mesh_to_node, &mut s.mesh_to_node);
         std::mem::swap(&mut self.macro_components, &mut s.macro_components);
+        std::mem::swap(&mut self.hinges, &mut s.hinges);
         // Posizioni: si riportano le mesh a quelle salvate, applicando la differenza
         let current = self.moved_placements();
         let wanted: std::collections::HashMap<u32, glam::Mat4> = s.placements.iter().copied().collect();
@@ -1403,6 +1407,7 @@ pub struct EditSnapshot {
     macro_components: Vec<MacroComponent>,
     /// Mesh spostate e loro posizione (solo quelle diverse dall'identità)
     placements: Vec<(u32, glam::Mat4)>,
+    hinges: Vec<super::hinge::SavedHinge>,
 }
 
 impl EditSnapshot {

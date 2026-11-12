@@ -223,6 +223,8 @@ pub struct CabinParams {
     /// Quota del piano del grigliato: 0 = a livello della tavola, negativa = grigliato ribassato
     /// (il robot lavora le parti basse); lo zero della cabina resta al piano della tavola
     pub grid_z: f32,
+    /// Spessore del grigliato verso l'alto (sopra il piano del grigliato) o verso il basso
+    pub grid_up: bool,
     /// Canalina lungo la cabina, nel pavimento
     pub channel: bool,
     /// Posizione dell'asse della canalina (Y), larghezza esterna, profondità interna, spessore
@@ -277,6 +279,7 @@ impl Default for CabinParams {
             exit_width: 3000.0,
             exit_height: 2500.0,
             grid_z: 0.0,
+            grid_up: true,
             channel: false,
             channel_y: 0.0,
             channel_width: 200.0,
@@ -309,6 +312,7 @@ impl CabinParams {
         v.push(u8::from(self.channel).to_string());
         v.push(u8::from(self.conveyor).to_string());
         v.push(u8::from(self.center_marker).to_string());
+        v.push(u8::from(self.grid_up).to_string());
         v.join(" ")
     }
 
@@ -318,9 +322,11 @@ impl CabinParams {
         let v: Vec<f32> = text.split_whitespace().map(|w| w.parse().ok()).collect::<Option<_>>()?;
         let mut p = Self::default();
         let (n, extra) = (p.fields_mut().len(), p.extra_fields_mut().len());
-        if v.len() != n + 1 && v.len() != n + 1 + extra + 3 {
+        if v.len() != n + 1 && v.len() != n + 1 + extra + 3 && v.len() != n + 1 + extra + 4 {
             return None;
         }
+        // Prima della 0.2.13 lo spessore del grigliato andava solo verso il basso
+        p.grid_up = v.get(n + 4 + extra).is_some_and(|x| *x != 0.0);
         for (f, x) in p.fields_mut().into_iter().zip(&v[..n]) {
             *f = *x;
         }
@@ -377,6 +383,17 @@ impl CabinParams {
         ]
     }
 
+    /// Piano superiore del grigliato posato sulla quota `z`: con lo spessore verso l'alto le barre
+    /// stanno sopra, altrimenti sotto.
+    pub fn grid_top(&self, z: f32) -> f32 {
+        if self.grid_up { z + 2.0 * self.bar_thickness } else { z }
+    }
+
+    /// Fondo delle barre del grigliato posato sulla quota `z`.
+    pub fn grid_bottom(&self, z: f32) -> f32 {
+        self.grid_top(z) - 2.0 * self.bar_thickness
+    }
+
     /// Misure da correggere prima di costruire (vuoto se vanno bene).
     pub fn problems(&self) -> Vec<String> {
         let mut out = Vec::new();
@@ -401,7 +418,7 @@ impl CabinParams {
         if self.depth < 0.0 {
             out.push("fondo sotto il grigliato: non può essere negativo".into());
         }
-        if self.grid_z.is_nan() || self.grid_z > 0.0 || self.grid_z - 2.0 * self.bar_thickness < -self.depth {
+        if self.grid_z.is_nan() || self.grid_z > 0.0 || self.grid_bottom(self.grid_z) < -self.depth {
             out.push("quota del grigliato: da 0 (a livello) in giù, sopra il fondo della cabina".into());
         }
         if self.channel {
@@ -706,7 +723,7 @@ fn conveyor(out: &mut String, p: &CabinParams, channel: Option<(f32, f32)>) {
     let busy: Vec<(f32, f32)> = channel.into_iter().collect();
     for x in stations(l, p.grid_module_x).windows(2) {
         for (y0, y1) in free_bands(-inner, inner, &busy) {
-            grating(&mut deck, p, [x[0], x[1]], [y0, y1], 0.0);
+            grating(&mut deck, p, [x[0], x[1]], [y0, y1], p.grid_top(0.0));
         }
     }
     deck.write(out, "Grigliato_tavola", DARK, 0.0);
@@ -732,7 +749,7 @@ fn conveyor(out: &mut String, p: &CabinParams, channel: Option<(f32, f32)>) {
     if p.grid_z < 0.0 {
         let mut sides = Boxes::default();
         for sign in [1.0f32, -1.0] {
-            sides.add([0.0, sign * half, p.grid_z - 2.0 * p.bar_thickness], [l, sign * (half + t), 0.0]);
+            sides.add([0.0, sign * half, p.grid_bottom(p.grid_z)], [l, sign * (half + t), 0.0]);
         }
         sides.write(out, "Sponde", PANEL, 0.0);
     }
@@ -757,7 +774,7 @@ pub fn vrml(p: &CabinParams) -> String {
         for (j, y) in ys.windows(2).enumerate() {
             let mut bars = Boxes::default();
             for (y0, y1) in free_bands(y[0] - half, y[1] - half, &busy) {
-                grating(&mut bars, p, [x[0], x[1]], [y0, y1], p.grid_z);
+                grating(&mut bars, p, [x[0], x[1]], [y0, y1], p.grid_top(p.grid_z));
             }
             bars.write(&mut out, &format!("Modulo_{}_{}", i + 1, j + 1), DARK, 0.0);
         }
@@ -944,6 +961,66 @@ impl crate::app::GestoreApp {
         }
     }
 
+    /// Spostamento che porta la cabina scelta a «costruita e traslata di meno il centro
+    /// applicato» (centro X 5300 Z 544 → cabina a X −5300 Z −544): lo stesso offset che si darebbe
+    /// a mano in Posizione, contato dalla posizione di costruzione (premuto due volte non si somma).
+    /// `None` senza cabina o senza centro applicato.
+    pub fn center_shift(&self) -> Option<glam::Mat4> {
+        let center = self.applied_robot_cell()?.center();
+        let (_, m) = self.cabin_center()?;
+        Some(glam::Mat4::from_translation(-center) * m.inverse())
+    }
+
+    /// Trasla la cabina scelta del centro applicato (vedi [`center_shift`](Self::center_shift)).
+    pub fn shift_cabin_by_center(&mut self) {
+        let (Some(delta), Some(node)) = (self.center_shift(), self.cabin_node()) else { return };
+        let Some(center) = self.applied_robot_cell().map(|c| c.center) else { return };
+        if delta.abs_diff_eq(glam::Mat4::IDENTITY, 1e-4) {
+            return;
+        }
+        // Un passo di Annulla suo (non fuso con uno spostamento fatto appena prima)
+        self.push_undo(None);
+        self.apply_without_undo(crate::app::Action::Move { nodes: vec![node], matrix: delta });
+        self.sync_moved_geometry();
+        self.ui_state.status_message =
+            format!("Cabina traslata del centro applicato: X {} Y {} Z {}", -center[0], -center[1], -center[2]);
+    }
+
+    /// Mette nella scena un file generato al posto di `old` (se c'è) e lo sposta con `placement`:
+    /// un solo passo di Annulla, che rimette il vecchio e toglie il nuovo. Ritorna il nodo del
+    /// file nuovo (`None` con la scena vuota: si apre come un file, senza Annulla).
+    pub(crate) fn replace_generated(
+        &mut self,
+        old: Option<u32>,
+        scene: crate::scene_graph::SceneGraph,
+        placement: Option<glam::Mat4>,
+    ) -> Option<u32> {
+        let Some(current) = &self.scene_graph else {
+            self.add_generated(scene);
+            return None;
+        };
+        let (first_node, first_mesh, first_macro) =
+            (current.nodes.len() as u32, current.shapes_data.len() as u32, current.macro_components.len());
+        self.push_undo(None);
+        if let Some(old) = old {
+            self.apply_without_undo(crate::app::Action::Delete(old));
+        }
+        // Negli stati da annullare il file nuovo non c'è ancora (`add_loaded_file` lo lascerebbe)
+        let mut undo = std::mem::take(&mut self.project.undo);
+        self.add_loaded_file(scene);
+        let current = self.scene_graph.as_ref()?;
+        for s in &mut undo {
+            s.extend_removed(current, first_node, first_mesh, first_macro);
+        }
+        self.project.undo = undo;
+        let new = current.sources.last().map(|f| f.node);
+        if let (Some(m), Some(node)) = (placement.filter(|m| *m != glam::Mat4::IDENTITY), new) {
+            self.apply_without_undo(crate::app::Action::Move { nodes: vec![node], matrix: m });
+        }
+        self.sync_moved_geometry();
+        new
+    }
+
     /// Costruisce la cabina con le misure date: sostituisce quella generata prima, se c'è.
     pub fn build_cabin(&mut self, params: CabinParams) {
         let problems = params.problems();
@@ -969,18 +1046,9 @@ impl crate::app::GestoreApp {
                 .find(|n| !taken.contains(n))
                 .unwrap_or_default(),
         };
-        let had_scene = self.scene_graph.is_some();
-        if let Some(old) = replaced {
-            self.apply(crate::app::Action::Delete(old));
-        }
-        self.add_generated(scene_named(&params, &name));
-        if had_scene {
+        if let Some(new) = self.replace_generated(replaced, scene_named(&params, &name), placement) {
             // La finestra resta sulla cabina appena fatta
-            let new = self.scene_graph.as_ref().and_then(|s| s.open_files().filter(|f| f.cabin.is_some()).last().map(|f| f.node));
-            self.ui_state.cabin_target = new.map(CabinChoice::Node);
-            if let (Some(m), Some(node)) = (placement.filter(|m| *m != glam::Mat4::IDENTITY), new) {
-                self.apply(crate::app::Action::Move { nodes: vec![node], matrix: m });
-            }
+            self.ui_state.cabin_target = Some(CabinChoice::Node(new));
         }
         self.ui_state.status_message = format!(
             "Cabina {}: {} × {} × {} mm",
@@ -1197,13 +1265,13 @@ mod tests {
         // Sponde dal grigliato ribassato al piano della tavola
         let (lo, hi) = part(&scene, "Sponde").unwrap();
         assert_eq!(hi.z, 0.0);
-        assert!(lo.z <= p.grid_z - p.bar_thickness);
+        assert!(lo.z <= p.grid_z + 0.01, "fino al fondo del grigliato");
         // Grigliato alla quota scelta, fuori dalla fascia della tavola e della canalina
         let modules: Vec<_> = scene.shapes_data.iter().filter(|s| s.name.as_deref().is_some_and(|n| n.starts_with("Modulo_"))).collect();
         let band = |v: &[f32; 3], a: f32, b: f32| v[1] > a + 0.5 && v[1] < b - 0.5;
         for m in &modules {
             for v in &m.world_vertices {
-                assert!(v[2] <= p.grid_z + 0.01 && v[2] >= p.grid_z - 2.0 * p.bar_thickness - 0.01, "quota {v:?}");
+                assert!(v[2] >= p.grid_z - 0.01 && v[2] <= p.grid_z + 2.0 * p.bar_thickness + 0.01, "quota {v:?}");
                 assert!(!band(v, -p.conveyor_width / 2.0, p.conveyor_width / 2.0), "sotto la tavola {v:?}");
                 assert!(!band(v, p.channel_y - p.channel_width / 2.0, p.channel_y + p.channel_width / 2.0), "sulla canalina {v:?}");
             }
@@ -1229,6 +1297,49 @@ mod tests {
         assert!(deep.problems().iter().any(|e| e.contains("quota del grigliato")));
     }
 
+    /// Centro applicato a X 5300 Z 544: la cabina si sposta di X −5300 Z −544 dalla posizione di
+    /// costruzione, anche se era già stata spostata; premuto di nuovo non cambia niente.
+    #[test]
+    fn cabin_shifts_by_the_applied_center() {
+        let mut app = crate::app::GestoreApp::new_headless();
+        let ctx = egui::Context::default();
+        app.build_cabin(CabinParams::default());
+        app.poll_loading(&ctx);
+        assert!(app.center_shift().is_none(), "senza centro applicato");
+        app.build_center(&crate::robot::RobotCell { center: [5300.0, 0.0, 544.0], marker: true, ..Default::default() });
+        let node = app.cabin_node().unwrap();
+        app.apply(crate::app::Action::Move { nodes: vec![node], matrix: glam::Mat4::from_translation(glam::Vec3::new(700.0, 30.0, 0.0)) });
+        app.shift_cabin_by_center();
+        let (middle, _) = app.cabin_center().unwrap();
+        assert!((middle - glam::Vec3::new(10000.0 - 5300.0, 0.0, -544.0)).length() < 0.01, "{middle}");
+        app.shift_cabin_by_center();
+        assert!((app.cabin_center().unwrap().0 - middle).length() < 0.01, "non si somma");
+        app.undo();
+        assert!((app.cabin_center().unwrap().0 - glam::Vec3::new(10700.0, 30.0, 0.0)).length() < 0.01);
+    }
+
+    /// Spessore del grigliato: verso l'alto (predefinito) sopra il piano, verso il basso sotto;
+    /// le misure salvate prima della scelta tornano verso il basso, come erano costruite.
+    #[test]
+    fn grating_thickness_goes_up_or_down() {
+        let z_range = |p: &CabinParams| {
+            let scene = scene(p);
+            part(&scene, "Modulo_1_1").map(|(lo, hi)| (lo.z, hi.z)).unwrap()
+        };
+        let up = CabinParams::default();
+        assert!(up.grid_up);
+        assert_eq!(z_range(&up), (0.0, 2.0 * up.bar_thickness));
+        let down = CabinParams { grid_up: false, ..CabinParams::default() };
+        assert_eq!(z_range(&down), (-2.0 * down.bar_thickness, 0.0));
+        let lowered = CabinParams { grid_z: -400.0, ..CabinParams::default() };
+        assert_eq!(z_range(&lowered), (-400.0, -400.0 + 2.0 * lowered.bar_thickness));
+
+        assert_eq!(CabinParams::from_text(&down.to_text()).unwrap().grid_up, false);
+        assert_eq!(CabinParams::from_text(&up.to_text()).unwrap().grid_up, true);
+        let old = up.to_text().rsplit_once(' ').unwrap().0.to_string();
+        assert_eq!(CabinParams::from_text(&old).unwrap().grid_up, false, "file della 0.2.12");
+    }
+
     /// Il simbolo del centro non è più nella cabina (sta fisso in «Centro e robot»).
     #[test]
     fn cabin_has_no_center_marker() {
@@ -1247,7 +1358,7 @@ mod tests {
         assert_eq!(CabinParams::from_text(&full.to_text()), Some(full));
         // Preferenze della versione precedente (18 misure e la vetrata): si leggono ancora
         let old = "20000 5700 3100 1250 2000 100 50 1000 3000 100 20 10 6000 2000 3000 2500 3000 2500 1";
-        assert_eq!(CabinParams::from_text(old), Some(CabinParams::default()));
+        assert_eq!(CabinParams::from_text(old), Some(CabinParams { grid_up: false, ..CabinParams::default() }));
         let wrong = CabinParams { length: 20.0, width: 5.7, bar_pitch: 0.0, entry_width: 9000.0, ..CabinParams::default() };
         let problems = wrong.problems();
         assert!(problems.iter().any(|p| p.contains("passo delle barre")), "{problems:?}");

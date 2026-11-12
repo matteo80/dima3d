@@ -1,6 +1,7 @@
 pub mod bbox;
 pub mod builder;
 pub mod copy;
+pub mod hinge;
 pub mod node;
 pub mod linkage;
 pub mod motion;

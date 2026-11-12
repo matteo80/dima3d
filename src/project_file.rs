@@ -23,6 +23,8 @@
 //! colore = 12 1 0.5 0 1
 //! nome = 14 Nuovo nome
 //! posizione = 7 m0 … m15                (mesh del file, matrice per colonne)
+//! cerniera = 7 3 4 | 35 0 70 | px py pz dx dy dz | Porta   (mesh di riferimento, nodi della
+//!                                        parte | angolo, limiti | asse nella mesh | nome)
 //!
 //! [copia]                               (pezzi incollati: si rifà la copia, poi le modifiche)
 //! di = 0                                (modello o copia da cui viene, in ordine nel progetto)
@@ -50,8 +52,8 @@ use crate::settings::{StepLoad, StepMesh};
 
 pub const EXTENSION: &str = "dima3d";
 /// 2: copie incollate, gruppi creati e pezzi spostati nell'albero. 3: cabina generata.
-/// 4: centro cabina e robot.
-const VERSION: u32 = 4;
+/// 4: centro cabina e robot. 5: cerniere salvate.
+const VERSION: u32 = 5;
 
 /// Vista salvata: centro, distanza e orientamento della camera.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -90,6 +92,8 @@ pub struct FileEntry {
     pub cabin: Option<crate::cabin::CabinParams>,
     /// Centro cabina e robot generati; `path` resta vuoto
     pub robots: Option<crate::robot::RobotCell>,
+    /// Cerniere della parte di questo file: nodi con il numero fisso, mesh dall'inizio del file
+    pub hinges: Vec<crate::scene_graph::hinge::SavedHinge>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -260,6 +264,22 @@ impl ProjectFile {
                     entry.placements.push((mesh - source.meshes.start, m));
                 }
             }
+            // Cerniere attaccate a un pezzo di questo file (solo i nodi del file e non eliminati)
+            let in_file: std::collections::HashSet<u32> = nodes.iter().copied().collect();
+            for (_, h) in scene.live_hinges() {
+                if !source.meshes.contains(&h.ref_mesh) {
+                    continue;
+                }
+                let nodes: Vec<u32> = h
+                    .nodes
+                    .iter()
+                    .filter(|&&n| in_file.contains(&n) && !scene.info[n as usize].deleted)
+                    .map(|&n| origin(n))
+                    .collect();
+                if !nodes.is_empty() {
+                    entry.hinges.push(crate::scene_graph::hinge::SavedHinge { nodes, ref_mesh: h.ref_mesh - source.meshes.start, ..h.clone() });
+                }
+            }
             files.push(entry);
         }
         ProjectFile { cluster, camera, files }
@@ -334,6 +354,9 @@ impl ProjectFile {
             for (mesh, m) in &f.placements {
                 let values: Vec<String> = m.to_cols_array().iter().map(f32::to_string).collect();
                 out.push_str(&format!("posizione = {mesh} {}\n", values.join(" ")));
+            }
+            for h in &f.hinges {
+                out.push_str(&format!("cerniera = {}\n", h.to_text(&h.nodes, h.ref_mesh)));
             }
         }
         out
@@ -456,6 +479,7 @@ impl ProjectFile {
                     let m = floats::<16>(rest).ok_or_else(|| bad(i))?;
                     f.placements.push((n.parse().map_err(|_| bad(i))?, Mat4::from_cols_array(&m)));
                 }
+                (Some(f), "cerniera") => f.hinges.push(crate::scene_graph::hinge::SavedHinge::from_text(value).ok_or_else(|| bad(i))?),
                 // Chiavi sconosciute (versioni future): si ignorano
                 _ => {}
             }
@@ -533,6 +557,16 @@ impl ProjectFile {
         }
         let list: Vec<u32> = placements.iter().map(|(m, _)| *m).collect();
         scene.set_placements(&list, |mesh| placements.iter().find(|(m, _)| *m == mesh).map_or(Mat4::IDENTITY, |(_, p)| *p));
+        // Cerniere: nodi e mesh di riferimento con i numeri di questa scena
+        for h in &entry.hinges {
+            let nodes: Vec<u32> = h.nodes.iter().filter_map(|&rel| node(rel)).collect();
+            match meshes.start.checked_add(h.ref_mesh).filter(|x| meshes.contains(x)) {
+                Some(ref_mesh) if !nodes.is_empty() => {
+                    scene.hinges.push(crate::scene_graph::hinge::SavedHinge { nodes, ref_mesh, ..h.clone() });
+                }
+                _ => skipped += 1,
+            }
+        }
         // Le eliminazioni per ultime: tolgono i nodi dall'albero
         for &rel in &entry.deleted {
             match node(rel) {
@@ -589,6 +623,16 @@ mod tests {
             children: vec![(4, vec![7, 812, 9]), (812, vec![])],
             cabin: None,
             robots: None,
+            hinges: vec![crate::scene_graph::hinge::SavedHinge {
+                name: "Porta ant. sx".into(),
+                nodes: vec![7, 9],
+                ref_mesh: 3,
+                point: Vec3::new(10.0, -20.5, 300.0),
+                dir: Vec3::Y,
+                angle: 12.5,
+                min: 0.0,
+                max: 70.0,
+            }],
         };
         let copy = FileEntry {
             scale: 1.0,

@@ -122,8 +122,28 @@ pub fn draw_viewport(ui: &mut egui::Ui, app: &mut crate::app::GestoreApp) {
                 pivot,
                 upside_down: renderer.camera.up().dot(world_up) < 0.0,
             });
+            // Ctrl + trascina su una parte con cerniera: si apre la parte invece di girare la vista
+            app.ui_state.hinge_drag = None;
+            let ctrl = ui.input(|i| i.modifiers.command || i.modifiers.ctrl);
+            let primary = ui.input(|i| i.pointer.button_down(egui::PointerButton::Primary));
+            if let (true, true, Some(ray), Some(scene)) = (ctrl, primary, ray, app.scene_graph.as_ref()) {
+                if let Some((mesh, t, _)) = pick(scene, &renderer.visibility, section, ray) {
+                    if let Some(index) = scene.hinge_of_mesh(mesh) {
+                        let back = scene.placement(scene.hinges[index].ref_mesh).inverse();
+                        let grab = back.transform_point3(ray.0 + ray.1 * t);
+                        app.ui_state.hinge_drag = Some(super::hinge_label::HingeDrag { index, grab });
+                        // La parte diventa la selezione: compare l'etichetta con i gradi
+                        let first = scene.hinges[index].nodes.first().copied();
+                        let selected = app.ui_state.selected_node.and_then(|n| scene.hinge_of_node(n));
+                        if selected != Some(index) {
+                            actions.push(Action::Select { node: first, reveal: true });
+                        }
+                    }
+                }
+            }
         } else if !response.dragged() {
             app.ui_state.drag = None;
+            app.ui_state.hinge_drag = None;
         }
         let drag = app.ui_state.drag.unwrap_or(DragState {
             pivot: renderer.camera.target,
@@ -133,7 +153,20 @@ pub fn draw_viewport(ui: &mut egui::Ui, app: &mut crate::app::GestoreApp) {
         // Modalità zoom: tasto sinistro + rotella premuti insieme.
         // Mouse verso l'alto → zoom in, verso il basso → zoom out.
         let zoom_sign = if app.settings.invert_zoom { -1.0 } else { 1.0 };
-        if response.dragged() && left_down && middle_down {
+        if let (Some(hd), true) = (app.ui_state.hinge_drag, response.dragged_by(egui::PointerButton::Primary)) {
+            let delta = response.drag_delta();
+            if let Some(scene) = app.scene_graph.as_ref().filter(|_| delta != egui::Vec2::ZERO) {
+                if let Some(h) = scene.hinges.get(hd.index) {
+                    let grab = scene.placement(h.ref_mesh).transform_point3(hd.grab);
+                    let camera = &renderer.camera;
+                    let screen = |v: glam::Vec3| to_screen(camera, rect, v).map(|p| glam::vec2(p.x, p.y));
+                    if let Some(deg) = scene.hinge_drag_degrees(hd.index, grab, glam::vec2(delta.x, delta.y), screen) {
+                        actions.push(Action::SetHingeAngle { index: hd.index, angle: h.angle + deg });
+                    }
+                }
+            }
+            ui.ctx().request_repaint();
+        } else if response.dragged() && left_down && middle_down {
             let delta = response.drag_delta();
             renderer.camera.dolly(drag.pivot, delta.y * zoom_sign);
             ui.ctx().request_repaint();
@@ -435,6 +468,12 @@ pub fn draw_viewport(ui: &mut egui::Ui, app: &mut crate::app::GestoreApp) {
             super::cabin_panel::draw_center(ui, rect, center, glam::Mat4::IDENTITY, size, offset, |v| to_screen(camera, rect, v));
         }
     }
+    // Cerniera salvata della parte selezionata: etichetta con i gradi
+    if app.renderer.is_some() && app.scene_graph.is_some() && !app.ui_state.position.hinge.picking {
+        if let Some(view_proj) = app.renderer.as_ref().map(|r| r.camera.view_proj()) {
+            super::hinge_label::draw_label(ui, rect, app, |v| project(view_proj, rect, v));
+        }
+    }
     // Cerniera: punti e asse
     if app.ui_state.position.open {
         if let (Some(renderer), Some(scene)) = (&app.renderer, &app.scene_graph) {
@@ -567,7 +606,12 @@ fn draw_section_controls(
 
 /// Posizione sullo schermo di un punto 3D (None se dietro la camera).
 fn to_screen(camera: &ArcballCamera, rect: egui::Rect, p: glam::Vec3) -> Option<egui::Pos2> {
-    let clip = camera.view_proj() * p.extend(1.0);
+    project(camera.view_proj(), rect, p)
+}
+
+/// Come [`to_screen`], con la matrice vista-proiezione già calcolata.
+fn project(view_proj: glam::Mat4, rect: egui::Rect, p: glam::Vec3) -> Option<egui::Pos2> {
+    let clip = view_proj * p.extend(1.0);
     if clip.w <= 0.0 {
         return None;
     }

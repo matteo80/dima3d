@@ -81,6 +81,9 @@ pub enum Action {
     NewGroup(Vec<u32>),
     /// Gruppo vuoto dentro un file o un gruppo (di un pezzo: nel suo gruppo), poi la rinomina.
     NewEmptyGroup(u32),
+    /// Apre la cerniera salvata `index` a `angle` gradi (vedi `scene_graph::hinge`); aperture
+    /// consecutive della stessa cerniera sono un solo passo di Annulla.
+    SetHingeAngle { index: usize, angle: f32 },
 }
 
 impl Action {
@@ -315,6 +318,7 @@ impl GestoreApp {
                 Action::SetColor(n, _) => Some(*n),
                 // Bit alto: chiave diversa da quella dei colori dello stesso nodo
                 Action::Move { nodes, .. } => nodes.first().map(|n| n | 0x8000_0000),
+                Action::SetHingeAngle { index, .. } => Some(*index as u32 | 0x4000_0000),
                 Action::Batch(list) => match list.first() {
                     Some(Action::SetColor(n, _)) => Some(*n),
                     Some(Action::Move { nodes, .. }) => nodes.first().map(|n| n | 0x8000_0000),
@@ -367,7 +371,7 @@ impl GestoreApp {
         }
     }
 
-    fn apply_without_undo(&mut self, action: Action) {
+    pub(crate) fn apply_without_undo(&mut self, action: Action) {
         if let Action::Batch(list) = action {
             let count = list.len();
             for a in list {
@@ -397,6 +401,15 @@ impl GestoreApp {
                 }
                 return;
             }
+            Action::SetHingeAngle { index, angle } => {
+                if let Some(scene) = &mut self.scene_graph {
+                    if let Some(done) = scene.set_hinge_angle(*index, *angle) {
+                        let name = scene.hinges[*index].name.clone();
+                        self.ui_state.status_message = format!("{name}: aperta a {done:.1}°");
+                    }
+                }
+                return;
+            }
             Action::ResetPosition(nodes) => {
                 if let Some(scene) = &mut self.scene_graph {
                     let meshes = scene.meshes_of(nodes);
@@ -415,6 +428,7 @@ impl GestoreApp {
             | Action::IsolateMany(_)
             | Action::FocusMany(_)
             | Action::Move { .. }
+            | Action::SetHingeAngle { .. }
             | Action::ResetPosition(_)
             // Gestite in `apply`
             | Action::Copy(_)

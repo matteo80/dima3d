@@ -365,6 +365,8 @@ pub struct Hinge {
     /// Un pezzo della parte che si apre e la sua posizione con il meccanismo a 0°: dopo Annulla o
     /// altre modifiche si ritrova a che angolo è il meccanismo
     pub arm_ref: Option<(u32, Mat4)>,
+    /// Nome della cerniera da salvare
+    pub save_name: String,
 }
 
 impl Default for Hinge {
@@ -385,6 +387,7 @@ impl Default for Hinge {
             arm: Vec::new(),
             links: [Vec::new(), Vec::new()],
             arm_ref: None,
+            save_name: String::new(),
         }
     }
 }
@@ -751,6 +754,9 @@ pub fn draw(ctx: &egui::Context, app: &mut GestoreApp, pass: super::dock::Pass) 
     let mut start_picking = false;
     // Dopo «Calcola l'asse»: i pezzi della prima posizione che si muovono diventano l'oggetto da ruotare
     let mut select_first: Option<Vec<u32>> = None;
+    let mut save_hinge: Option<(String, Vec<u32>, Vec3, Vec3, f32)> = None;
+    let saved_hinges: Vec<(usize, crate::scene_graph::hinge::SavedHinge)> = scene.live_hinges().map(|(i, h)| (i, h.clone())).collect();
+    let mut hinge_cmds: Vec<super::hinge_label::HingeCmd> = Vec::new();
     let mut sections = app.settings.position_sections;
     // Su schermi bassi la finestra non deve uscire: il contenuto scorre
     let max_height = (ctx.screen_rect().height() - 120.0).max(150.0);
@@ -1249,7 +1255,26 @@ pub fn draw(ctx: &egui::Context, app: &mut GestoreApp, pass: super::dock::Pass) 
                                     }
                                 }
                             });
+                            // Cerniera salvata: si apre poi dalla vista, cliccando la parte
+                            ui.horizontal_wrapped(|ui| {
+                                ui.add(egui::TextEdit::singleline(&mut h.save_name).hint_text("Nome, es. Porta ant. sx").desired_width(130.0));
+                                if ui
+                                    .add_enabled(!nodes.is_empty(), egui::Button::new(icon_text(ui, icon::DOOR_OPEN, "Salva cerniera")))
+                                    .on_hover_text(
+                                        "Ricorda asse e parte (l'oggetto scelto sopra) nel progetto: poi basta cliccare la parte \
+                                         nella vista per aprirla con i gradi. La posizione in cui hai scelto l'asse è 0°",
+                                    )
+                                    .on_disabled_hover_text("Scegli prima l'oggetto (la parte che si apre)")
+                                    .clicked()
+                                {
+                                    save_hinge = Some((h.save_name.clone(), nodes.clone(), o, d, h.angle));
+                                    h.save_name.clear();
+                                }
+                            });
                         }
+                        ui.separator();
+                        ui.label(egui::RichText::new("Cerniere salvate").strong());
+                        hinge_cmds = super::hinge_label::draw_list(ui, &saved_hinges);
                     });
 
                 // ── Applica offset ─────────────────────────────────────────────
@@ -1460,6 +1485,10 @@ pub fn draw(ctx: &egui::Context, app: &mut GestoreApp, pass: super::dock::Pass) 
     for a in actions {
         app.apply(a);
     }
+    if let Some((name, nodes, o, d, angle)) = save_hinge {
+        app.save_hinge(&name, nodes, o, d, angle);
+    }
+    super::hinge_label::run(app, hinge_cmds);
     // Il valore del cursore resta valido dopo i propri spostamenti
     if let Some(s) = &app.scene_graph {
         app.ui_state.position.revision = s.revision;
@@ -1557,6 +1586,97 @@ DEF Destinazione Group { children [
                 .center();
             self.press_at(app, at);
         }
+    }
+
+    /// Cerniera salvata: «Salva cerniera» ricorda asse e parte; la parte si apre ai gradi scritti
+    /// (entro i limiti), l'asse segue l'oggetto spostato con Posizione, Annulla torna indietro e
+    /// il progetto la riporta uguale.
+    #[test]
+    fn saved_hinge_opens_follows_the_object_and_goes_in_the_project() {
+        let mut app = app();
+        let ui = Ui { ctx: egui::Context::default() };
+        let rif = node(&app, "Riferimento", 0);
+        app.ui_state.select_single(Some(rif));
+        ui.run(&mut app, vec![]);
+        ui.click(&mut app, "Due punti", 0);
+        ui.click(&mut app, "Scegli l'asse nella vista", 0);
+        app.ui_state.position.hinge.add_point(Vec3::new(100.0, 200.0, 300.0));
+        app.ui_state.position.hinge.add_point(Vec3::new(100.0, 200.0, 310.0));
+        app.ui_state.position.hinge.save_name = "Porta".into();
+        ui.click(&mut app, "Salva cerniera", 0);
+        let scene = app.scene_graph.as_ref().unwrap();
+        assert_eq!(scene.hinges.len(), 1, "{}", app.ui_state.status_message);
+        assert_eq!(scene.hinges[0].name, "Porta");
+        assert_eq!(app.selected_hinge(), Some(0), "la parte selezionata ha la cerniera");
+        let file_root = app.scene_graph.as_ref().unwrap().sources[0].node;
+        assert_eq!(app.scene_graph.as_ref().unwrap().hinge_of_node(file_root), None, "tutto il file non è la parte");
+        let texts = ui.run(&mut app, vec![]);
+        assert!(texts.iter().any(|(t, _)| t.ends_with("Porta")), "nell'elenco");
+
+        let vertex = |app: &GestoreApp, i: usize| {
+            let s = app.scene_graph.as_ref().unwrap();
+            Vec3::from(s.shapes_data[s.meshes_of(&[rif])[0] as usize].world_vertices[i])
+        };
+        app.apply(Action::SetHingeAngle { index: 0, angle: 90.0 });
+        assert!((vertex(&app, 1) - Vec3::new(50.0, 200.0, 300.0)).length() < 1e-3, "{:?}", vertex(&app, 1));
+        app.apply(Action::SetHingeAngle { index: 0, angle: 200.0 });
+        assert_eq!(app.scene_graph.as_ref().unwrap().hinges[0].angle, 90.0, "fermo al limite");
+        let undo_steps = app.project.undo.len();
+
+        // Tutto l'oggetto si sposta: l'asse lo segue, chiudendo la parte torna al suo posto
+        let shift = Vec3::new(1000.0, 0.0, 0.0);
+        app.apply(Action::Move { nodes: vec![rif], matrix: Mat4::from_translation(shift) });
+        let (o, _) = { let s = app.scene_graph.as_ref().unwrap(); s.hinge_axis(&s.hinges[0]) };
+        assert!((o - Vec3::new(1100.0, 200.0, 300.0)).length() < 1e-3, "{o}");
+        app.apply(Action::SetHingeAngle { index: 0, angle: 0.0 });
+        assert!((vertex(&app, 1) - (Vec3::new(100.0, 250.0, 300.0) + shift)).length() < 1e-3, "{:?}", vertex(&app, 1));
+
+        // Progetto: stessa cerniera, stesso asse
+        app.apply(Action::SetHingeAngle { index: 0, angle: 30.0 });
+        // Nel progetto vanno solo i modelli con un file (qui letti dalla memoria)
+        for (k, f) in app.scene_graph.as_mut().unwrap().sources.iter_mut().enumerate() {
+            f.path = Some(std::path::PathBuf::from(format!(r"D:\prova\skid{k}.wrl")));
+        }
+        let file = crate::project_file::ProjectFile::capture(app.scene_graph.as_ref().unwrap(), Default::default(), None);
+        let path = std::path::Path::new(r"D:\prova\cerniere.dima3d");
+        let text = file.to_text(path);
+        assert!(text.contains("cerniera = "), "{text}");
+        let back = crate::project_file::ProjectFile::from_text(&text, path).unwrap();
+        let mut other = super::tests::app();
+        let scene = other.scene_graph.as_mut().unwrap();
+        for (i, entry) in back.files.iter().enumerate() {
+            assert_eq!(crate::project_file::ProjectFile::apply_entry(entry, scene, i), 0);
+        }
+        let (a, b) = (app.scene_graph.as_ref().unwrap(), other.scene_graph.as_ref().unwrap());
+        assert_eq!(b.hinges.len(), 1);
+        assert_eq!((b.hinges[0].name.as_str(), b.hinges[0].angle, b.hinges[0].nodes.clone()), ("Porta", 30.0, a.hinges[0].nodes.clone()));
+        let ((o1, d1), (o2, d2)) = (a.hinge_axis(&a.hinges[0]), b.hinge_axis(&b.hinges[0]));
+        assert!((o1 - o2).length() < 1e-3 && (d1 - d2).length() < 1e-5);
+
+        // Annulla: si torna indietro passo per passo, fino a prima della cerniera
+        for _ in 0..10 {
+            app.undo();
+        }
+        assert!(app.scene_graph.as_ref().unwrap().hinges.is_empty());
+        assert!((vertex(&app, 1) - Vec3::new(100.0, 250.0, 300.0)).length() < 1e-3);
+        assert!(undo_steps >= 2, "salvataggio e apertura sono passi distinti");
+    }
+
+    /// Trascinando la parte con il mouse il punto preso segue il mouse lungo l'arco: in una vista
+    /// dall'alto, asse Z e punto a 100 mm, 100·π/2 pixel verso +Y aprono di 90°.
+    #[test]
+    fn dragging_the_part_follows_the_mouse() {
+        let mut app = app();
+        let rif = node(&app, "Riferimento", 0);
+        let i = app.save_hinge("Sportello", vec![rif], Vec3::ZERO, Vec3::Z, 0.0).unwrap();
+        let s = app.scene_graph.as_ref().unwrap();
+        let screen = |v: Vec3| Some(glam::vec2(v.x, -v.y));
+        let pixels = 100.0 * std::f32::consts::FRAC_PI_2;
+        let deg = s.hinge_drag_degrees(i, Vec3::new(100.0, 0.0, 0.0), glam::vec2(0.0, -pixels), screen).unwrap();
+        assert!((deg - 90.0).abs() < 0.5, "{deg}");
+        let back = s.hinge_drag_degrees(i, Vec3::new(100.0, 0.0, 0.0), glam::vec2(0.0, pixels), screen).unwrap();
+        assert!((back + 90.0).abs() < 0.5, "{back}");
+        assert!(s.hinge_drag_degrees(i, Vec3::ZERO, glam::vec2(0.0, 10.0), screen).is_none(), "sull'asse");
     }
 
     /// Frecce sull'asse X: in coordinate dell'oggetto (ruotato di 90° attorno a Z) l'oggetto va

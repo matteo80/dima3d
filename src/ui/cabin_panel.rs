@@ -188,6 +188,9 @@ pub fn draw(ctx: &egui::Context, app: &mut GestoreApp, pass: super::dock::Pass) 
     let cell_center = cell.center();
     let mut apply_cell = false;
     let mut move_to: Option<glam::Vec3> = None;
+    let applied_center = app.applied_robot_cell().map(|c| c.center);
+    let shift = app.center_shift();
+    let mut shift_cabin = false;
     let window = super::dock::Dockable {
         id: "finestra_cabina",
         title: format!("{}  Cabina", icon::CUBE_TRANSPARENT),
@@ -260,7 +263,15 @@ pub fn draw(ctx: &egui::Context, app: &mut GestoreApp, pass: super::dock::Pass) 
                     egui::Grid::new("cabina_grigliato").num_columns(2).show(ui, |ui| {
                         mm(ui, "Passo delle barre", "Distanza tra le barre, nei due versi", &mut p.bar_pitch);
                         mm(ui, "Larghezza barre", "Larghezza delle barre piatte", &mut p.bar_width);
-                        mm(ui, "Spessore barre", "Spessore delle barre piatte", &mut p.bar_thickness);
+                        mm(ui, "Spessore barre", "Spessore delle barre piatte (il grigliato ne ha due strati)", &mut p.bar_thickness);
+                        ui.label("Spessore verso").on_hover_text("Da che parte del piano del grigliato stanno le barre");
+                        ui.horizontal(|ui| {
+                            ui.selectable_value(&mut p.grid_up, true, "Alto")
+                                .on_hover_text("Le barre stanno sopra il piano del grigliato: il piano è il fondo delle barre");
+                            ui.selectable_value(&mut p.grid_up, false, "Basso")
+                                .on_hover_text("Le barre stanno sotto il piano del grigliato: il piano è la loro faccia superiore");
+                        });
+                        ui.end_row();
                         mm(ui, "Moduli lungo X", "Lunghezza dei moduli del grigliato", &mut p.grid_module_x);
                         mm(ui, "Moduli lungo Y", "Larghezza dei moduli del grigliato", &mut p.grid_module_y);
                         ui.label("Grigliato ribassato");
@@ -338,7 +349,7 @@ pub fn draw(ctx: &egui::Context, app: &mut GestoreApp, pass: super::dock::Pass) 
                         }
                     });
                     ui.checkbox(&mut cell.marker, "Simbolo nel centro (si esporta)").on_hover_text(
-                        "Sfera gialla con gli assi X (rosso), Y (verde) e Z (blu), nel file «Centro e robot»: \
+                        "Sfera gialla con gli assi X (rosso), Y (verde) e Z (blu), nel file «Centro cabina» («Centro e robot» con i robot): \
                          si vede, si seleziona e si esporta. Si applica con «Applica centro»",
                     );
                     if cell.marker {
@@ -368,11 +379,27 @@ pub fn draw(ctx: &egui::Context, app: &mut GestoreApp, pass: super::dock::Pass) 
                                 offset.z
                             )).monospace());
                             if ui
-                                .add_enabled(!busy && offset.length() > 0.001, egui::Button::new("Porta la cabina sul centro"))
-                                .on_hover_text("Sposta la cabina (senza ruotarla) in modo che la sua metà vada sul centro (Ctrl+Z per tornare indietro)")
+                                .add_enabled(!busy && offset.length() > 0.001, egui::Button::new("Metà cabina sul centro"))
+                                .on_hover_text("Sposta la cabina (senza ruotarla) in modo che la sua metà vada sul centro scritto qui sopra (Ctrl+Z per tornare indietro)")
                                 .clicked()
                             {
                                 move_to = Some(-offset);
+                            }
+                            let applied = applied_center.map(|c| {
+                                format!("X {:+.1} Y {:+.1} Z {:+.1}", -c[0], -c[1], -c[2])
+                            });
+                            let to_do = shift.is_some_and(|m| !m.abs_diff_eq(glam::Mat4::IDENTITY, 1e-4));
+                            if ui
+                                .add_enabled(!busy && to_do, egui::Button::new("Trasla la cabina del centro applicato"))
+                                .on_hover_text(match &applied {
+                                    Some(t) => format!(
+                                        "Sposta la cabina di {t} dalla posizione in cui è stata costruita: lo stesso offset                                          che daresti a mano in Posizione. Premuto di nuovo non si somma (Ctrl+Z per tornare indietro)"
+                                    ),
+                                    None => "Prima applica il centro con «Applica centro»".to_string(),
+                                })
+                                .clicked()
+                            {
+                                shift_cabin = true;
                             }
                         }
                         None => {
@@ -425,6 +452,9 @@ pub fn draw(ctx: &egui::Context, app: &mut GestoreApp, pass: super::dock::Pass) 
     if let (Some(delta), Some(node)) = (move_to, app.cabin_node()) {
         app.apply(crate::app::Action::Move { nodes: vec![node], matrix: glam::Mat4::from_translation(delta) });
         app.ui_state.status_message = "Cabina spostata: la sua metà è sul centro cabina".to_string();
+    }
+    if shift_cabin {
+        app.shift_cabin_by_center();
     }
     if !open {
         app.ui_state.cabin_open = false;

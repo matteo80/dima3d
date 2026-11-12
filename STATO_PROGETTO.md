@@ -962,6 +962,14 @@ Fatto:
       %LOCALAPPDATA%\Programs\Dima3D senza permessi da amministratore, menu Start, desktop facoltativo,
       associazione dei .dima3d facoltativa, disinstallazione. `pacchetto.ps1` lo crea, `pubblica.ps1` lo carica nella
       Release accanto allo zip; dopo un aggiornamento dal programma si aggiorna la versione in «App installate».
+- [x] (2026-11-12, 0.2.13) **Cerniere salvate** (`scene_graph/hinge.rs`, `ui/hinge_label.rs`): dalla finestra
+      Posizione «Salva cerniera» ricorda asse e parte; nella vista, cliccando la parte, un'etichetta con i gradi
+      (Chiudi/Apri ai limiti), Ctrl + trascina la apre con il mouse. Asse nelle coordinate di un pezzo della parte
+      (segue gli spostamenti dell'oggetto), angolo e limiti salvati; entrano in Annulla e nel progetto (formato 5,
+      `cerniera = …`). Solo cerniere su un asse (non i 4 perni). Cabina: Annulla non crea più cabine e centri doppi
+      (`replace_generated`: sostituzione in un passo), file «Centro cabina» con il solo centro, spessore del grigliato
+      verso l'alto o il basso (predefinito alto; le misure vecchie restano verso il basso), «Trasla la cabina del
+      centro applicato» (la cabina si sposta di meno il centro, dalla posizione di costruzione).
 - [x] (2026-11-11, 0.2.12) **Misure PDF** (`src/pdf_measure/`, finestra `ui/pdf_panel.rs`, pulsante
       «Misure PDF»): porting in Rust dello script Python di misura sui layout PDF. Calibrazione della scala su una
       distanza nota, misura con Delta X, Delta Y e distanza in mm (anche mentre si muove il mouse). Rendering a tile

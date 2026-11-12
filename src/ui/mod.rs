@@ -1,6 +1,7 @@
 pub mod about;
 pub mod cabin_panel;
 pub mod dock;
+pub mod hinge_label;
 pub mod color_menu;
 pub mod measure;
 pub mod pdf_panel;
@@ -65,6 +66,8 @@ pub struct UiState {
     pub section: Option<crate::renderer::Section>,
     /// Riferimento del trascinamento in corso nella viewport
     pub drag: Option<viewport::DragState>,
+    /// Ctrl + trascina su una parte con cerniera: la si apre con il mouse
+    pub hinge_drag: Option<hinge_label::HingeDrag>,
     /// Punto usato dall'ultimo scatto di rotella, riutilizzabile finché nulla si muove
     pub zoom_anchor: Option<viewport::ZoomAnchor>,
     /// Finestra «Posizione»
@@ -120,6 +123,7 @@ impl Default for UiState {
             about: false,
             section: None,
             drag: None,
+            hinge_drag: None,
             zoom_anchor: None,
             position: Default::default(),
             cabin_open: false,
