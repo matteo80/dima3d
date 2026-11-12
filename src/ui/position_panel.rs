@@ -1269,6 +1269,11 @@ pub fn draw(ctx: &egui::Context, app: &mut GestoreApp, pass: super::dock::Pass) 
                                 {
                                     save_hinge = Some((h.save_name.clone(), nodes.clone(), o, d, h.angle));
                                     h.save_name.clear();
+                                    // Salvata: l'asse ora è della cerniera (si vede con la parte selezionata)
+                                    h.points.clear();
+                                    h.axis = None;
+                                    h.angle = 0.0;
+                                    h.motion = None;
                                 }
                             });
                         }
@@ -1607,6 +1612,8 @@ DEF Destinazione Group { children [
         let scene = app.scene_graph.as_ref().unwrap();
         assert_eq!(scene.hinges.len(), 1, "{}", app.ui_state.status_message);
         assert_eq!(scene.hinges[0].name, "Porta");
+        let h = &app.ui_state.position.hinge;
+        assert!(h.axis.is_none() && h.points.is_empty(), "salvata: niente asse fisso nella vista");
         assert_eq!(app.selected_hinge(), Some(0), "la parte selezionata ha la cerniera");
         let file_root = app.scene_graph.as_ref().unwrap().sources[0].node;
         assert_eq!(app.scene_graph.as_ref().unwrap().hinge_of_node(file_root), None, "tutto il file non è la parte");

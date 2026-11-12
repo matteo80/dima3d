@@ -962,6 +962,10 @@ Fatto:
       %LOCALAPPDATA%\Programs\Dima3D senza permessi da amministratore, menu Start, desktop facoltativo,
       associazione dei .dima3d facoltativa, disinstallazione. `pacchetto.ps1` lo crea, `pubblica.ps1` lo carica nella
       Release accanto allo zip; dopo un aggiornamento dal programma si aggiorna la versione in «App installate».
+- [x] (2026-11-12, 0.2.15) Cerniere: dopo «Salva cerniera» l'asse in lavorazione della finestra
+      Posizione si azzera (prima restava una linea arancione fissa nella vista); l'etichetta della cerniera si
+      sposta trascinando il titolo (spostamento ricordato per cerniera, doppio clic la riporta vicino alla parte,
+      linea sottile verso la parte quando è lontana).
 - [x] (2026-11-12, 0.2.14) **Centro cabina come punto della cabina** (richiesta dell'utente): X Y Z del
       centro sono nelle coordinate della cabina costruita (dall'ingresso, sull'asse, al grigliato), come nel
       controllore. «Applica centro» porta la cabina a meno il centro dalla posizione di costruzione

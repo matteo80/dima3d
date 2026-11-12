@@ -120,15 +120,32 @@ pub fn draw_label(
         painter.line_segment([a, b], egui::Stroke::new(2.0_f32, accent));
     }
 
+    // Spostamento dell'etichetta dalla parte (trascinando il titolo), ricordato per ogni cerniera
+    let offset_id = egui::Id::new(("etichetta_cerniera_spostamento", index));
+    let default_offset = egui::vec2(14.0, -14.0);
+    let mut offset = ui.ctx().data(|d| d.get_temp::<egui::Vec2>(offset_id)).unwrap_or(default_offset);
     let mut angle = h.angle;
-    egui::Area::new(egui::Id::new("etichetta_cerniera"))
+    let shown = egui::Area::new(egui::Id::new("etichetta_cerniera"))
         .order(egui::Order::Foreground)
-        .fixed_pos(at + egui::vec2(14.0, -14.0))
+        .fixed_pos(at + offset)
         .constrain_to(rect)
         .show(ui.ctx(), |ui| {
             egui::Frame::popup(ui.style()).show(ui, |ui| {
                 ui.horizontal(|ui| {
-                    ui.label(egui::RichText::new(format!("{}  {}", icon::DOOR_OPEN, h.name)).strong());
+                    let title = ui
+                        .add(
+                            egui::Label::new(egui::RichText::new(format!("{}  {}  {}", icon::DOTS_SIX, icon::DOOR_OPEN, h.name)).strong())
+                                .selectable(false)
+                                .sense(egui::Sense::click_and_drag()),
+                        )
+                        .on_hover_cursor(egui::CursorIcon::Grab)
+                        .on_hover_text("Trascina per spostare l'etichetta; doppio clic la rimette vicino alla parte");
+                    if title.dragged() {
+                        offset += title.drag_delta();
+                    }
+                    if title.double_clicked() {
+                        offset = default_offset;
+                    }
                 });
                 ui.horizontal(|ui| {
                     if ui.small_button(icon::CARET_LEFT).on_hover_text("Chiude di 1°").clicked() {
@@ -157,6 +174,14 @@ pub fn draw_label(
                 ui.label(egui::RichText::new("Ctrl + trascina la parte per aprirla col mouse").small().weak());
             });
         });
+    ui.ctx().data_mut(|d| d.insert_temp(offset_id, offset));
+    // Spostata lontano: una linea sottile la lega alla parte
+    let label = shown.response.rect;
+    if !label.expand(4.0).contains(at) && offset != default_offset {
+        let end = egui::pos2(at.x.clamp(label.left(), label.right()), at.y.clamp(label.top(), label.bottom()));
+        painter.line_segment([at, end], egui::Stroke::new(1.0_f32, egui::Color32::from_white_alpha(140)));
+        painter.circle_filled(at, 3.0, accent);
+    }
     if (angle - h.angle).abs() > 1e-5 {
         app.apply(Action::SetHingeAngle { index, angle });
     }
