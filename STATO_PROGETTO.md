@@ -962,6 +962,15 @@ Fatto:
       %LOCALAPPDATA%\Programs\Dima3D senza permessi da amministratore, menu Start, desktop facoltativo,
       associazione dei .dima3d facoltativa, disinstallazione. `pacchetto.ps1` lo crea, `pubblica.ps1` lo carica nella
       Release accanto allo zip; dopo un aggiornamento dal programma si aggiorna la versione in «App installate».
+- [x] (2026-11-12, 0.2.16) Richieste dell'utente dopo la prova di 0.2.15:
+      Shift + clic nella vista aggiunge o toglie dalla selezione (Ctrl + Shift il singolo pezzo;
+      `toggle_in_selection`); icona della cerniera nell'albero accanto al nodo scelto come parte (non ai pezzi
+      dentro) e riga «Cerniera» nelle proprietà; «Asse dai N perni selezionati» al posto di «Scegli l'asse nella
+      vista» quando sono selezionati due o più pezzi (asse per i centri dei due più lontani, `pins_axis`);
+      descrizione e riga «Parte» prima di «Salva cerniera»; «Cambia parte» nell'elenco delle cerniere salvate
+      (`reassign_hinge`: la parte di prima torna chiusa, la nuova parte da 0°, stesso asse, un Annulla);
+      aprendo un altro progetto o file la finestra Posizione riparte da zero (`PositionPanel::reset_values`,
+      restano finestra aperta, unità, World, passo).
 - [x] (2026-11-12, 0.2.15) Cerniere: dopo «Salva cerniera» l'asse in lavorazione della finestra
       Posizione si azzera (prima restava una linea arancione fissa nella vista); l'etichetta della cerniera si
       sposta trascinando il titolo (spostamento ricordato per cerniera, doppio clic la riporta vicino alla parte,

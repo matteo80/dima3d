@@ -103,6 +103,11 @@ pub fn draw(ui: &mut egui::Ui, app: &crate::app::GestoreApp) {
         if nodes.len() == 1 {
             row("Nome", scene.display_name(primary));
             row("Tipo", kind_label(scene, primary).to_string());
+            if let Some(h) = scene.hinge_of_node(primary).map(|i| &scene.hinges[i]) {
+                let part = h.nodes.first().map(|&n| scene.display_name(n)).unwrap_or_default();
+                let of = if h.nodes.contains(&primary) { String::new() } else { format!(" (parte «{part}»)") };
+                row("Cerniera", format!("{}  {} {:.1}° (da {:.0}° a {:.0}°){of}", super::theme::icon::DOOR_OPEN, h.name, h.angle, h.min, h.max));
+            }
         }
         match s.files.as_slice() {
             [] => {}

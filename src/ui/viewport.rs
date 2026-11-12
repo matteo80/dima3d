@@ -40,6 +40,23 @@ fn surface_point(
     pick(scene, visibility, section, (origin, dir)).map(|(_, t, _)| origin + dir * t)
 }
 
+/// Shift + clic su `node`: lo aggiunge alla selezione, o lo toglie se c'è già.
+fn toggle_in_selection(selection: &[u32], primary: Option<u32>, node: u32) -> Action {
+    let mut nodes: Vec<u32> = selection.to_vec();
+    let primary = if let Some(i) = nodes.iter().position(|&n| n == node) {
+        nodes.remove(i);
+        primary.filter(|&p| p != node).or(nodes.first().copied())
+    } else {
+        nodes.push(node);
+        Some(node)
+    };
+    match (nodes.as_slice(), primary) {
+        ([], _) | (_, None) => Action::Select { node: None, reveal: false },
+        ([one], _) => Action::Select { node: Some(*one), reveal: true },
+        (_, Some(p)) => Action::SelectMany { nodes, primary: p, anchor: p },
+    }
+}
+
 /// Picking che ignora la parte tagliata dal piano di sezione.
 fn pick(
     scene: &SceneGraph,
@@ -245,6 +262,7 @@ pub fn draw_viewport(ui: &mut egui::Ui, app: &mut crate::app::GestoreApp) {
         // Click singolo: selezione 3D tramite ray picking
         //  - click        → seleziona il macro-oggetto che contiene il pezzo
         //  - Ctrl + click → seleziona il singolo pezzo
+        //  - Shift + click → aggiunge o toglie dalla selezione (con Ctrl il singolo pezzo)
         //  - click di nuovo sul macro già selezionato → scende al singolo pezzo
         //  - click sul vuoto → deseleziona
         // (il secondo click di un doppio click non cambia la selezione)
@@ -311,16 +329,25 @@ pub fn draw_viewport(ui: &mut egui::Ui, app: &mut crate::app::GestoreApp) {
                     .and_then(|(mesh, _, _)| scene.mesh_to_node.get(mesh as usize).copied())
                     .filter(|&n| n != crate::scene_graph::NO_PARENT);
 
+                let ctrl = ui.input(|i| i.modifiers.command || i.modifiers.ctrl);
+                let shift = ui.input(|i| i.modifiers.shift);
+                let selection = app.ui_state.selected_nodes();
                 let target = picked_node.map(|shape_node| {
-                    let ctrl = ui.input(|i| i.modifiers.command || i.modifiers.ctrl);
                     let macro_node = scene.parent_of(shape_node).unwrap_or(shape_node);
-                    if ctrl || app.ui_state.selected_node == Some(macro_node) {
+                    // Con Shift si aggiunge il macro-oggetto (Ctrl + Shift il pezzo); se il
+                    // macro-oggetto è già selezionato si toglie
+                    if ctrl || (!shift && app.ui_state.selected_node == Some(macro_node)) {
                         shape_node
                     } else {
                         macro_node
                     }
                 });
-                actions.push(Action::Select { node: target, reveal: true });
+                match target {
+                    Some(node) if shift => actions.push(toggle_in_selection(&selection, app.ui_state.selected_node, node)),
+                    // Shift + clic nel vuoto: la selezione resta
+                    None if shift => {}
+                    _ => actions.push(Action::Select { node: target, reveal: true }),
+                }
             }
         }
 
@@ -760,6 +787,8 @@ fn draw_view_controls(
                     ("Sinistro + rotella premuti", "Zoom"),
                     ("Click", "Seleziona il macro-oggetto"),
                     ("Ctrl + click", "Seleziona il singolo pezzo"),
+                    ("Shift + click", "Aggiunge o toglie dalla selezione (Ctrl + Shift: il singolo pezzo)"),
+                    ("Ctrl + trascina", "Apre la parte con una cerniera salvata"),
                     ("Doppio click", "Inquadra la selezione"),
                 ] {
                     ui.label(egui::RichText::new(input).strong());
@@ -801,6 +830,16 @@ fn draw_axes(painter: &egui::Painter, rect: egui::Rect, camera: &ArcballCamera) 
 mod tests {
     use crate::ui::color_menu::tests::{node, TWO_PARTS};
     use crate::ui::tests::{click, frame};
+
+    /// Shift + clic: aggiunge alla selezione, o toglie se c'è già.
+    #[test]
+    fn shift_click_toggles_the_selection() {
+        use super::{toggle_in_selection, Action};
+        assert_eq!(toggle_in_selection(&[], None, 4), Action::Select { node: Some(4), reveal: true });
+        assert_eq!(toggle_in_selection(&[4], Some(4), 7), Action::SelectMany { nodes: vec![4, 7], primary: 7, anchor: 7 });
+        assert_eq!(toggle_in_selection(&[4, 7], Some(7), 7), Action::Select { node: Some(4), reveal: true });
+        assert_eq!(toggle_in_selection(&[4], Some(4), 4), Action::Select { node: None, reveal: false });
+    }
 
     /// App con un renderer vero (per il picking), se c'è una scheda video. Chi la usa prende
     /// prima `gpu_lock`, che deve durare più dell'app.

@@ -1035,6 +1035,9 @@ impl GestoreApp {
                         self.ui_state.expanded.clear();
                         // Gli appunti puntano ai nodi della scena precedente
                         self.ui_state.clipboard.clear();
+                        // Finestra Posizione: valori, offset, calcoli e cerniera ripartono da zero
+                        // (restano solo finestra aperta, unità e World)
+                        self.ui_state.position.reset_values();
                         self.load_state = LoadState::Ready;
                         self.project.on_loaded(scene.revision);
                         if let Some(p) = self.project.current_path.clone() {

@@ -106,6 +106,24 @@ impl Default for PositionPanel {
     }
 }
 
+impl PositionPanel {
+    /// Progetto o file nuovo: tutto da capo, tranne finestra aperta, unità, World e passo
+    /// dell'angolo (scelte di chi lavora, non valori del progetto).
+    pub fn reset_values(&mut self) {
+        let step = self.hinge.step;
+        let mode = self.hinge.mode;
+        *self = Self {
+            open: self.open,
+            unit: self.unit,
+            world: self.world,
+            calc: self.calc,
+            guide: self.guide,
+            hinge: Hinge { step, mode, ..Hinge::default() },
+            ..Self::default()
+        };
+    }
+}
+
 const AXES: [(&str, egui::Color32, &str); 6] = [
     ("X", egui::Color32::from_rgb(230, 80, 80), "Sposta lungo X"),
     ("Y", egui::Color32::from_rgb(80, 190, 90), "Sposta lungo Y"),
@@ -512,6 +530,30 @@ pub fn draw_overlay(
     }
 }
 
+/// Asse per i centri dei perni: i due più lontani tra loro. `None` se coincidono.
+pub fn pins_axis(centers: &[Vec3]) -> Option<(Vec3, Vec3)> {
+    let mut best: Option<(f32, Vec3, Vec3)> = None;
+    for (i, &a) in centers.iter().enumerate() {
+        for &b in &centers[i + 1..] {
+            let d = a.distance(b);
+            if best.is_none_or(|(m, _, _)| d > m) {
+                best = Some((d, a, b));
+            }
+        }
+    }
+    let (d, a, b) = best?;
+    if d < 1e-3 {
+        return None;
+    }
+    // Verso: il primo componente più grande positivo (una porta: verso l'alto)
+    let mut dir = (b - a) / d;
+    let k = if dir.x.abs() >= dir.y.abs() && dir.x.abs() >= dir.z.abs() { 0 } else if dir.y.abs() >= dir.z.abs() { 1 } else { 2 };
+    if dir[k] < 0.0 {
+        dir = -dir;
+    }
+    Some(((a + b) / 2.0, dir))
+}
+
 /// Movimento elementare: `amount` mm lungo l'asse 0..2, o gradi attorno all'asse 3..5.
 pub fn axis_motion(axis: usize, amount: f32) -> Mat4 {
     let mut v = Vec3::ZERO;
@@ -755,7 +797,26 @@ pub fn draw(ctx: &egui::Context, app: &mut GestoreApp, pass: super::dock::Pass) 
     // Dopo «Calcola l'asse»: i pezzi della prima posizione che si muovono diventano l'oggetto da ruotare
     let mut select_first: Option<Vec<u32>> = None;
     let mut save_hinge: Option<(String, Vec<u32>, Vec3, Vec3, f32)> = None;
-    let saved_hinges: Vec<(usize, crate::scene_graph::hinge::SavedHinge)> = scene.live_hinges().map(|(i, h)| (i, h.clone())).collect();
+    let part_name = |nodes: &[u32]| match nodes {
+        [] => "—".to_string(),
+        [n] => scene.display_name(*n),
+        many => format!("{} elementi", many.len()),
+    };
+    let saved_hinges: Vec<(usize, crate::scene_graph::hinge::SavedHinge, String)> =
+        scene.live_hinges().map(|(i, h)| (i, h.clone(), part_name(&h.nodes))).collect();
+    let selection_name = part_name(&selection);
+    // Due o più pezzi selezionati: l'asse può passare per i loro centri (i perni della cerniera)
+    let pins: Option<(Vec3, Vec3)> = (selection.len() >= 2)
+        .then(|| {
+            let centers: Vec<Vec3> = selection
+                .iter()
+                .map(|&n| scene.subtree_bounding_box(n))
+                .filter(|b| b.is_valid())
+                .map(|b| b.center())
+                .collect();
+            pins_axis(&centers)
+        })
+        .flatten();
     let mut hinge_cmds: Vec<super::hinge_label::HingeCmd> = Vec::new();
     let mut sections = app.settings.position_sections;
     // Su schermi bassi la finestra non deve uscire: il contenuto scorre
@@ -1087,9 +1148,25 @@ pub fn draw(ctx: &egui::Context, app: &mut GestoreApp, pass: super::dock::Pass) 
                                     h.start();
                                     start_picking = true;
                                 }
+                            } else if let Some((o, d)) = pins {
+                                // Perni selezionati: l'asse passa per i loro centri
+                                if ui
+                                    .button(icon_text(ui, icon::CROSSHAIR, &format!("Asse dai {} perni selezionati", selection.len())))
+                                    .on_hover_text(
+                                        "L'asse passa per i centri dei pezzi selezionati (con più di due, per i due più lontani).                                          Per sceglierlo con i clic nella vista, togli prima la selezione multipla",
+                                    )
+                                    .clicked()
+                                {
+                                    h.start();
+                                    h.picking = false;
+                                    h.axis = Some((o, d));
+                                    status = Some("Asse dai perni: ora seleziona la parte che si apre, poi «Salva cerniera»".to_string());
+                                }
                             } else if ui
                                 .button(icon_text(ui, icon::CROSSHAIR, if h.axis.is_some() { "Scegli un altro asse" } else { "Scegli l'asse nella vista" }))
-                                .on_hover_text("Clic sui pezzi nella vista (si aggancia ai vertici vicini, come le Misure)")
+                                .on_hover_text(
+                                    "Clic sui pezzi nella vista (si aggancia ai vertici vicini, come le Misure).                                      Oppure seleziona i due perni (Shift + clic nella vista) e il pulsante crea l'asse da loro",
+                                )
                                 .clicked()
                             {
                                 h.start();
@@ -1256,6 +1333,17 @@ pub fn draw(ctx: &egui::Context, app: &mut GestoreApp, pass: super::dock::Pass) 
                                 }
                             });
                             // Cerniera salvata: si apre poi dalla vista, cliccando la parte
+                            ui.label(
+                                egui::RichText::new(
+                                    "Per salvare: seleziona la parte che si apre (nella vista o nell'albero),                                      dai un nome e premi «Salva cerniera». Senza la parte giusta la cerniera non gira.",
+                                )
+                                .small()
+                                .weak(),
+                            );
+                            ui.horizontal_wrapped(|ui| {
+                                ui.label("Parte");
+                                ui.label(egui::RichText::new(part_name(&nodes)).italics());
+                            });
                             ui.horizontal_wrapped(|ui| {
                                 ui.add(egui::TextEdit::singleline(&mut h.save_name).hint_text("Nome, es. Porta ant. sx").desired_width(130.0));
                                 if ui
@@ -1279,7 +1367,7 @@ pub fn draw(ctx: &egui::Context, app: &mut GestoreApp, pass: super::dock::Pass) 
                         }
                         ui.separator();
                         ui.label(egui::RichText::new("Cerniere salvate").strong());
-                        hinge_cmds = super::hinge_label::draw_list(ui, &saved_hinges);
+                        hinge_cmds = super::hinge_label::draw_list(ui, &saved_hinges, (&selection, &selection_name));
                     });
 
                 // ── Applica offset ─────────────────────────────────────────────
@@ -1503,6 +1591,65 @@ pub fn draw(ctx: &egui::Context, app: &mut GestoreApp, pass: super::dock::Pass) 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Asse dai perni: per i centri dei due più lontani, verso il componente maggiore positivo.
+    #[test]
+    fn pins_axis_goes_through_the_farthest_centers() {
+        let (o, d) = pins_axis(&[Vec3::new(10.0, 0.0, 900.0), Vec3::new(10.0, 0.0, 100.0), Vec3::new(10.0, 0.0, 500.0)]).unwrap();
+        assert!((o - Vec3::new(10.0, 0.0, 500.0)).length() < 1e-4 && (d - Vec3::Z).length() < 1e-6, "{o} {d}");
+        assert!(pins_axis(&[Vec3::ONE, Vec3::ONE]).is_none());
+        assert!(pins_axis(&[Vec3::ONE]).is_none());
+    }
+
+    /// Due perni selezionati: il pulsante crea l'asse dai loro centri; poi si sceglie la parte, si
+    /// salva, e «Cambia parte» la passa a un'altra selezione (la prima torna chiusa).
+    #[test]
+    fn hinge_from_selected_pins_and_change_of_part() {
+        let mut app = app();
+        let ui = Ui { ctx: egui::Context::default() };
+        let (rif, dest) = (node(&app, "Riferimento", 0), node(&app, "Destinazione", 0));
+        app.apply(Action::SelectMany { nodes: vec![rif, dest], primary: rif, anchor: rif });
+        ui.run(&mut app, vec![]);
+        ui.click(&mut app, "Asse dai 2 perni selezionati", 0);
+        let (o, d) = app.ui_state.position.hinge.axis.expect("asse dai perni");
+        let s = app.scene_graph.as_ref().unwrap();
+        let (a, b) = (s.subtree_bounding_box(rif).center(), s.subtree_bounding_box(dest).center());
+        assert!((o - (a + b) / 2.0).length() < 1e-3 && d.cross((b - a).normalize()).length() < 1e-4);
+
+        // La parte giusta: la seconda copia del riferimento
+        let part = node(&app, "Riferimento", 1);
+        app.ui_state.select_single(Some(part));
+        ui.run(&mut app, vec![]);
+        ui.click(&mut app, "Salva cerniera", 0);
+        assert_eq!(app.scene_graph.as_ref().unwrap().hinges[0].nodes, vec![part]);
+        let before = first_vertex(&app, part);
+        app.apply(Action::SetHingeAngle { index: 0, angle: 40.0 });
+        assert!((first_vertex(&app, part) - before).length() > 1.0, "gira");
+
+        let other = node(&app, "Destinazione", 1);
+        app.ui_state.select_single(Some(other));
+        app.reassign_hinge(0, vec![other]);
+        let s = app.scene_graph.as_ref().unwrap();
+        assert_eq!((s.hinges[0].nodes.clone(), s.hinges[0].angle), (vec![other], 0.0));
+        assert!((first_vertex(&app, part) - before).length() < 1e-3, "la parte di prima torna chiusa");
+        let (o2, d2) = s.hinge_axis(&s.hinges[0]);
+        assert!(d2.cross(d).length() < 1e-4 && (o2 - o).cross(d).length() < 1e-2, "stesso asse");
+        app.undo();
+        assert_eq!(app.scene_graph.as_ref().unwrap().hinges[0].nodes, vec![part]);
+    }
+
+    /// Progetto nuovo: valori, offset e cerniera in lavorazione ripartono da zero.
+    #[test]
+    fn reset_values_keeps_only_the_choices() {
+        let mut p = PositionPanel { open: true, unit: 10.0, value: 35.0, ..Default::default() };
+        p.offset.xyz.x = 5300.0;
+        p.hinge.axis = Some((Vec3::ZERO, Vec3::Z));
+        p.hinge.step = 5.0;
+        p.reset_values();
+        assert!(p.open && p.unit == 10.0 && p.hinge.step == 5.0);
+        assert_eq!((p.value, p.offset.xyz.x), (0.0, 0.0));
+        assert!(p.hinge.axis.is_none());
+    }
 
     #[test]
     fn long_names_are_shortened_in_the_middle() {

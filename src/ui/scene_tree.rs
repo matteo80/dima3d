@@ -758,7 +758,11 @@ fn draw_row(ui: &mut egui::Ui, ctx: &mut RowCtx, node_idx: u32, depth: u16) {
         // Etichetta selezionabile
         let label = scene.display_name(node_idx);
         let is_match = ctx.search.is_some_and(|q| label.to_lowercase().contains(q));
-        let mut text = egui::RichText::new(format!("{icon} {label}"));
+        // Parte di una cerniera salvata (solo il nodo scelto come parte, non i pezzi dentro)
+        let hinges: Vec<&str> =
+            scene.live_hinges().filter(|(_, h)| h.nodes.contains(&node_idx)).map(|(_, h)| h.name.as_str()).collect();
+        let hinge_mark = if hinges.is_empty() { String::new() } else { format!("  {}", icon::DOOR_OPEN) };
+        let mut text = egui::RichText::new(format!("{icon} {label}{hinge_mark}"));
         if !is_visible {
             text = text.weak().strikethrough();
         } else if ctx.search.is_some() && !is_match {
@@ -771,7 +775,10 @@ fn draw_row(ui: &mut egui::Ui, ctx: &mut RowCtx, node_idx: u32, depth: u16) {
         }
         // Clic per selezionare. Trascinando da una riga selezionata la selezione si sposta dentro
         // un altro gruppo; da una riga non selezionata si selezionano le righe su cui si passa
-        let resp = ui.add(egui::SelectableLabel::new(is_selected, text)).interact(egui::Sense::click_and_drag());
+        let mut resp = ui.add(egui::SelectableLabel::new(is_selected, text)).interact(egui::Sense::click_and_drag());
+        if !hinges.is_empty() {
+            resp = resp.on_hover_text(format!("Cerniera: {}", hinges.join(", ")));
+        }
         let movable = is_selected && info.kind != NodeKind::File;
         if movable && ctx.sweep.is_none() {
             resp.dnd_set_drag_payload(DraggedNodes(ctx.selection.to_vec()));

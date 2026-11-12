@@ -4,7 +4,7 @@
 
 use glam::Vec3;
 
-use super::theme::icon;
+use super::theme::{icon, icon_text};
 use crate::app::{Action, GestoreApp};
 use crate::scene_graph::hinge::SavedHinge;
 
@@ -71,6 +71,34 @@ impl GestoreApp {
         if let Some(s) = self.scene_graph.as_mut() {
             s.revision += 1;
         }
+    }
+
+    /// La cerniera `index` passa alla parte `nodes` (per correggere un pezzo sbagliato): la parte di
+    /// prima torna chiusa (0°, entro i limiti), l'asse resta dov'è e la nuova parte parte da 0°
+    /// nella posizione in cui si trova. Un passo di Annulla.
+    pub fn reassign_hinge(&mut self, index: usize, nodes: Vec<u32>) {
+        let Some(scene) = &self.scene_graph else { return };
+        let Some(old) = scene.hinges.get(index).cloned() else { return };
+        if nodes.is_empty() || nodes == old.nodes {
+            return;
+        }
+        if scene.meshes_of(&nodes).is_empty() {
+            self.ui_state.status_message = "Cerniera non cambiata: la selezione non ha pezzi".to_string();
+            return;
+        }
+        self.push_undo(None);
+        let Some(scene) = self.scene_graph.as_mut() else { return };
+        scene.set_hinge_angle(index, 0.0);
+        let (o, d) = scene.hinge_axis(&scene.hinges[index]);
+        let names: Vec<String> = nodes.iter().map(|&n| scene.display_name(n)).collect();
+        if let Some(mut new) = scene.new_hinge(old.name.clone(), nodes, o, d, 0.0) {
+            new.min = old.min.min(0.0);
+            new.max = old.max.max(0.0);
+            scene.hinges[index] = new;
+        }
+        scene.revision += 1;
+        self.sync_moved_geometry();
+        self.ui_state.status_message = format!("Cerniera «{}» assegnata a {}", old.name, names.join(", "));
     }
 
     /// Toglie una cerniera (la parte resta dov'è). Un passo di Annulla.
@@ -193,12 +221,15 @@ pub enum HingeCmd {
     Angle(usize, f32),
     Edit(usize, SavedHinge),
     ClosedHere(usize),
+    /// Assegna la cerniera alla selezione attuale
+    Reassign(usize),
     Remove(usize),
     Select(Vec<u32>),
 }
 
-/// Elenco delle cerniere salvate (finestra Posizione): nome, gradi, limiti, chiusa qui, togli.
-pub fn draw_list(ui: &mut egui::Ui, hinges: &[(usize, SavedHinge)]) -> Vec<HingeCmd> {
+/// Elenco delle cerniere salvate (finestra Posizione): nome, gradi, parte, limiti, chiusa qui,
+/// togli. `selection`: nodi selezionati e il loro nome, per «Cambia parte».
+pub fn draw_list(ui: &mut egui::Ui, hinges: &[(usize, SavedHinge, String)], selection: (&[u32], &str)) -> Vec<HingeCmd> {
     let mut out = Vec::new();
     if hinges.is_empty() {
         ui.label(
@@ -208,7 +239,7 @@ pub fn draw_list(ui: &mut egui::Ui, hinges: &[(usize, SavedHinge)]) -> Vec<Hinge
         );
         return out;
     }
-    for (i, h) in hinges {
+    for (i, h, part) in hinges {
         let i = *i;
         let mut e = h.clone();
         ui.horizontal_wrapped(|ui| {
@@ -229,6 +260,21 @@ pub fn draw_list(ui: &mut egui::Ui, hinges: &[(usize, SavedHinge)]) -> Vec<Hinge
         ui.horizontal_wrapped(|ui| {
             ui.label("Nome");
             ui.add(egui::TextEdit::singleline(&mut e.name).desired_width(120.0));
+        });
+        ui.horizontal_wrapped(|ui| {
+            ui.label("Parte");
+            ui.label(egui::RichText::new(part).italics());
+            let (nodes, name) = selection;
+            if ui
+                .add_enabled(!nodes.is_empty() && nodes != h.nodes.as_slice(), egui::Button::new(icon_text(ui, icon::PENCIL_SIMPLE, "Cambia parte")).small())
+                .on_hover_text(format!(
+                    "La cerniera passa alla selezione ({name}): la parte di prima torna chiusa, la nuova parte da 0° dove si trova"
+                ))
+                .on_disabled_hover_text("Seleziona prima (nella vista o nell'albero) la parte giusta")
+                .clicked()
+            {
+                out.push(HingeCmd::Reassign(i));
+            }
         });
         ui.horizontal_wrapped(|ui| {
             ui.label("Da");
@@ -264,6 +310,10 @@ pub fn run(app: &mut GestoreApp, cmds: Vec<HingeCmd>) {
                 h.angle = h.angle.clamp(h.min, h.max);
             }),
             HingeCmd::ClosedHere(i) => app.hinge_closed_here(i),
+            HingeCmd::Reassign(i) => {
+                let nodes = app.ui_state.selected_nodes();
+                app.reassign_hinge(i, nodes);
+            }
             HingeCmd::Remove(i) => app.remove_hinge(i),
             HingeCmd::Select(nodes) => {
                 app.ui_state.select_single(nodes.first().copied());
