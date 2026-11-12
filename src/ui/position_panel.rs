@@ -1355,6 +1355,8 @@ pub fn draw(ctx: &egui::Context, app: &mut GestoreApp, pass: super::dock::Pass) 
                                     .on_disabled_hover_text("Scegli prima l'oggetto (la parte che si apre)")
                                     .clicked()
                                 {
+                                    // Parte ancora chiusa: il verso si sceglie perché si apra verso l'esterno
+                                    let d = if h.angle.abs() < 1e-4 { scene.outward_dir(&nodes, o, d) } else { d };
                                     save_hinge = Some((h.save_name.clone(), nodes.clone(), o, d, h.angle));
                                     h.save_name.clear();
                                     // Salvata: l'asse ora è della cerniera (si vede con la parte selezionata)
@@ -1636,6 +1638,30 @@ mod tests {
         assert!(d2.cross(d).length() < 1e-4 && (o2 - o).cross(d).length() < 1e-2, "stesso asse");
         app.undo();
         assert_eq!(app.scene_graph.as_ref().unwrap().hinges[0].nodes, vec![part]);
+    }
+
+    /// «Inverti verso» di una cerniera salvata: la parte torna chiusa, poi gli angoli positivi la
+    /// aprono dall'altra parte; un Annulla torna com'era.
+    #[test]
+    fn flipping_a_saved_hinge_closes_it_and_opens_the_other_way() {
+        let mut app = app();
+        let part = node(&app, "Riferimento", 0);
+        let closed = first_vertex(&app, part);
+        let i = app.save_hinge("Porta", vec![part], Vec3::new(0.0, 0.0, 0.0), Vec3::Z, 0.0).unwrap();
+        app.apply(Action::SetHingeAngle { index: i, angle: 30.0 });
+        let one_way = first_vertex(&app, part);
+        app.flip_hinge(i);
+        assert!((first_vertex(&app, part) - closed).length() < 1e-3, "chiusa");
+        assert_eq!(app.scene_graph.as_ref().unwrap().hinges[i].angle, 0.0);
+        app.apply(Action::SetHingeAngle { index: i, angle: 30.0 });
+        let other_way = first_vertex(&app, part);
+        // Stesso arco dall'altra parte: simmetrici rispetto alla posizione chiusa
+        let turn = |deg: f32| Mat4::from_rotation_z(deg.to_radians()).transform_point3(closed);
+        assert!((one_way - turn(30.0)).length() < 1e-2, "{one_way} {}", turn(30.0));
+        assert!((other_way - turn(-30.0)).length() < 1e-2, "{other_way} {}", turn(-30.0));
+        app.undo();
+        app.undo();
+        assert!((first_vertex(&app, part) - one_way).length() < 1e-3, "Annulla");
     }
 
     /// Progetto nuovo: valori, offset e cerniera in lavorazione ripartono da zero.

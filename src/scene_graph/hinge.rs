@@ -180,6 +180,23 @@ impl SceneGraph {
         Some(degrees)
     }
 
+    /// Verso dell'asse (`d` o `-d`) per cui un angolo positivo apre la parte `nodes` verso
+    /// l'esterno: il suo centro si allontana dal centro della scena (porte verso fuori, cofani e
+    /// portelloni verso l'alto). `d` se non si capisce.
+    pub fn outward_dir(&self, nodes: &[u32], o: Vec3, d: Vec3) -> Vec3 {
+        let mut part = super::Aabb::empty();
+        for &n in nodes {
+            part.extend_aabb(&self.subtree_bounding_box(n));
+        }
+        let (scene, _) = self.main_visible_bounding_box();
+        if !part.is_valid() || !scene.is_valid() {
+            return d;
+        }
+        let (c, s) = (part.center(), scene.center());
+        let opened = about_axis(o, d, 10.0).transform_point3(c);
+        if opened.distance(s) < c.distance(s) - 1e-3 { -d } else { d }
+    }
+
     /// Cerniere ancora valide (indice e cerniera).
     pub fn live_hinges(&self) -> impl Iterator<Item = (usize, &SavedHinge)> {
         self.hinges.iter().enumerate().filter(|(_, h)| self.hinge_alive(h))
@@ -189,6 +206,26 @@ impl SceneGraph {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Scocca in coordinate veicolo (X verso il retro, Y a destra, Z in alto) e porta sinistra
+    /// (Y negativa) con la cerniera sul bordo anteriore: chiusa, il verso scelto la apre verso
+    /// l'esterno (Y più negativa), qualunque sia il verso di partenza.
+    #[test]
+    fn closed_door_opens_outward() {
+        let wrl = br#"#VRML V2.0 utf8
+DEF Scocca Shape { geometry IndexedFaceSet { coord Coordinate { point [ 0 -900 0, 4000 -900 0, 4000 900 1500, 0 900 1500 ] } coordIndex [ 0 1 2 3 -1 ] } }
+DEF Porta Shape { geometry IndexedFaceSet { coord Coordinate { point [ 1900 -900 500, 2900 -900 500, 2900 -900 1100, 1900 -900 1100 ] } coordIndex [ 0 1 2 3 -1 ] } }
+"#;
+        let scene = crate::parser::parse_wrl(wrl);
+        let door = (0..scene.nodes.len() as u32).find(|&n| scene.display_name(n) == "Porta").unwrap();
+        let hinge = Vec3::new(1900.0, -900.0, 800.0);
+        for start in [Vec3::Z, -Vec3::Z] {
+            let d = scene.outward_dir(&[door], hinge, start);
+            // Bordo posteriore della porta aperto di 30°: va verso Y più negativa
+            let back = about_axis(hinge, d, 30.0).transform_point3(Vec3::new(2900.0, -900.0, 800.0));
+            assert!(back.y < -1200.0, "verso {d}: {back}");
+        }
+    }
 
     #[test]
     fn text_roundtrip() {

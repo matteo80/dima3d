@@ -962,6 +962,10 @@ Fatto:
       %LOCALAPPDATA%\Programs\Dima3D senza permessi da amministratore, menu Start, desktop facoltativo,
       associazione dei .dima3d facoltativa, disinstallazione. `pacchetto.ps1` lo crea, `pubblica.ps1` lo carica nella
       Release accanto allo zip; dopo un aggiornamento dal programma si aggiorna la versione in «App installate».
+- [x] (2026-11-13, 0.2.17) Cerniere, verso di apertura (porta anteriore che si apriva verso l'interno):
+      salvando con la parte chiusa il verso dell'asse si sceglie perché gli angoli positivi la aprano verso
+      l'esterno (`SceneGraph::outward_dir`: il centro della parte si allontana dal centro della scena);
+      «Inverti verso» nell'elenco delle cerniere salvate (`flip_hinge`: la parte torna chiusa, limiti uguali).
 - [x] (2026-11-12, 0.2.16) Richieste dell'utente dopo la prova di 0.2.15:
       Shift + clic nella vista aggiunge o toglie dalla selezione (Ctrl + Shift il singolo pezzo;
       `toggle_in_selection`); icona della cerniera nell'albero accanto al nodo scelto come parte (non ai pezzi

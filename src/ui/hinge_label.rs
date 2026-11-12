@@ -101,6 +101,24 @@ impl GestoreApp {
         self.ui_state.status_message = format!("Cerniera «{}» assegnata a {}", old.name, names.join(", "));
     }
 
+    /// Inverte il verso di apertura: la parte torna chiusa (0°) e da lì gli angoli positivi la
+    /// aprono dall'altra parte; i limiti restano. Un passo di Annulla.
+    pub fn flip_hinge(&mut self, index: usize) {
+        if self.scene_graph.as_ref().is_none_or(|s| index >= s.hinges.len()) {
+            return;
+        }
+        self.push_undo(None);
+        let Some(scene) = self.scene_graph.as_mut() else { return };
+        let reached = scene.set_hinge_angle(index, 0.0).unwrap_or(0.0);
+        let h = &mut scene.hinges[index];
+        h.dir = -h.dir;
+        h.angle = -reached;
+        let name = h.name.clone();
+        scene.revision += 1;
+        self.sync_moved_geometry();
+        self.ui_state.status_message = format!("Cerniera «{name}»: verso di apertura invertito (la parte è chiusa)");
+    }
+
     /// Toglie una cerniera (la parte resta dov'è). Un passo di Annulla.
     pub fn remove_hinge(&mut self, index: usize) {
         if self.scene_graph.as_ref().is_none_or(|s| index >= s.hinges.len()) {
@@ -223,6 +241,7 @@ pub enum HingeCmd {
     ClosedHere(usize),
     /// Assegna la cerniera alla selezione attuale
     Reassign(usize),
+    Flip(usize),
     Remove(usize),
     Select(Vec<u32>),
 }
@@ -283,6 +302,13 @@ pub fn draw_list(ui: &mut egui::Ui, hinges: &[(usize, SavedHinge, String)], sele
             ui.label("a");
             ui.add(egui::DragValue::new(&mut e.max).range(h.min..=360.0).speed(1.0).max_decimals(1).suffix("°"))
                 .on_hover_text("Limite di apertura");
+            if ui
+                .small_button("Inverti verso")
+                .on_hover_text("La parte si apre dall'altra parte (per esempio verso l'interno invece che verso l'esterno): prima torna chiusa")
+                .clicked()
+            {
+                out.push(HingeCmd::Flip(i));
+            }
             if ui.small_button("0° qui").on_hover_text("La posizione attuale diventa quella chiusa (0°), senza muovere la parte").clicked() {
                 out.push(HingeCmd::ClosedHere(i));
             }
@@ -310,6 +336,7 @@ pub fn run(app: &mut GestoreApp, cmds: Vec<HingeCmd>) {
                 h.angle = h.angle.clamp(h.min, h.max);
             }),
             HingeCmd::ClosedHere(i) => app.hinge_closed_here(i),
+            HingeCmd::Flip(i) => app.flip_hinge(i),
             HingeCmd::Reassign(i) => {
                 let nodes = app.ui_state.selected_nodes();
                 app.reassign_hinge(i, nodes);
