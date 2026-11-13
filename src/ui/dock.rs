@@ -154,7 +154,7 @@ fn preview_rect(area: egui::Rect, side: Side, width: f32, height: f32) -> egui::
 }
 
 /// Area libera per le finestre: lo schermo senza barra degli strumenti e barra di stato.
-fn free_area(ctx: &egui::Context) -> egui::Rect {
+pub(crate) fn free_area(ctx: &egui::Context) -> egui::Rect {
     let screen = ctx.screen_rect();
     egui::Rect::from_min_max(screen.min + egui::vec2(0.0, 42.0), screen.max - egui::vec2(0.0, 26.0))
 }

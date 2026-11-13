@@ -1,6 +1,7 @@
 //! Finestra «Misure PDF»: un layout in PDF su cui si calibra la scala con una distanza nota e
 //! si misurano Delta X, Delta Y e distanza in mm (vedi `crate::pdf_measure`). Agganciabile come
-//! le altre finestre. Di base si apre a tutto schermo, sopra la vista e i pannelli (sugli schermi
+//! le altre finestre. Di base si apre a tutto schermo, sopra la vista e i pannelli, lasciando menu,
+//! barra degli strumenti e barra di stato (sugli schermi
 //! piccoli una finestra normale lascia poco spazio al PDF); «Riduci» la rimette mobile/agganciabile.
 
 use std::path::PathBuf;
@@ -26,9 +27,6 @@ impl Default for PdfPanel {
         Self { open: false, full: true, view: None, pending: None }
     }
 }
-
-/// Altezza della barra di stato, che resta visibile sotto la finestra a tutto schermo
-const STATUS_BAR: f32 = 26.0;
 
 impl std::fmt::Debug for PdfPanel {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -90,19 +88,30 @@ pub fn draw(ctx: &egui::Context, app: &mut GestoreApp, pass: super::dock::Pass) 
         }
     };
     if full {
-        let screen = ctx.screen_rect();
-        let rect = egui::Rect::from_min_max(screen.min, screen.max - egui::vec2(0.0, STATUS_BAR));
-        egui::Window::new(&title)
-            .id(egui::Id::new("finestra_pdf_tutto_schermo"))
-            .open(&mut open)
-            .collapsible(false)
-            .resizable(false)
-            .movable(false)
-            .title_bar(true)
-            .fixed_rect(rect)
+        // Area disegnata a mano, non egui::Window: la finestra aggiunge cornice e titolo alla
+        // misura data e usciva dallo schermo. Restano visibili menu, barra strumenti e stato.
+        let rect = super::dock::free_area(ctx);
+        let frame = egui::Frame::window(&ctx.style()).corner_radius(0).shadow(egui::Shadow::NONE);
+        let inner = rect - frame.total_margin();
+        egui::Area::new(egui::Id::new("finestra_pdf_tutto_schermo"))
+            .fixed_pos(rect.min)
+            .constrain(false)
+            .order(egui::Order::Middle)
             .show(ctx, |ui| {
-                ui.set_min_size(ui.available_size());
-                view.show_with(ui, |ui| size_button(ui, &mut toggle));
+                frame.show(ui, |ui| {
+                    ui.set_width(inner.width());
+                    ui.set_height(inner.height());
+                    ui.horizontal(|ui| {
+                        ui.label(egui::RichText::new(&title).strong());
+                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                            if ui.button(super::theme::icon_text(ui, icon::X, "")).on_hover_text("Chiudi").clicked() {
+                                open = false;
+                            }
+                        });
+                    });
+                    ui.separator();
+                    view.show_with(ui, |ui| size_button(ui, &mut toggle));
+                });
             });
     } else {
         let window = super::dock::Dockable {
@@ -204,6 +213,13 @@ mod tests {
         let results = find(&texts, "RISULTATO MISURA").unwrap();
         assert!(results.left() > 1000.0, "risultati sul bordo destro dello schermo: {results:?}");
         assert!(texts.iter().any(|(t, _)| t.contains("Riduci")), "pulsante Riduci");
+        // Tutto dentro lo schermo, sotto la barra degli strumenti e sopra la barra di stato
+        let close = find(&texts, icon::X).expect("pulsante Chiudi");
+        assert!(close.right() <= 1280.0, "Chiudi dentro lo schermo: {close:?}");
+        let title = find(&texts, &format!("{}  Misure PDF", icon::FILE_PDF)).expect("titolo");
+        assert!(title.top() >= 42.0, "sotto la barra degli strumenti: {title:?}");
+        let status = find(&texts, "Nessun PDF caricato").expect("stato del widget");
+        assert!(status.bottom() <= 800.0 - 26.0, "sopra la barra di stato: {status:?}");
     }
 
     #[test]

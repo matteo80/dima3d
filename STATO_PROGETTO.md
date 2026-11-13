@@ -962,6 +962,9 @@ Fatto:
       %LOCALAPPDATA%\Programs\Dima3D senza permessi da amministratore, menu Start, desktop facoltativo,
       associazione dei .dima3d facoltativa, disinstallazione. `pacchetto.ps1` lo crea, `pubblica.ps1` lo carica nella
       Release accanto allo zip; dopo un aggiornamento dal programma si aggiorna la versione in «App installate».
+- [x] (2026-11-13, 0.2.19) Misure PDF a tutto schermo usciva dallo schermo (egui::Window aggiunge cornice e
+      titolo a `fixed_rect`): ora è un'Area con cornice e titolo disegnati a mano, nell'area libera di
+      `dock::free_area` (restano menu, barra degli strumenti e barra di stato).
 - [x] (2026-11-13, 0.2.18) Richieste dell'utente: nell'albero l'icona della cerniera compare, più chiara, anche
       sui gruppi che contengono la parte (fino al file), così si vede con il ramo chiuso; la finestra Misure PDF
       si apre a tutto schermo sopra vista e pannelli (tranne la barra di stato), «Riduci» la rimette
