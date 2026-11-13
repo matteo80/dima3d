@@ -177,6 +177,12 @@ impl PdfMeasure {
     /// Disegna tutto: barra degli strumenti, risultati a destra (sotto, se lo spazio è stretto),
     /// vista del PDF al centro. Occupa tutto lo spazio disponibile in `ui`.
     pub fn show(&mut self, ui: &mut Ui) {
+        self.show_with(ui, |_| {});
+    }
+
+    /// Come [`Self::show`], con `extra` in fondo alla prima riga della barra (comandi di chi
+    /// ospita il widget, es. il pulsante per allargare la finestra).
+    pub fn show_with(&mut self, ui: &mut Ui, extra: impl FnOnce(&mut Ui)) {
         self.frame += 1;
         self.process_events(ui.ctx());
         // Esc solo durante una scelta di punti: altrimenti è dell'app che ospita il widget.
@@ -186,7 +192,7 @@ impl PdfMeasure {
 
         let id = ui.id().with("pdf_measure");
         let compact = ui.available_width() < 720.0;
-        egui::TopBottomPanel::top(id.with("toolbar")).show_inside(ui, |ui| self.toolbar(ui));
+        egui::TopBottomPanel::top(id.with("toolbar")).show_inside(ui, |ui| self.toolbar(ui, extra));
         if compact {
             egui::TopBottomPanel::bottom(id.with("results_compact"))
                 .resizable(false)
@@ -260,7 +266,7 @@ impl PdfMeasure {
 
     // ---------------------------------------------------------------- barra degli strumenti
 
-    fn toolbar(&mut self, ui: &mut Ui) {
+    fn toolbar(&mut self, ui: &mut Ui, extra: impl FnOnce(&mut Ui)) {
         let loaded = self.doc.is_some();
         let active = self.tool != Tool::None;
         let calibrated = self.calibration().is_some();
@@ -302,6 +308,8 @@ impl PdfMeasure {
                 self.fit_requested = true;
             }
             ui.label(format!("Zoom: {}%", (self.zoom * 100.0).round()));
+            ui.separator();
+            extra(ui);
         });
         ui.horizontal_wrapped(|ui| {
             if ui.add_enabled(loaded && !active, egui::Button::new("Calibra scala")).clicked() {

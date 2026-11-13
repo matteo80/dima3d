@@ -762,6 +762,17 @@ fn draw_row(ui: &mut egui::Ui, ctx: &mut RowCtx, node_idx: u32, depth: u16) {
         let hinges: Vec<&str> =
             scene.live_hinges().filter(|(_, h)| h.nodes.contains(&node_idx)).map(|(_, h)| h.name.as_str()).collect();
         let hinge_mark = if hinges.is_empty() { String::new() } else { format!("  {}", icon::DOOR_OPEN) };
+        // Gruppi che contengono la parte di una cerniera (fino al file): icona più chiara, così si
+        // vede anche con il ramo chiuso
+        let inner_hinges: Vec<&str> = if hinges.is_empty() && has_children {
+            scene
+                .live_hinges()
+                .filter(|(_, h)| h.nodes.iter().any(|&n| scene.ancestors(n).contains(&node_idx)))
+                .map(|(_, h)| h.name.as_str())
+                .collect()
+        } else {
+            Vec::new()
+        };
         let mut text = egui::RichText::new(format!("{icon} {label}{hinge_mark}"));
         if !is_visible {
             text = text.weak().strikethrough();
@@ -778,6 +789,10 @@ fn draw_row(ui: &mut egui::Ui, ctx: &mut RowCtx, node_idx: u32, depth: u16) {
         let mut resp = ui.add(egui::SelectableLabel::new(is_selected, text)).interact(egui::Sense::click_and_drag());
         if !hinges.is_empty() {
             resp = resp.on_hover_text(format!("Cerniera: {}", hinges.join(", ")));
+        }
+        if !inner_hinges.is_empty() {
+            ui.label(egui::RichText::new(icon::DOOR_OPEN).weak())
+                .on_hover_text(format!("Contiene la cerniera: {}", inner_hinges.join(", ")));
         }
         let movable = is_selected && info.kind != NodeKind::File;
         if movable && ctx.sweep.is_none() {

@@ -962,6 +962,10 @@ Fatto:
       %LOCALAPPDATA%\Programs\Dima3D senza permessi da amministratore, menu Start, desktop facoltativo,
       associazione dei .dima3d facoltativa, disinstallazione. `pacchetto.ps1` lo crea, `pubblica.ps1` lo carica nella
       Release accanto allo zip; dopo un aggiornamento dal programma si aggiorna la versione in «App installate».
+- [x] (2026-11-13, 0.2.18) Richieste dell'utente: nell'albero l'icona della cerniera compare, più chiara, anche
+      sui gruppi che contengono la parte (fino al file), così si vede con il ramo chiuso; la finestra Misure PDF
+      si apre a tutto schermo sopra vista e pannelli (tranne la barra di stato), «Riduci» la rimette
+      mobile/agganciabile e «Tutto schermo» la riallarga (`PdfMeasure::show_with` per il pulsante nella barra).
 - [x] (2026-11-13, 0.2.17) Cerniere, verso di apertura (porta anteriore che si apriva verso l'interno):
       salvando con la parte chiusa il verso dell'asse si sceglie perché gli angoli positivi la aprano verso
       l'esterno (`SceneGraph::outward_dir`: il centro della parte si allontana dal centro della scena);
