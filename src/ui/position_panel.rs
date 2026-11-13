@@ -18,7 +18,9 @@ use super::theme::{icon, icon_text};
 use crate::app::{Action, GestoreApp};
 use crate::scene_graph::linkage::FourBar;
 use crate::scene_graph::motion::Motion;
-use crate::scene_graph::placement::{about_axis, angle_for_distance, circle_through, parse_const_base, parse_offset, Pose};
+use crate::scene_graph::placement::{
+    about_axis, angle_for_distance, circle_through, offset_in_world, parse_const_base, parse_offset, parse_robot_base, Pose,
+};
 
 /// Cosa si sposta.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -67,7 +69,12 @@ pub struct PositionPanel {
     pub destination: Option<u32>,
     pub base_a: String,
     pub base_b: String,
+    /// Offset calcolato in coordinate del riferimento (come gli script e i BASE del robot)
     pub result: Option<Pose>,
+    /// Lo stesso offset in coordinate della cabina (World)
+    pub result_world: Option<Pose>,
+    /// Riga dell'oggetto del robot a cui applicare l'offset («Nuovo oggetto del robot»)
+    pub robot_line: String,
     /// Come è stato calcolato il risultato (dalla geometria o dai Transform)
     pub result_note: Option<String>,
     /// Ultimo messaggio di errore del calcolo
@@ -98,6 +105,8 @@ impl Default for PositionPanel {
             base_a: String::new(),
             base_b: String::new(),
             result: None,
+            result_world: None,
+            robot_line: String::new(),
             result_note: None,
             error: None,
             hinge: Hinge::default(),
@@ -1462,6 +1471,44 @@ pub fn draw(ctx: &egui::Context, app: &mut GestoreApp, pass: super::dock::Pass) 
                                 panel.offset = Pose::default();
                             }
                         });
+
+                        // Lo stesso offset su un oggetto del programma del robot, senza conti a mano
+                        ui.separator();
+                        ui.label(egui::RichText::new("Nuovo oggetto del robot").strong()).on_hover_text(
+                            "Incolla la riga dell'oggetto: viene riscritta, nello stesso formato, spostata dell'offset qui sopra",
+                        );
+                        ui.add(
+                            egui::TextEdit::singleline(&mut panel.robot_line)
+                                .desired_width(f32::INFINITY)
+                                .font(egui::TextStyle::Monospace)
+                                .hint_text("CONST BASE NOME = X Y Z A B C"),
+                        )
+                        .on_hover_text("CONST BASE NOME = X Y Z A B C\noppure\nNOME : OBJECT := (X, Y, Z, A, B, C)");
+                        if !panel.robot_line.trim().is_empty() {
+                            match parse_robot_base(&panel.robot_line) {
+                                Some(base) => {
+                                    let line = base.moved(&panel.offset, panel.world).to_line();
+                                    ui.add(egui::Label::new(egui::RichText::new(&line).monospace().strong()).wrap());
+                                    ui.horizontal_wrapped(|ui| {
+                                        if ui.button(icon_text(ui, icon::COPY, "Copia")).clicked() {
+                                            copy = Some(line.clone());
+                                        }
+                                        ui.label(
+                                            egui::RichText::new(if panel.world {
+                                                "Offset in coordinate della cabina (World acceso)"
+                                            } else {
+                                                "Offset in coordinate dell'oggetto"
+                                            })
+                                            .small()
+                                            .weak(),
+                                        );
+                                    });
+                                }
+                                None => {
+                                    ui.label(egui::RichText::new("Riga non riconosciuta").small().color(egui::Color32::from_rgb(230, 90, 80)));
+                                }
+                            }
+                        }
                     });
 
                 // ── Calcola offset ─────────────────────────────────────────────
@@ -1472,7 +1519,8 @@ pub fn draw(ctx: &egui::Context, app: &mut GestoreApp, pass: super::dock::Pass) 
                             ui.selectable_value(&mut panel.calc, CalcMode::Bases, "Tra due CONST BASE")
                                 .on_hover_text("Come BaseOffsetCalculator: CONST BASE NOME = X Y Z A B C");
                         });
-                        let mut calc_result: Option<Result<(String, Pose), String>> = None;
+                        // (titolo, offset nel riferimento, riferimento)
+                        let mut calc_result: Option<Result<(String, Pose, Pose), String>> = None;
                         match panel.calc {
                             CalcMode::Objects => {
                                 egui::Grid::new("posizione_oggetti").num_columns(3).spacing([8.0, 4.0]).show(ui, |ui| {
@@ -1513,14 +1561,14 @@ pub fn draw(ctx: &egui::Context, app: &mut GestoreApp, pass: super::dock::Pass) 
                                                 Ok(fit) => {
                                                     let m = a.matrix();
                                                     panel.result_note = Some("Calcolato dalla geometria: i due oggetti sono lo stesso pezzo".to_string());
-                                                    Ok((title, Pose::from_matrix(m.inverse() * fit.matrix * m)))
+                                                    Ok((title, Pose::from_matrix(m.inverse() * fit.matrix * m), a))
                                                 }
                                                 Err(why) => {
                                                     let b = Pose::from_matrix(scene.object_frame(d));
                                                     panel.result_note = Some(format!(
                                                         "Calcolato dai Transform del file (non dalla geometria: {why})"
                                                     ));
-                                                    Ok((title, a.offset_to(&b)))
+                                                    Ok((title, a.offset_to(&b), a))
                                                 }
                                             }
                                         }
@@ -1532,12 +1580,13 @@ pub fn draw(ctx: &egui::Context, app: &mut GestoreApp, pass: super::dock::Pass) 
                             CalcMode::Bases => {
                                 for (label, text) in [("Origine", &mut panel.base_a), ("Destinazione", &mut panel.base_b)] {
                                     ui.label(label);
-                                    ui.add(egui::TextEdit::singleline(text).desired_width(f32::INFINITY).font(egui::TextStyle::Monospace).hint_text("CONST BASE NOME = X Y Z A B C"));
+                                    ui.add(egui::TextEdit::singleline(text).desired_width(f32::INFINITY).font(egui::TextStyle::Monospace).hint_text("CONST BASE NOME = X Y Z A B C"))
+                                        .on_hover_text("CONST BASE NOME = X Y Z A B C\noppure\nNOME : OBJECT := (X, Y, Z, A, B, C)");
                                 }
                                 if ui.button("Calcola").clicked() {
                                     panel.result_note = None;
                                     calc_result = Some(match (parse_const_base(&panel.base_a), parse_const_base(&panel.base_b)) {
-                                        (Some((na, a)), Some((nb, b))) => Ok((format!("{na}  ->  {nb}"), a.offset_to(&b))),
+                                        (Some((na, a)), Some((nb, b))) => Ok((format!("{na}  ->  {nb}"), a.offset_to(&b), a)),
                                         (None, _) => Err("BASE di origine non riconosciuto".to_string()),
                                         (_, None) => Err("BASE di destinazione non riconosciuto".to_string()),
                                     });
@@ -1545,32 +1594,56 @@ pub fn draw(ctx: &egui::Context, app: &mut GestoreApp, pass: super::dock::Pass) 
                             }
                         }
                         match calc_result {
-                            Some(Ok((title, p))) => {
+                            Some(Ok((title, p, frame))) => {
                                 panel.result = Some(p);
+                                panel.result_world = Some(offset_in_world(&p, &frame));
                                 panel.error = None;
                                 status = Some(format!("Offset calcolato: {title}"));
                             }
                             Some(Err(e)) => {
                                 panel.result = None;
+                                panel.result_world = None;
                                 panel.error = Some(e);
                             }
                             None => {}
                         }
                         if let Some(p) = panel.result {
-                            ui.add_space(4.0);
-                            ui.label(egui::RichText::new("Scostamento").strong());
-                            pose_grid(ui, "posizione_risultato", &p);
+                            let rows = [
+                                (
+                                    "Offset in coordinate dell'oggetto",
+                                    "Negli assi e nell'origine del riferimento: come gli script e i BASE del robot",
+                                    p,
+                                    false,
+                                ),
+                                (
+                                    "Offset in coordinate World",
+                                    "Lo stesso spostamento visto dalla cabina: assi e origine della cabina",
+                                    panel.result_world.unwrap_or(p),
+                                    true,
+                                ),
+                            ];
+                            for (k, (title, hover, pose, world)) in rows.into_iter().enumerate() {
+                                ui.add_space(4.0);
+                                ui.label(egui::RichText::new(title).strong()).on_hover_text(hover);
+                                pose_grid(ui, &format!("posizione_risultato_{k}"), &pose);
+                                ui.horizontal_wrapped(|ui| {
+                                    if ui.button(icon_text(ui, icon::COPY, "Copia")).clicked() {
+                                        copy = Some(offset_text(if world { "Offset World" } else { "Offset" }, &pose));
+                                    }
+                                    let what = if world { "acceso" } else { "spento" };
+                                    if ui
+                                        .button("Usa come offset")
+                                        .on_hover_text(format!("Copia i valori in «Applica offset», con World {what}"))
+                                        .clicked()
+                                    {
+                                        panel.offset = pose;
+                                        panel.world = world;
+                                    }
+                                });
+                            }
                             if let Some(note) = &panel.result_note {
                                 ui.label(egui::RichText::new(note).weak().small());
                             }
-                            ui.horizontal_wrapped(|ui| {
-                                if ui.button(icon_text(ui, icon::COPY, "Copia")).clicked() {
-                                    copy = Some(offset_text("Offset", &p));
-                                }
-                                if ui.button("Usa come offset").on_hover_text("Copia i valori in «Applica offset»").clicked() {
-                                    panel.offset = p;
-                                }
-                            });
                         }
                     });
                 if let Some(e) = &panel.error {
@@ -1769,7 +1842,8 @@ DEF Destinazione Group { children [
 
     impl Ui {
         fn run(&self, app: &mut GestoreApp, events: Vec<egui::Event>) -> Vec<(String, egui::Rect)> {
-            let screen = egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(1400.0, 1000.0));
+            // Alta: la finestra deve stare tutta sullo schermo, senza scorrere
+            let screen = egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(1400.0, 1800.0));
             let out = self.ctx.run(egui::RawInput { screen_rect: Some(screen), events, ..Default::default() }, |ctx| {
                 draw(ctx, app, crate::ui::dock::Pass::Floating);
             });
@@ -2037,6 +2111,22 @@ DEF Destinazione Group { children [
         let texts = ui.run(&mut app, vec![]);
         assert!(texts.iter().any(|(t, _)| t.starts_with("+1367.98")), "risultato mostrato");
         assert!(app.ui_state.status_message.contains("BASE_A  ->  BASE_B"));
+
+        // Il nuovo oggetto del robot: la base di origine spostata dell'offset è la destinazione,
+        // sia con l'offset nell'oggetto (World spento) sia con quello in World (acceso)
+        app.ui_state.position.robot_line = "CONST BASE BASE_A = 150 2500 -1200 0.5 -20 -85".into();
+        for (k, world) in [(0, false), (1, true)] {
+            ui.click(&mut app, "Usa come offset", k);
+            assert_eq!(app.ui_state.position.world, world);
+            let texts = ui.run(&mut app, vec![]);
+            assert!(
+                texts.iter().any(|(t, _)| t == "CONST BASE BASE_A = 180 3100 40 1.2 -12.5 -91"),
+                "World {world}: {:?}",
+                texts.iter().map(|t| &t.0).filter(|t| t.contains("BASE_A")).collect::<Vec<_>>()
+            );
+        }
+        let w = app.ui_state.position.result_world.expect("offset World");
+        assert!(w.xyz.abs().max_element() > 1.0 && (w.xyz - p.xyz).length() > 1.0, "diverso da quello nell'oggetto: {w:?}");
     }
 
     /// Cerniera: asse verticale da due punti, la freccia dell'angolo ruota il pezzo attorno

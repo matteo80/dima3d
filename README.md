@@ -25,7 +25,8 @@ Il nome viene dalla *dima* di officina, la maschera che tiene i pezzi nella posi
 - **Misure** tra due punti con aggancio ai vertici; con la *calamita* i punti seguono i pezzi che si spostano
 - **Piano di sezione**, proprietà del pezzo selezionato, pipetta per i colori
 - **Posizione**: sposta e ruota file o pezzi in X Y Z / A B C, in coordinate dell'oggetto o della cabina;
-  calcolo e applicazione di offset tra oggetti o tra `CONST BASE` (es. per costruire lo skid)
+  calcolo e applicazione di offset tra oggetti o tra `CONST BASE` (es. per costruire lo skid), in coordinate
+  dell'oggetto o della cabina; riga del nuovo oggetto del robot (`CONST BASE` o `OBJECT`) già spostata dell'offset
 - **Cerniere**: rotazione attorno a un asse scelto nella vista (due punti, due fori, un foro, punto + asse),
   oppure calcolato da due matematiche dello stesso pezzo in posizioni diverse; porta una misura a una quota data
 - **Cerniere a 4 perni** (cofani): dai quattro perni il cofano si apre dell'angolo scelto e le bielle seguono,

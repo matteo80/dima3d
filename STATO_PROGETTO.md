@@ -962,6 +962,15 @@ Fatto:
       %LOCALAPPDATA%\Programs\Dima3D senza permessi da amministratore, menu Start, desktop facoltativo,
       associazione dei .dima3d facoltativa, disinstallazione. `pacchetto.ps1` lo crea, `pubblica.ps1` lo carica nella
       Release accanto allo zip; dopo un aggiornamento dal programma si aggiorna la versione in «App installate».
+- [x] (2026-11-13, 0.2.21) **Offset in coordinate dell'oggetto e World; nuovo oggetto del robot.** «Calcola offset»
+      mostra lo scostamento nel riferimento (O = F_rif⁻¹·F_dest, come gli script e i BASE) e lo stesso visto dalla
+      cabina (W = F·O·F⁻¹, `offset_in_world`): il visualizzatore usato in azienda sembra applicare gli offset
+      all'oggetto attorno all'origine della cabina (con O i pezzi non tornano, con i valori World sì: da
+      confermare con le prove dell'utente). «Usa come offset» copia l'uno o l'altro e spegne/accende World.
+      «Nuovo oggetto del robot» (in «Applica offset»): legge `CONST BASE NOME = X Y Z A B C` o
+      `NOME : OBJECT := (X, Y, Z, A, B, C)` (`parse_robot_base`) e la riscrive nello stesso formato spostata
+      dell'offset (base·O con World spento, O·base acceso), in doppia precisione. Per `OBJECT` si assume la
+      stessa convenzione degli angoli del CONST BASE (Rz(C)·Ry(B)·Rx(A)): da verificare.
 - [x] (2026-11-13, 0.2.20) **Cerniere a 4 perni salvate** (`SavedLinkage` in `scene_graph/hinge.rs`): «Salva
       cerniera» anche in «4 perni (cofano)» ricorda perni, parte che si apre e bielle. I perni sono nelle coordinate
       del pezzo di riferimento con il meccanismo a 0° (dalla posizione attuale e dall'angolo si ricava quella a 0°,

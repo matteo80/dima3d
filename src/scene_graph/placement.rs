@@ -152,16 +152,93 @@ fn numbers(text: &str) -> Vec<f32> {
         .collect()
 }
 
-/// `CONST BASE NOME = X Y Z A B C` → (nome, posa).
+/// `CONST BASE NOME = X Y Z A B C` → (nome, posa). Accetta anche il formato
+/// `NOME : OBJECT := (X, Y, Z, A, B, C)` (vedi [`parse_robot_base`]).
 pub fn parse_const_base(text: &str) -> Option<(String, Pose)> {
+    parse_robot_base(text).map(|b| (b.name, b.pose))
+}
+
+/// Come è scritto un oggetto (base) nel file del robot.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum BaseFormat {
+    /// `CONST BASE NOME = X Y Z A B C`
+    ConstBase,
+    /// `NOME : OBJECT := (X, Y, Z, A, B, C)`
+    Object,
+}
+
+/// Oggetto del robot letto da una riga del programma: nome, posa e formato in cui riscriverlo.
+#[derive(Debug, Clone, PartialEq)]
+pub struct RobotBase {
+    pub name: String,
+    pub pose: Pose,
+    pub format: BaseFormat,
+}
+
+/// Legge `CONST BASE NOME = X Y Z A B C` oppure `NOME : OBJECT := (X, Y, Z, A, B, C)`.
+pub fn parse_robot_base(text: &str) -> Option<RobotBase> {
+    let text = text.trim();
     let upper = text.to_ascii_uppercase();
+    let pose = |v: &[f32]| Pose { xyz: Vec3::new(v[0], v[1], v[2]), abc: Vec3::new(v[3], v[4], v[5]) };
+    if let Some(assign) = upper.find(":=").filter(|&i| upper[..i].contains("OBJECT")) {
+        let name = text[..assign].split(':').next()?.trim();
+        let inside = &text[assign + 2..];
+        let inside = inside.trim().trim_start_matches('(');
+        let inside = inside.split(')').next()?;
+        // Separati dalle virgole: qui la virgola non è il separatore decimale
+        let v: Vec<f32> = inside.split([',', ';']).filter_map(|t| t.trim().parse::<f32>().ok()).collect();
+        return (v.len() >= 6 && !name.is_empty())
+            .then(|| RobotBase { name: name.to_string(), pose: pose(&v), format: BaseFormat::Object });
+    }
     let at = upper.find("BASE")?;
-    let rest = &text[at + 4..];
-    let (name, values) = rest.split_once('=')?;
+    let (name, values) = text[at + 4..].split_once('=')?;
     let v = numbers(values);
-    (v.len() >= 6).then(|| {
-        (name.trim().to_string(), Pose { xyz: Vec3::new(v[0], v[1], v[2]), abc: Vec3::new(v[3], v[4], v[5]) })
-    })
+    (v.len() >= 6).then(|| RobotBase { name: name.trim().to_string(), pose: pose(&v), format: BaseFormat::ConstBase })
+}
+
+/// Numero come si scrive nei file del robot: al più tre decimali, senza zeri in fondo ("290",
+/// "0.334", "-179.974").
+fn robot_number(x: f32) -> String {
+    let s = format!("{:.3}", x);
+    let s = if s.contains('.') { s.trim_end_matches('0').trim_end_matches('.') } else { &s };
+    if s == "-0" { "0".to_string() } else { s.to_string() }
+}
+
+impl RobotBase {
+    /// La riga da incollare nel file del robot, nel formato in cui era scritta.
+    pub fn to_line(&self) -> String {
+        let p = &self.pose;
+        let v: Vec<String> = [p.xyz.x, p.xyz.y, p.xyz.z, p.abc.x, p.abc.y, p.abc.z].into_iter().map(robot_number).collect();
+        match self.format {
+            BaseFormat::ConstBase => format!("CONST BASE {} = {}", self.name, v.join(" ")),
+            BaseFormat::Object => format!("{} : OBJECT := ({})", self.name, v.join(", ")),
+        }
+    }
+
+    /// Lo stesso oggetto spostato dell'offset: in coordinate dell'oggetto (`world` falso, come
+    /// gli script: base · offset) oppure in coordinate della cabina (offset · base).
+    pub fn moved(&self, offset: &Pose, world: bool) -> RobotBase {
+        let (b, o) = (dmatrix(&self.pose), dmatrix(offset));
+        let m = if world { o * b } else { b * o };
+        RobotBase { pose: Pose::from_matrix(m.as_mat4()), ..self.clone() }
+    }
+}
+
+/// Matrice di una posa in doppia precisione: i conti sulle basi del robot (metri di distanza,
+/// millesimi di precisione) non perdono cifre.
+fn dmatrix(p: &Pose) -> glam::DMat4 {
+    let a = p.abc.as_dvec3();
+    glam::DMat4::from_translation(p.xyz.as_dvec3())
+        * glam::DMat4::from_rotation_z(a.z.to_radians())
+        * glam::DMat4::from_rotation_y(a.y.to_radians())
+        * glam::DMat4::from_rotation_x(a.x.to_radians())
+}
+
+/// Lo stesso scostamento visto dalla cabina: lo spostamento in coordinate World che porta un
+/// oggetto con riferimento `frame` dove lo porta `offset` applicato nelle sue coordinate.
+pub fn offset_in_world(offset: &Pose, frame: &Pose) -> Pose {
+    let f = dmatrix(frame);
+    Pose::from_matrix((f * dmatrix(offset) * f.inverse()).as_mat4())
 }
 
 /// Offset incollato: righe "X  +12.000 mm" … "C  -0.500°" (risultato degli script), oppure sei
@@ -490,6 +567,37 @@ mod tests {
         let back = Pose::from_matrix(o.matrix() * off.matrix());
         assert!(close_pose(&back, [180.0, 3100.0, 40.0], [1.2, -12.5, -91.0], 2e-3), "{back:?}");
         assert!(parse_const_base("BASE senza valori = 1 2").is_none());
+    }
+
+    /// I due formati degli oggetti del robot si leggono e si riscrivono uguali; spostati
+    /// dell'offset danno la base di destinazione.
+    #[test]
+    fn robot_bases_in_both_formats() {
+        let b = parse_robot_base("CONST BASE OGG_A = -1250 -4000 290 0 0 90").unwrap();
+        assert_eq!((b.name.as_str(), b.format), ("OGG_A", BaseFormat::ConstBase));
+        assert_eq!(b.to_line(), "CONST BASE OGG_A = -1250 -4000 290 0 0 90");
+        let o = parse_robot_base("  OGG_B : OBJECT := (-1615, 15, -1963, 0.334, 0.451, -179.974)").unwrap();
+        assert_eq!((o.name.as_str(), o.format), ("OGG_B", BaseFormat::Object));
+        assert!(close_pose(&o.pose, [-1615.0, 15.0, -1963.0], [0.334, 0.451, -179.974], 1e-4), "{o:?}");
+        assert_eq!(o.to_line(), "OGG_B : OBJECT := (-1615, 15, -1963, 0.334, 0.451, -179.974)");
+        assert!(parse_robot_base("OGG : OBJECT := (1, 2, 3)").is_none());
+        assert_eq!(parse_const_base("OGG_B : OBJECT := (1, 2, 3, 4, 5, 6)").unwrap().0, "OGG_B");
+
+        // Offset tra due basi applicato alla prima: in coordinate dell'oggetto e in World
+        let (_, a) = parse_const_base("CONST BASE BASE_A = 150 2500 -1200 0.5 -20 -85").unwrap();
+        let (_, d) = parse_const_base("CONST BASE BASE_B = 180 3100 40 1.2 -12.5 -91").unwrap();
+        let base = RobotBase { name: "BASE_A".into(), pose: a, format: BaseFormat::Object };
+        let off = a.offset_to(&d);
+        for moved in [base.moved(&off, false), base.moved(&offset_in_world(&off, &a), true)] {
+            assert!(close_pose(&moved.pose, [180.0, 3100.0, 40.0], [1.2, -12.5, -91.0], 2e-3), "{moved:?}");
+        }
+        // Base ruotata di 90° attorno a Z: X dell'offset nell'oggetto = Y della cabina
+        let small = Pose { xyz: Vec3::new(100.0, 0.0, 10.0), abc: Vec3::new(0.0, 0.0, 0.5) };
+        assert_eq!(b.moved(&small, false).to_line(), "CONST BASE OGG_A = -1250 -3900 300 0 0 90.5");
+        assert_eq!(b.moved(&small, true).to_line(), "CONST BASE OGG_A = -1115.046 -4010.756 300 0 0 90.5");
+        // In World lo scostamento è d · a⁻¹
+        let w = offset_in_world(&off, &a);
+        assert!(w.matrix().abs_diff_eq(d.matrix() * a.matrix().inverse(), 1e-2), "{w:?}");
     }
 
     #[test]
