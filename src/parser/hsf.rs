@@ -231,9 +231,11 @@ fn mat_from_rows(m: &[f32; 12]) -> Mat4 {
     )
 }
 
-/// Campioni di coordinate quantizzate (`quantize_and_pack_floats`): flusso di bit letto dal bit
-/// più alto di parole da 32 bit little-endian. Verificato sul cubo di prova: con l'ordine dei byte
-/// semplice le strisce non formano facce piane.
+/// Campioni di coordinate quantizzate (`quantize_and_pack_floats`). A 8 e 16 bit sono interi
+/// semplici (byte, u16 little-endian): con 8 bit, su quasi tutte le Shell dei file reali, solo così
+/// i parallelepipedi hanno le facce piane e i triangoli non attraversano il pezzo. Con le altre
+/// larghezze è un flusso di bit letto dal bit più alto di parole da 32 bit little-endian
+/// (verificato sui parallelepipedi a 12 bit: tutte le coordinate agli estremi).
 fn unpack_samples(data: &[u8], bits: u8, n: usize) -> Res<Vec<u32>> {
     if !(1..=32).contains(&bits) {
         return Err(format!("campioni a {bits} bit non validi"));
@@ -241,6 +243,11 @@ fn unpack_samples(data: &[u8], bits: u8, n: usize) -> Res<Vec<u32>> {
     let bits = bits as usize;
     if data.len() * 8 < n * bits {
         return Err("dati compressi troppo corti".into());
+    }
+    match bits {
+        8 => return Ok(data[..n].iter().map(|&b| b as u32).collect()),
+        16 => return Ok(data.chunks_exact(2).take(n).map(|b| u16::from_le_bytes([b[0], b[1]]) as u32).collect()),
+        _ => {}
     }
     let word = |i: usize| -> u64 {
         let mut b = [0u8; 4];
@@ -1174,11 +1181,11 @@ mod tests {
 
     #[test]
     fn samples_are_read_from_the_high_bit_of_each_word() {
-        // Parola 0x12345678 in little-endian: a 16 bit dà 0x1234 poi 0x5678, a 8 bit 0x12 0x34…
-        let data = 0x1234_5678u32.to_le_bytes();
-        assert_eq!(unpack_samples(&data, 16, 2).unwrap(), vec![0x1234, 0x5678]);
+        // A 8 e 16 bit interi semplici, nell'ordine dei byte
+        let data = [0x12, 0x34, 0x56, 0x78];
         assert_eq!(unpack_samples(&data, 8, 4).unwrap(), vec![0x12, 0x34, 0x56, 0x78]);
-        // A cavallo di due parole: 12 bit
+        assert_eq!(unpack_samples(&data, 16, 2).unwrap(), vec![0x3412, 0x7856]);
+        // Altre larghezze: parole little-endian lette dal bit più alto, anche a cavallo di due
         let mut d = 0xABCD_EF01u32.to_le_bytes().to_vec();
         d.extend_from_slice(&0x2345_6789u32.to_le_bytes());
         assert_eq!(unpack_samples(&d, 12, 5).unwrap(), vec![0xABC, 0xDEF, 0x012, 0x345, 0x678]);

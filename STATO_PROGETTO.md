@@ -962,6 +962,11 @@ Fatto:
       %LOCALAPPDATA%\Programs\Dima3D senza permessi da amministratore, menu Start, desktop facoltativo,
       associazione dei .dima3d facoltativa, disinstallazione. `pacchetto.ps1` lo crea, `pubblica.ps1` lo carica nella
       Release accanto allo zip; dopo un aggiornamento dal programma si aggiorna la versione in «App installate».
+- [x] (2026-11-13, 0.2.23) **HSF: coordinate compresse a 8 e 16 bit.** I campioni a 8 bit sono byte nell'ordine del
+      file (16 bit: u16 little-endian), non bit dentro parole da 32: con la lettura «a parole» i robot si vedevano
+      come un groviglio di triangoli. Verificato sui parallelepipedi (facce piane solo così) e con lo spigolo medio
+      su ~10.800 Shell dei file di prova (6-7 volte più corto). A 12 bit resta il flusso di bit in parole da 32
+      (parallelepipedi: tutte le coordinate agli estremi).
 - [x] (2026-11-13, 0.2.22) **HSF dei robot che non si aprivano.** Ingombro `B` in double (primo byte & 1), opcode
       `!` (selezionabilità) e `l` (linea, con byte float/double) saltati; nelle strisce compresse a 8 bit il
       conteggio può usare il bit alto (0x82 = striscia da 130): se la lista con il segno non torna si rilegge senza
