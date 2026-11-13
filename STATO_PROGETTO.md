@@ -962,6 +962,11 @@ Fatto:
       %LOCALAPPDATA%\Programs\Dima3D senza permessi da amministratore, menu Start, desktop facoltativo,
       associazione dei .dima3d facoltativa, disinstallazione. `pacchetto.ps1` lo crea, `pubblica.ps1` lo carica nella
       Release accanto allo zip; dopo un aggiornamento dal programma si aggiorna la versione in «App installate».
+- [x] (2026-11-13, 0.2.22) **HSF dei robot che non si aprivano.** Ingombro `B` in double (primo byte & 1), opcode
+      `!` (selezionabilità) e `l` (linea, con byte float/double) saltati; nelle strisce compresse a 8 bit il
+      conteggio può usare il bit alto (0x82 = striscia da 130): se la lista con il segno non torna si rilegge senza
+      segno; file V19.10 senza byte di precisione (versione letta dall'intestazione, `Stream::precision`). Sui 180
+      HSF di prova da 77 file con avvisi a 2; restano solo le Shell con compressione «edgebreaker».
 - [x] (2026-11-13, 0.2.21) **Offset in coordinate dell'oggetto e World; nuovo oggetto del robot.** «Calcola offset»
       mostra lo scostamento nel riferimento (O = F_rif⁻¹·F_dest, come gli script e i BASE) e lo stesso visto dalla
       cabina (W = F·O·F⁻¹, `offset_in_world`): il visualizzatore usato in azienda sembra applicare gli offset

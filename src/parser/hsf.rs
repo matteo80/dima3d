@@ -1,11 +1,14 @@
-//! Lettura dei file HSF (HOOPS Stream Format, versioni 20 e 21).
+//! Lettura dei file HSF (HOOPS Stream Format, versioni 19.10, 20 e 21).
 //!
 //! Riferimento: la specifica pubblica degli opcode (docs.techsoft3d.com, sezione «HSF File
 //! Format»), che permette di leggere e scrivere HSF senza il toolkit. Alcuni dettagli non sono
 //! scritti nella specifica e sono stati ricavati dai file reali:
-//! - le geometrie e la matrice (`S`, `%`, `X`, polilinee) hanno un byte in più subito dopo
-//!   l'opcode: 0 = coordinate `float`, 1 = `double`;
-//! - `B` (ingombro informativo) ha due byte prima delle coordinate;
+//! - dalla V20 le geometrie e la matrice (`S`, `%`, `X`, `B`, linee e polilinee) hanno un byte in
+//!   più subito dopo l'opcode: 0 = coordinate `float`, 1 = `double`; nella V19 manca;
+//! - `B` (ingombro informativo) ha poi un byte di tipo: 0 = parallelepipedo (6 numeri), altrimenti
+//!   sfera (4);
+//! - nelle strisce compresse a 8 bit il conteggio può usare il bit alto (striscia da più di 127
+//!   punti) invece di indicare un ventaglio;
 //! - `m` (metadati del segmento): numero di voci, poi chiave di 4 caratteri (`name`), lunghezza e
 //!   testo terminato da zero;
 //! - nelle facce compresse la lunghezza comprende il byte dei bit per valore; i valori a 8, 16 e 32
@@ -60,6 +63,8 @@ struct Stream<'a> {
     raw_pos: usize,
     out: Vec<u8>,
     pos: usize,
+    /// Versione dall'intestazione × 100 (es. 2100 per «V21.00»)
+    version: u32,
 }
 
 type Res<T> = Result<T, String>;
@@ -105,6 +110,10 @@ impl<'a> Stream<'a> {
     fn f64(&mut self) -> Res<f64> {
         let b = self.bytes(8)?;
         Ok(f64::from_le_bytes(b.try_into().unwrap()))
+    }
+    /// Byte di precisione dopo l'opcode (bit 0 = `double`). Nei file prima della V20 manca: float.
+    fn precision(&mut self) -> Res<u8> {
+        if self.version < 2000 { Ok(0) } else { self.u8() }
     }
     /// Un numero `float` o `double` secondo il byte di precisione.
     fn real(&mut self, double: bool) -> Res<f32> {
@@ -275,16 +284,25 @@ fn unpack(data: &[u8], bits: u8, n: usize) -> Res<Vec<u32>> {
         .collect())
 }
 
-/// Triangoli da strisce e ventagli (`TKSH_TRISTRIPS`): conteggio negativo = ventaglio.
+/// Triangoli da strisce e ventagli (`TKSH_TRISTRIPS`): conteggio negativo = ventaglio. Se così la
+/// lista non torna, i conteggi sono senza segno: con 8 bit e più di 128 punti lo scrittore usa
+/// il bit alto per strisce lunghe (es. 0x82 = striscia da 130), non per i ventagli.
 fn triangles_from_strips(list: &[u32], bits: u8, point_count: usize) -> Res<Vec<u32>> {
+    match strips(list, bits, point_count, true) {
+        Err(e) if bits < 32 => strips(list, bits, point_count, false).map_err(|_| e),
+        r => r,
+    }
+}
+
+fn strips(list: &[u32], bits: u8, point_count: usize, signed: bool) -> Res<Vec<u32>> {
     let mut out = Vec::with_capacity(list.len() * 2);
     let sign = 1i64 << (bits - 1);
     let mut k = 0;
     while k < list.len() {
         let mut c = list[k] as i64;
-        if bits < 32 && c >= sign {
+        if signed && bits < 32 && c >= sign {
             c -= sign << 1;
-        } else if bits == 32 {
+        } else if signed && bits == 32 {
             c = list[k] as i32 as i64;
         }
         k += 1;
@@ -341,7 +359,7 @@ impl<'a> Reader<'a> {
     fn new(data: &'a [u8]) -> Self {
         let root = Segment::default();
         Self {
-            s: Stream { raw: data, raw_pos: 0, out: Vec::new(), pos: 0 },
+            s: Stream { raw: data, raw_pos: 0, out: Vec::new(), pos: 0, version: 2100 },
             segments: vec![root],
             stack: vec![0],
             slots: Vec::new(),
@@ -358,11 +376,20 @@ impl<'a> Reader<'a> {
 
     fn run(&mut self) -> Res<()> {
         // Intestazione: commento «;; HSF V21.00 » fino a fine riga
+        let mut header = Vec::new();
         loop {
             let b = self.s.u8()?;
             if b == b'\n' {
                 break;
             }
+            header.push(b);
+        }
+        if let Some(v) = String::from_utf8_lossy(&header)
+            .split_once(" V")
+            .and_then(|(_, v)| v.trim().split_once('.'))
+            .and_then(|(a, b)| Some(a.parse::<u32>().ok()? * 100 + b.get(..2)?.parse::<u32>().ok()?))
+        {
+            self.s.version = v;
         }
         while !self.s.at_end() {
             let at = self.s.pos;
@@ -404,9 +431,12 @@ impl<'a> Reader<'a> {
                 s.u32()?;
             }
             b'B' | b'b' => {
-                s.u8()?;
+                // Ingombro: precisione (1 = double; manca prima della V20), tipo (0 =
+                // parallelepipedo, 6 numeri; altrimenti sfera, 4 numeri)
+                let double = s.precision()? & 0x01 != 0;
                 let kind = s.u8()?;
-                s.bytes(if kind == 0 { 24 } else { 16 })?;
+                let n = if kind == 0 { 6 } else { 4 };
+                s.bytes(n * if double { 8 } else { 4 })?;
             }
             b'(' => {
                 let n = s.u8()? as usize;
@@ -457,7 +487,7 @@ impl<'a> Reader<'a> {
                 }
             }
             b'%' => {
-                let double = s.u8()? != 0;
+                let double = s.precision()? != 0;
                 let mut m = [0f32; 12];
                 for v in &mut m {
                     *v = s.real(double)?;
@@ -511,19 +541,27 @@ impl<'a> Reader<'a> {
             b'H' => self.heuristics()?,
             b'S' => self.shell()?,
             b'X' => {
-                let double = s.u8()? != 0;
+                let double = s.precision()? != 0;
                 s.bytes(if double { 24 } else { 12 })?;
             }
             0x10 => self.polypolyline()?,
             b'L' => {
                 // Polilinea: un byte di opzioni (0 = float, 1 = double), numero di punti, poi
                 // x y z. Si salta: la scena mostra solo superfici
-                let flags = s.u8()?;
+                let flags = s.precision()?;
                 if flags > 1 {
                     return Err(format!("polilinea con opzioni {flags:02x} non supportata"));
                 }
                 let n = s.len_i32("polilinea")?;
                 s.bytes(n * if flags == 1 { 24 } else { 12 })?;
+            }
+            b'l' => {
+                // Linea: precisione (0 = float, 1 = double), due punti. Si salta come le polilinee
+                let flags = s.precision()?;
+                if flags > 1 {
+                    return Err(format!("linea con opzioni {flags:02x} non supportata"));
+                }
+                s.bytes(if flags == 1 { 48 } else { 24 })?;
             }
             b'&' => {
                 let from = s.len_i32("copia")?;
@@ -560,6 +598,13 @@ impl<'a> Reader<'a> {
                     }
                     _ => self.warnings.push(format!("Riferimento a un segmento ({tag}) non supportato: ignorato")),
                 }
+            }
+            b'!' => {
+                // Selezionabilità: maschera delle geometrie, poi 5 campi della stessa larghezza
+                // (premuto, rilasciato, trascinato giù/su, anche se invisibile). Si salta
+                let g = self.geometry_bits()?;
+                let width = if g & 0x8000 != 0 { 4 } else if g & 0x80 != 0 { 2 } else { 1 };
+                self.s.bytes(5 * width)?;
             }
             b'D' => {}
             _ => {
@@ -704,7 +749,7 @@ impl<'a> Reader<'a> {
 
     fn polypolyline(&mut self) -> Res<()> {
         let s = &mut self.s;
-        let double = s.u8()? != 0;
+        let double = s.precision()? != 0;
         let sub = s.u16()?;
         let count = s.len_i32("polilinea")?;
         let primitives = if sub & 0x02 != 0 {
@@ -760,7 +805,7 @@ impl<'a> Reader<'a> {
 
     fn shell(&mut self) -> Res<()> {
         let s = &mut self.s;
-        let double = s.u8()? != 0;
+        let double = s.precision()? != 0;
         let sub = s.u8()?;
         let sub2 = if sub & 0x80 != 0 { s.u16()? } else { 0 };
         let null = sub2 & 0x02 != 0;
@@ -1147,6 +1192,31 @@ mod tests {
         assert_eq!(t, vec![0, 1, 2, 2, 1, 3, 4, 5, 6, 4, 6, 7]);
     }
 
+    /// V19: ingombro e matrice senza il byte di precisione.
+    #[test]
+    fn version_19_has_no_precision_byte() {
+        let mut f = b";; HSF V19.10 \n".to_vec();
+        f.extend_from_slice(&[b'B', 0]);
+        f.extend_from_slice(&[0u8; 6 * 4]);
+        f.extend_from_slice(&[b'(', 1, b'a', b'%']);
+        for v in [1f32, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0] {
+            f.extend_from_slice(&v.to_le_bytes());
+        }
+        f.extend_from_slice(&[b')', 0]);
+        let (_, warnings) = shapes(&f);
+        assert!(warnings.is_empty(), "{warnings:?}");
+    }
+
+    /// Striscia da 130 punti in 8 bit: 0x82 è un conteggio senza segno, non un ventaglio da 126.
+    #[test]
+    fn long_strip_count_uses_the_high_bit() {
+        let mut list = vec![130u32];
+        list.extend(0..130);
+        list.extend([3, 130, 131, 132]);
+        let t = triangles_from_strips(&list, 8, 200).unwrap();
+        assert_eq!(t.len(), (128 + 1) * 3);
+    }
+
     #[test]
     fn degenerate_strip_triangles_are_dropped() {
         let t = triangles_from_strips(&[3, 5, 5, 6], 8, 7).unwrap();
@@ -1269,10 +1339,32 @@ mod tests {
     fn unknown_opcode_keeps_what_was_read() {
         let mut f = sample();
         f.pop();
-        f.push(b'!');
+        f.push(0xee);
         let (shapes, warnings) = shapes(&f);
         assert_eq!(shapes.len(), 1);
         assert_eq!(warnings.len(), 1);
+    }
+
+    /// Ingombro in double (primo byte = 1) e selezionabilità con maschera a 2 byte: si saltano
+    /// senza perdere l'allineamento.
+    #[test]
+    fn double_bounding_and_selectability_are_skipped() {
+        let mut extra = vec![b'B', 1, 0];
+        extra.extend_from_slice(&[0u8; 6 * 8]);
+        extra.extend_from_slice(&[b'B', 0, 1]);
+        extra.extend_from_slice(&[0u8; 4 * 4]);
+        extra.extend_from_slice(&[b'!', 0xff, 0x43]);
+        extra.extend_from_slice(&[0u8; 5 * 2]);
+        extra.extend_from_slice(&[b'!', 0x01, 0, 0, 0, 0, 0]);
+        // Linee: due punti in float, poi in double
+        extra.extend_from_slice(&[b'l', 0]);
+        extra.extend_from_slice(&[0u8; 6 * 4]);
+        extra.extend_from_slice(&[b'l', 1]);
+        extra.extend_from_slice(&[0u8; 6 * 8]);
+        let (shapes, warnings) = shapes(&sample_with(&extra, &[]));
+        assert!(warnings.is_empty(), "{warnings:?}");
+        assert_eq!(shapes.len(), 1);
+        assert_eq!(shapes[0].indices.len(), 6);
     }
 
     /// Come nei file dei programmi di misura: normali polari dopo le facce, polilinee semplici e
