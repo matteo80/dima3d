@@ -276,8 +276,20 @@ impl ProjectFile {
                     .filter(|&&n| in_file.contains(&n) && !scene.info[n as usize].deleted)
                     .map(|&n| origin(n))
                     .collect();
+                // Bielle: anche i loro nodi con i numeri del file
+                let linkage = h.linkage.clone().map(|mut l| {
+                    for link in &mut l.links {
+                        *link = link.iter().filter(|&&n| in_file.contains(&n) && !scene.info[n as usize].deleted).map(|&n| origin(n)).collect();
+                    }
+                    l
+                });
                 if !nodes.is_empty() {
-                    entry.hinges.push(crate::scene_graph::hinge::SavedHinge { nodes, ref_mesh: h.ref_mesh - source.meshes.start, ..h.clone() });
+                    entry.hinges.push(crate::scene_graph::hinge::SavedHinge {
+                        nodes,
+                        ref_mesh: h.ref_mesh - source.meshes.start,
+                        linkage,
+                        ..h.clone()
+                    });
                 }
             }
             files.push(entry);
@@ -356,7 +368,7 @@ impl ProjectFile {
                 out.push_str(&format!("posizione = {mesh} {}\n", values.join(" ")));
             }
             for h in &f.hinges {
-                out.push_str(&format!("cerniera = {}\n", h.to_text(&h.nodes, h.ref_mesh)));
+                out.push_str(&format!("{} = {}\n", h.text_key(), h.to_text(&h.nodes, h.ref_mesh)));
             }
         }
         out
@@ -480,6 +492,9 @@ impl ProjectFile {
                     f.placements.push((n.parse().map_err(|_| bad(i))?, Mat4::from_cols_array(&m)));
                 }
                 (Some(f), "cerniera") => f.hinges.push(crate::scene_graph::hinge::SavedHinge::from_text(value).ok_or_else(|| bad(i))?),
+                (Some(f), "cerniera_perni") => {
+                    f.hinges.push(crate::scene_graph::hinge::SavedHinge::from_text_four(value).ok_or_else(|| bad(i))?)
+                }
                 // Chiavi sconosciute (versioni future): si ignorano
                 _ => {}
             }
@@ -562,7 +577,13 @@ impl ProjectFile {
             let nodes: Vec<u32> = h.nodes.iter().filter_map(|&rel| node(rel)).collect();
             match meshes.start.checked_add(h.ref_mesh).filter(|x| meshes.contains(x)) {
                 Some(ref_mesh) if !nodes.is_empty() => {
-                    scene.hinges.push(crate::scene_graph::hinge::SavedHinge { nodes, ref_mesh, ..h.clone() });
+                    let linkage = h.linkage.clone().map(|mut l| {
+                        for link in &mut l.links {
+                            *link = link.iter().filter_map(|&rel| node(rel)).collect();
+                        }
+                        l
+                    });
+                    scene.hinges.push(crate::scene_graph::hinge::SavedHinge { nodes, ref_mesh, linkage, ..h.clone() });
                 }
                 _ => skipped += 1,
             }
@@ -623,16 +644,34 @@ mod tests {
             children: vec![(4, vec![7, 812, 9]), (812, vec![])],
             cabin: None,
             robots: None,
-            hinges: vec![crate::scene_graph::hinge::SavedHinge {
-                name: "Porta ant. sx".into(),
-                nodes: vec![7, 9],
-                ref_mesh: 3,
-                point: Vec3::new(10.0, -20.5, 300.0),
-                dir: Vec3::Y,
-                angle: 12.5,
-                min: 0.0,
-                max: 70.0,
-            }],
+            hinges: vec![
+                crate::scene_graph::hinge::SavedHinge {
+                    name: "Porta ant. sx".into(),
+                    nodes: vec![7, 9],
+                    ref_mesh: 3,
+                    point: Vec3::new(10.0, -20.5, 300.0),
+                    dir: Vec3::Y,
+                    angle: 12.5,
+                    min: 0.0,
+                    max: 70.0,
+                    linkage: None,
+                },
+                crate::scene_graph::hinge::SavedHinge {
+                    name: "Cofano | motore".into(),
+                    nodes: vec![4],
+                    ref_mesh: 2,
+                    point: Vec3::new(1.0, 2.0, 3.0),
+                    dir: -Vec3::Y,
+                    angle: 30.25,
+                    min: -0.5,
+                    max: 61.3,
+                    linkage: Some(crate::scene_graph::hinge::SavedLinkage {
+                        pins: [Vec3::new(1.0, 2.0, 3.0), Vec3::new(51.0, 2.0, 3.0), Vec3::new(-9.0, 2.0, 83.0), Vec3::new(46.0, 2.5, 73.0)],
+                        links: [vec![5, 812], vec![]],
+                        zero: -1.5,
+                    }),
+                },
+            ],
         };
         let copy = FileEntry {
             scale: 1.0,
@@ -666,6 +705,8 @@ mod tests {
         assert_eq!((&f.hidden, &f.deleted, &f.colors, &f.names), (&file.hidden, &file.deleted, &file.colors, &file.names));
         assert_eq!(f.placements, file.placements, "le matrici tornano identiche");
         assert_eq!((&f.groups, &f.children), (&file.groups, &file.children));
+        assert_eq!(f.hinges, file.hinges, "cerniere su un asse e a 4 perni");
+        assert!(text.contains("cerniera_perni = 2 4 | 30.25 -0.5 61.3 | "), "{text}");
         assert_eq!(back.files[1].path, PathBuf::from(r"E:\b.stl"));
         assert_eq!(back.files[3], cabin, "cabina: misure e modifiche");
         assert!(text.contains("[copia]\ndi = 1\nnodi = 3-5 9\nsaltati = 6\ntitolo = Copia di Staffa"), "{text}");

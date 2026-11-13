@@ -797,6 +797,9 @@ pub fn draw(ctx: &egui::Context, app: &mut GestoreApp, pass: super::dock::Pass) 
     // Dopo «Calcola l'asse»: i pezzi della prima posizione che si muovono diventano l'oggetto da ruotare
     let mut select_first: Option<Vec<u32>> = None;
     let mut save_hinge: Option<(String, Vec<u32>, Vec3, Vec3, f32)> = None;
+    // «4 perni»: nome, parte, bielle, perni a 0°, direzione, apertura
+    #[allow(clippy::type_complexity)]
+    let mut save_four: Option<(String, Vec<u32>, [Vec<u32>; 2], [Vec3; 4], Vec3, f32)> = None;
     let part_name = |nodes: &[u32]| match nodes {
         [] => "—".to_string(),
         [n] => scene.display_name(*n),
@@ -1259,6 +1262,42 @@ pub fn draw(ctx: &egui::Context, app: &mut GestoreApp, pass: super::dock::Pass) 
                             } else if h.angle != before {
                                 h.angle = before;
                             }
+                            // Cerniera salvata: si apre poi dalla vista, cliccando il cofano
+                            ui.label(
+                                egui::RichText::new(
+                                    "Per salvare: indica sopra la parte che si apre (e le bielle), dai un nome e premi \
+                                     «Salva cerniera». Poi basta cliccare il cofano nella vista per aprirlo con i gradi.",
+                                )
+                                .small()
+                                .weak(),
+                            );
+                            ui.horizontal_wrapped(|ui| {
+                                ui.add(egui::TextEdit::singleline(&mut h.save_name).hint_text("Nome, es. Cofano").desired_width(130.0));
+                                if ui
+                                    .add_enabled(!h.arm.is_empty(), egui::Button::new(icon_text(ui, icon::DOOR_OPEN, "Salva cerniera")))
+                                    .on_hover_text(
+                                        "Ricorda perni, parte che si apre e bielle nel progetto. \
+                                         La posizione in cui hai scelto i perni è 0°; il limite di apertura è il fine corsa",
+                                    )
+                                    .on_disabled_hover_text("Indica prima la parte che si apre (cofano + braccio)")
+                                    .clicked()
+                                {
+                                    let pins = four.pins_at_start();
+                                    // Cofano ancora chiuso: il verso si sceglie perché si apra
+                                    let normal = if four.at_start() { scene.outward_four_bar(&h.arm, pins, four.normal) } else { four.normal };
+                                    save_four = Some((h.save_name.clone(), h.arm.clone(), h.links.clone(), pins, normal, h.angle));
+                                    h.save_name.clear();
+                                }
+                            });
+                        }
+                        if save_four.is_some() {
+                            // Salvata: il meccanismo ora è della cerniera (etichetta nella vista)
+                            h.four = None;
+                            h.arm_ref = None;
+                            h.points.clear();
+                            h.arm.clear();
+                            h.links = Default::default();
+                            h.angle = 0.0;
                         }
                         if let Some((o, d)) = h.axis {
                             ui.label(
@@ -1582,6 +1621,9 @@ pub fn draw(ctx: &egui::Context, app: &mut GestoreApp, pass: super::dock::Pass) 
     }
     if let Some((name, nodes, o, d, angle)) = save_hinge {
         app.save_hinge(&name, nodes, o, d, angle);
+    }
+    if let Some((name, nodes, links, pins, normal, angle)) = save_four {
+        app.save_four_bar_hinge(&name, nodes, links, pins, normal, angle);
     }
     super::hinge_label::run(app, hinge_cmds);
     // Il valore del cursore resta valido dopo i propri spostamenti
@@ -2177,6 +2219,115 @@ DEF Piastra Group { children [ Shape { geometry IndexedFaceSet { coord Coordinat
         assert_eq!(app.ui_state.position.hinge.angle, 0.0);
         ui.click(&mut app, "Scegli di nuovo i perni", 0);
         assert!(app.ui_state.position.hinge.picking);
+    }
+
+    fn cofano_app() -> GestoreApp {
+        let mut app = GestoreApp::new_headless();
+        let mut scene = crate::parser::parse_wrl(COFANO);
+        scene.into_file("cofano.wrl".into(), None);
+        app.project.on_loaded(scene.revision);
+        app.scene_graph = Some(scene);
+        app.ui_state.position.open = true;
+        app
+    }
+
+    /// Cerniera a 4 perni salvata: si apre con i gradi muovendo cofano e bielle, si ferma al fine
+    /// corsa, segue l'oggetto spostato, «0° qui» e «Inverti verso» tengono il meccanismo, il
+    /// progetto la riporta uguale.
+    #[test]
+    fn saved_four_pin_hinge_opens_the_hood() {
+        let mut app = cofano_app();
+        let ui = Ui { ctx: egui::Context::default() };
+        let [arm, l1, l2, plate] = ["Braccio", "Biella1", "Biella2", "Piastra"].map(|n| node(&app, n, 0));
+        ui.run(&mut app, vec![]);
+        ui.click(&mut app, "4 perni (cofano)", 0);
+        for (k, n) in [arm, l1, l2].into_iter().enumerate() {
+            app.ui_state.select_single(Some(n));
+            ui.click(&mut app, "Usa selezione", k);
+        }
+        ui.click(&mut app, "Scegli i 4 perni nella vista", 0);
+        for (x, z) in [(0.0, 0.0), (50.0, 0.0), (-10.0, 80.0), (45.0, 70.0)] {
+            for (dx, dz) in [(3.0, 0.0), (0.0, 3.0), (-3.0, 0.0)] {
+                app.ui_state.position.hinge.add_point(Vec3::new(x + dx, 0.0, z + dz));
+            }
+        }
+        app.ui_state.position.hinge.save_name = "Cofano".into();
+        ui.run(&mut app, vec![]);
+        // Senza «Inverti verso»: al salvataggio il verso positivo è quello in cui il cofano si apre
+        ui.click(&mut app, "Salva cerniera", 0);
+        let h = app.scene_graph.as_ref().unwrap().hinges.first().cloned().expect(&app.ui_state.status_message);
+        assert_eq!(h.name, "Cofano");
+        assert_eq!(h.linkage.as_ref().unwrap().links, [vec![l1], vec![l2]]);
+        assert!(h.max > 20.0 && h.max <= 120.0, "fine corsa {}", h.max);
+        assert!(app.ui_state.position.hinge.four.is_none(), "il meccanismo ora è della cerniera");
+        app.ui_state.select_single(Some(arm));
+        assert_eq!(app.selected_hinge(), Some(0));
+
+        let vertex = |app: &GestoreApp, n: u32, i: usize| {
+            let s = app.scene_graph.as_ref().unwrap();
+            Vec3::from(s.shapes_data[s.meshes_of(&[n])[0] as usize].world_vertices[i])
+        };
+        let joined = |app: &GestoreApp| {
+            vertex(app, arm, 0).distance(vertex(app, l1, 1)) < 1e-2 && vertex(app, arm, 1).distance(vertex(app, l2, 1)) < 1e-2
+        };
+        app.apply(Action::SetHingeAngle { index: 0, angle: 20.0 });
+        let (m1, m2) = (vertex(&app, arm, 0), vertex(&app, arm, 1));
+        assert!(m1.distance(Vec3::new(-10.0, 0.0, 80.0)) > 5.0, "il cofano si è aperto");
+        assert!(joined(&app), "perni mobili uniti alle bielle");
+        assert!(vertex(&app, l1, 0).distance(Vec3::ZERO) < 1e-3 && vertex(&app, l2, 0).distance(Vec3::new(50.0, 0.0, 0.0)) < 1e-3, "perni fissi fermi");
+        let turn = (m2 - m1).normalize().dot(Vec3::new(55.0, 0.0, -10.0).normalize()).acos().to_degrees();
+        assert!((turn - 20.0).abs() < 1e-2, "{turn}");
+        assert_eq!(vertex(&app, plate, 2), Vec3::new(25.0, 0.0, -20.0));
+        // Oltre il fine corsa si ferma al limite
+        app.apply(Action::SetHingeAngle { index: 0, angle: 500.0 });
+        let max = app.scene_graph.as_ref().unwrap().hinges[0].angle;
+        assert!((max - h.max).abs() < 1e-3 && joined(&app), "{max}");
+
+        // Tutto l'oggetto si sposta e gira: la cerniera lo segue
+        let moved = Mat4::from_translation(Vec3::new(1000.0, 200.0, -50.0)) * Mat4::from_rotation_z(0.7);
+        app.apply(Action::Move { nodes: vec![arm, l1, l2, plate], matrix: moved });
+        app.apply(Action::SetHingeAngle { index: 0, angle: 0.0 });
+        assert!(vertex(&app, arm, 0).distance(moved.transform_point3(Vec3::new(-10.0, 0.0, 80.0))) < 1e-2, "chiuso al suo posto");
+        app.apply(Action::SetHingeAngle { index: 0, angle: 20.0 });
+        assert!(joined(&app));
+        assert!(vertex(&app, l1, 0).distance(moved.transform_point3(Vec3::ZERO)) < 1e-2);
+        let open20 = vertex(&app, arm, 2);
+
+        // «0° qui» a 20°: altri 10° portano il meccanismo a 30°
+        app.hinge_closed_here(0);
+        app.apply(Action::SetHingeAngle { index: 0, angle: 10.0 });
+        assert!(joined(&app));
+        let s = app.scene_graph.as_ref().unwrap();
+        assert!((s.hinges[0].max - (h.max - 20.0)).abs() < 1e-3, "il limite segue lo 0");
+        // «Inverti verso»: torna a 0° (il meccanismo a 20°), poi i gradi positivi lo chiudono
+        app.flip_hinge(0);
+        assert!(vertex(&app, arm, 2).distance(open20) < 1e-2, "di nuovo dove era «0° qui»");
+        app.apply(Action::SetHingeAngle { index: 0, angle: 20.0 });
+        assert!(vertex(&app, arm, 0).distance(moved.transform_point3(Vec3::new(-10.0, 0.0, 80.0))) < 1e-2, "chiuso");
+        assert!(joined(&app));
+        app.apply(Action::SetHingeAngle { index: 0, angle: 5.0 });
+
+        // Progetto: stessa cerniera, stessi perni
+        for (k, f) in app.scene_graph.as_mut().unwrap().sources.iter_mut().enumerate() {
+            f.path = Some(std::path::PathBuf::from(format!(r"D:\prova\cofano{k}.wrl")));
+        }
+        let file = crate::project_file::ProjectFile::capture(app.scene_graph.as_ref().unwrap(), Default::default(), None);
+        let path = std::path::Path::new(r"D:\prova\cofano.dima3d");
+        let text = file.to_text(path);
+        assert!(text.contains("cerniera_perni = "), "{text}");
+        let back = crate::project_file::ProjectFile::from_text(&text, path).unwrap();
+        let mut other = cofano_app();
+        let scene = other.scene_graph.as_mut().unwrap();
+        for (i, entry) in back.files.iter().enumerate() {
+            assert_eq!(crate::project_file::ProjectFile::apply_entry(entry, scene, i), 0);
+        }
+        let (a, b) = (app.scene_graph.as_ref().unwrap(), other.scene_graph.as_ref().unwrap());
+        assert_eq!(b.hinges.len(), 1);
+        assert_eq!(b.hinges[0].linkage.as_ref().unwrap().links, [vec![l1], vec![l2]]);
+        let (pa, pb) = (a.hinge_pins(&a.hinges[0]).unwrap(), b.hinge_pins(&b.hinges[0]).unwrap());
+        assert!(pa.iter().zip(pb).all(|(p, q)| p.distance(q) < 1e-2), "{pa:?} {pb:?}");
+        other.apply(Action::SetHingeAngle { index: 0, angle: 20.0 });
+        assert!(joined(&other));
     }
 
     #[test]

@@ -216,6 +216,11 @@ impl FourBar {
         [arm, self.about(self.f1, s.theta), self.about(self.f2, link2)]
     }
 
+    /// Centri dei quattro perni nella posizione in cui sono stati scelti (F1, F2, M1, M2).
+    pub fn pins_at_start(&self) -> [Vec3; 4] {
+        [self.f1, self.f2, self.m1, self.m2].map(|p| self.point(p))
+    }
+
     /// Centri dei quattro perni nella posizione `s` (F1, F2, M1, M2).
     pub fn pins(&self, s: &LinkState) -> [Vec3; 4] {
         [self.point(self.f1), self.point(self.f2), self.point(s.m1), self.point(s.m2)]

@@ -60,6 +60,10 @@ Se i perni mobili sono stati cliccati al contrario le bielle risultano incrociat
 Basta una cerniera: il cofano si muove tutto; le bielle dell'altro lato si possono selezionare insieme a
 quelle di questo lato se le due cerniere sono allineate. Annulla/Ripeti tengono il conto dell'angolo.
 
+6. Dai un nome e premi **Salva cerniera**: perni, cofano e bielle restano nel progetto. Poi basta cliccare il
+   cofano nella vista per aprirlo con i gradi (o Ctrl + trascina); il limite di apertura è il fine corsa del
+   meccanismo. Salvata a cofano chiuso, i gradi positivi lo aprono.
+
 ## Compilazione
 
 Serve [Rust](https://rustup.rs) (toolchain MSVC su Windows).

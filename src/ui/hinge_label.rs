@@ -20,9 +20,32 @@ impl GestoreApp {
     /// Salva una cerniera: la parte `nodes` gira sull'asse (`origin`, `dir`) ed è aperta di
     /// `angle` gradi dalla posizione chiusa. Un passo di Annulla.
     pub fn save_hinge(&mut self, name: &str, nodes: Vec<u32>, origin: Vec3, dir: Vec3, angle: f32) -> Option<usize> {
+        self.push_hinge(name, |scene, name| scene.new_hinge(name, nodes, origin, dir, angle))
+    }
+
+    /// Salva una cerniera a 4 perni: parte `nodes` (cofano e braccio), bielle `links`, perni
+    /// nella scena con il meccanismo a 0° (`pins`, direzione `normal`), meccanismo aperto di
+    /// `angle` gradi. Un passo di Annulla.
+    pub fn save_four_bar_hinge(
+        &mut self,
+        name: &str,
+        nodes: Vec<u32>,
+        links: [Vec<u32>; 2],
+        pins: [Vec3; 4],
+        normal: Vec3,
+        angle: f32,
+    ) -> Option<usize> {
+        self.push_hinge(name, |scene, name| scene.new_four_bar_hinge(name, nodes, links, pins, normal, angle, angle))
+    }
+
+    fn push_hinge(
+        &mut self,
+        name: &str,
+        build: impl FnOnce(&crate::scene_graph::SceneGraph, String) -> Option<SavedHinge>,
+    ) -> Option<usize> {
         let scene = self.scene_graph.as_ref()?;
         let name = if name.trim().is_empty() { format!("Cerniera {}", scene.hinges.len() + 1) } else { name.trim().to_string() };
-        let Some(hinge) = scene.new_hinge(name.clone(), nodes, origin, dir, angle) else {
+        let Some(hinge) = build(scene, name.clone()) else {
             self.ui_state.status_message = "Cerniera non salvata: scegli la parte che si apre".to_string();
             return None;
         };
@@ -66,6 +89,10 @@ impl GestoreApp {
             h.min -= shift;
             h.max -= shift;
             h.angle = 0.0;
+            // A 4 perni il meccanismo resta dov'è: cambia solo il suo angolo a 0°
+            if let Some(l) = &mut h.linkage {
+                l.zero += shift;
+            }
             self.ui_state.status_message = format!("{}: questa è la posizione chiusa (0°)", h.name);
         }
         if let Some(s) = self.scene_graph.as_mut() {
@@ -88,10 +115,17 @@ impl GestoreApp {
         }
         self.push_undo(None);
         let Some(scene) = self.scene_graph.as_mut() else { return };
-        scene.set_hinge_angle(index, 0.0);
+        let reached = scene.set_hinge_angle(index, 0.0).unwrap_or(0.0);
         let (o, d) = scene.hinge_axis(&scene.hinges[index]);
         let names: Vec<String> = nodes.iter().map(|&n| scene.display_name(n)).collect();
-        if let Some(mut new) = scene.new_hinge(old.name.clone(), nodes, o, d, 0.0) {
+        let new = match (&scene.hinges[index].linkage, scene.hinge_pins_at_zero(&scene.hinges[index])) {
+            // 4 perni: perni e bielle restano, il meccanismo è dov'è (la nuova parte da qui)
+            (Some(l), Some(pins)) => {
+                scene.new_four_bar_hinge(old.name.clone(), nodes, l.links.clone(), pins, d, reached + l.zero, reached)
+            }
+            _ => scene.new_hinge(old.name.clone(), nodes, o, d, 0.0),
+        };
+        if let Some(mut new) = new {
             new.min = old.min.min(0.0);
             new.max = old.max.max(0.0);
             scene.hinges[index] = new;
@@ -113,6 +147,16 @@ impl GestoreApp {
         let h = &mut scene.hinges[index];
         h.dir = -h.dir;
         h.angle = -reached;
+        // A 4 perni il meccanismo visto dall'altra parte: anche il suo angolo cambia segno
+        if let Some(l) = &mut h.linkage {
+            l.zero = -l.zero;
+        }
+        // Il fine corsa di prima era dall'altra parte: il limite di apertura è quello nuovo
+        if let Some(top) = scene.hinge_travel(&scene.hinges[index]) {
+            let h = &mut scene.hinges[index];
+            h.max = top.max(h.angle).max(h.min);
+        }
+        let h = &scene.hinges[index];
         let name = h.name.clone();
         scene.revision += 1;
         self.sync_moved_geometry();
@@ -162,7 +206,18 @@ pub fn draw_label(
     let painter = ui.painter_at(rect);
     let accent = egui::Color32::from_rgb(255, 140, 30);
     let half = if bbox.is_valid() { bbox.diagonal() * 0.6 } else { 500.0 };
-    if let (Some(a), Some(b)) = (to_screen(o - d * half), to_screen(o + d * half)) {
+    if let Some(pins) = scene.hinge_pins(&h) {
+        // 4 perni: le bielle e il braccio tra i perni mobili, i perni come punti
+        let [f1, f2, m1, m2] = pins.map(&to_screen);
+        for (a, b) in [(f1, m1), (f2, m2), (m1, m2)] {
+            if let (Some(a), Some(b)) = (a, b) {
+                painter.line_segment([a, b], egui::Stroke::new(2.0_f32, accent));
+            }
+        }
+        for p in [f1, f2, m1, m2].into_iter().flatten() {
+            painter.circle_filled(p, 3.5, accent);
+        }
+    } else if let (Some(a), Some(b)) = (to_screen(o - d * half), to_screen(o + d * half)) {
         painter.line_segment([a, b], egui::Stroke::new(2.0_f32, accent));
     }
 

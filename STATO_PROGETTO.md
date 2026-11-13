@@ -962,6 +962,14 @@ Fatto:
       %LOCALAPPDATA%\Programs\Dima3D senza permessi da amministratore, menu Start, desktop facoltativo,
       associazione dei .dima3d facoltativa, disinstallazione. `pacchetto.ps1` lo crea, `pubblica.ps1` lo carica nella
       Release accanto allo zip; dopo un aggiornamento dal programma si aggiorna la versione in «App installate».
+- [x] (2026-11-13, 0.2.20) **Cerniere a 4 perni salvate** (`SavedLinkage` in `scene_graph/hinge.rs`): «Salva
+      cerniera» anche in «4 perni (cofano)» ricorda perni, parte che si apre e bielle. I perni sono nelle coordinate
+      del pezzo di riferimento con il meccanismo a 0° (dalla posizione attuale e dall'angolo si ricava quella a 0°,
+      quindi seguono l'oggetto spostato); ad ogni apertura `FourBar::solve` dalla posizione dei perni muove parte e
+      bielle. Limite di apertura = fine corsa (max 120°); salvata a 0° il verso è quello in cui il meccanismo si apre
+      (`outward_four_bar`). «0° qui» sposta lo zero del meccanismo (`zero`), «Inverti verso» cambia segno a zero e
+      ricalcola il fine corsa, «Cambia parte» tiene perni e bielle. Etichetta: bielle e perni disegnati. Progetto:
+      riga `cerniera_perni = …` (formato invariato, le versioni vecchie la ignorano).
 - [x] (2026-11-13, 0.2.19) Misure PDF a tutto schermo usciva dallo schermo (egui::Window aggiunge cornice e
       titolo a `fixed_rect`): ora è un'Area con cornice e titolo disegnati a mano, nell'area libera di
       `dock::free_area` (restano menu, barra degli strumenti e barra di stato).
