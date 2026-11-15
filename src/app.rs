@@ -585,6 +585,10 @@ impl GestoreApp {
         if ctx.wants_keyboard_input() || self.project.pending.is_some() || self.project.busy() {
             return;
         }
+        // Con il mouse sulla finestra Programma copia, incolla, annulla… valgono per le sue righe
+        if crate::ui::program_panel::shortcuts(ctx, self) {
+            return;
+        }
         let (open, save, save_as, export) = ctx.input(|inp| {
             let cmd = inp.modifiers.command;
             let s = cmd && inp.key_pressed(egui::Key::S);
@@ -1123,6 +1127,11 @@ impl eframe::App for GestoreApp {
             .input(|i| i.raw.dropped_files.iter().filter_map(|f| f.path.clone()).collect::<Vec<_>>())
             .into_iter()
             .partition(|p| crate::ui::pdf_panel::is_pdf(p));
+        // Programmi del robot trascinati sulla finestra: si aprono nella finestra Programma
+        let (programs, dropped): (Vec<_>, Vec<_>) = dropped.into_iter().partition(|p| crate::robot_program::is_program_file(p));
+        if let Some(p) = programs.into_iter().next() {
+            crate::ui::program_panel::open_program(self, &p);
+        }
         if let Some(pdf) = pdfs.into_iter().next() {
             self.ui_state.pdf.open_file(pdf);
         }
@@ -1141,6 +1150,7 @@ impl eframe::App for GestoreApp {
         crate::ui::position_panel::draw(ctx, self, crate::ui::dock::Pass::Floating);
         crate::ui::cabin_panel::draw(ctx, self, crate::ui::dock::Pass::Floating);
         crate::ui::robot_panel::draw(ctx, self, crate::ui::dock::Pass::Floating);
+        crate::ui::program_panel::draw(ctx, self, crate::ui::dock::Pass::Floating);
         crate::ui::pdf_panel::draw(ctx, self, crate::ui::dock::Pass::Floating);
         crate::ui::about::draw(ctx, self);
         crate::update::draw(ctx, self);

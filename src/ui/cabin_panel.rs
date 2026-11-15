@@ -182,7 +182,6 @@ pub fn draw(ctx: &egui::Context, app: &mut GestoreApp, pass: super::dock::Pass) 
     let mut build = false;
     let exists = app.cabin_node().is_some();
     let busy = app.ui_state.is_loading || app.project.busy();
-    let mut center = app.settings.cabin_center;
     let current_center = app.center_in_cabin();
     let mut cell = app.settings.robots.clone();
     let mut apply_cell = false;
@@ -332,12 +331,10 @@ pub fn draw(ctx: &egui::Context, app: &mut GestoreApp, pass: super::dock::Pass) 
                     ui.label(
                         egui::RichText::new(
                             "Punto della cabina (dall'ingresso, sull'asse, al piano del grigliato) che diventa lo zero della scena \
-                             e delle coordinate dei robot. «Applica centro» sposta la cabina, il centro resta lì.",
+                             e delle coordinate dei robot. «Applica centro» sposta la cabina, il centro resta lì. \n                             Si vede con «Centro» sopra la vista.",
                         )
                         .weak(),
                     );
-                    ui.checkbox(&mut center, "Mostra il centro nella vista")
-                        .on_hover_text("Assi del centro cabina con le sue coordinate e lo scostamento della cabina");
                     ui.horizontal(|ui| {
                         for (name, v) in ["X", "Y", "Z"].into_iter().zip(cell.center.iter_mut()) {
                             ui.label(name);
@@ -413,10 +410,9 @@ pub fn draw(ctx: &egui::Context, app: &mut GestoreApp, pass: super::dock::Pass) 
                 }
             });
         });
-    if p != app.settings.cabin || center != app.settings.cabin_center || dock != app.settings.dock_cabin || cell != app.settings.robots {
+    if p != app.settings.cabin || dock != app.settings.dock_cabin || cell != app.settings.robots {
         let mut settings = app.settings.clone();
         settings.cabin = p.clone();
-        settings.cabin_center = center;
         settings.dock_cabin = dock;
         settings.robots = cell.clone();
         app.apply_settings(settings);

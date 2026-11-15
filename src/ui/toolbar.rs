@@ -224,6 +224,15 @@ Sposta e ruota un file o i pezzi selezionati (X Y Z, A B C), applica e calcola g
     if robot.clicked() {
         app.ui_state.robot_open = !robot_open;
     }
+    let program_open = app.ui_state.program.open;
+    let program_text = icon_text(ui, icon::PATH, if compact { "" } else { "Programma" });
+    let program = ui
+        .add_enabled(!loading, egui::Button::new(program_text).selected(program_open))
+        .on_hover_text("Programma del robot
+Apre un programma (.TIS / .tip) e disegna la traiettoria nella vista; righe da copiare, tagliare, incollare, invertire e trascinare");
+    if program.clicked() {
+        app.ui_state.program.open = !program_open;
+    }
     // Sempre attivo: il layout PDF non dipende dalla scena 3D
     let pdf_open = app.ui_state.pdf.open;
     let pdf_text = icon_text(ui, icon::FILE_PDF, if compact { "" } else { "Misure PDF" });

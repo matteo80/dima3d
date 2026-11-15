@@ -13,6 +13,7 @@ mod reduce;
 mod reduction;
 mod renderer;
 mod robot;
+mod robot_program;
 mod scene_graph;
 mod settings;
 mod text3d;

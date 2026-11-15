@@ -494,6 +494,11 @@ pub fn draw_viewport(ui: &mut egui::Ui, app: &mut crate::app::GestoreApp) {
             super::cabin_panel::draw_center(ui, rect, glam::Vec3::ZERO, glam::Mat4::IDENTITY, size, in_cabin, |v| to_screen(camera, rect, v));
         }
     }
+    // Traiettoria del programma del robot
+    if let Some(renderer) = &app.renderer {
+        let camera = &renderer.camera;
+        super::program_panel::draw_overlay(ui, rect, &app.ui_state.program, |v| to_screen(camera, rect, v));
+    }
     // Cerniera salvata della parte selezionata: etichetta con i gradi
     if app.renderer.is_some() && app.scene_graph.is_some() && !app.ui_state.position.hinge.picking {
         if let Some(view_proj) = app.renderer.as_ref().map(|r| r.camera.view_proj()) {
@@ -537,6 +542,7 @@ pub fn draw_viewport(ui: &mut egui::Ui, app: &mut crate::app::GestoreApp) {
             eyedropper: &mut ui_state.eyedropper,
             section: &mut ui_state.section,
             invert_zoom: &mut settings.invert_zoom,
+            center: &mut settings.cabin_center,
         };
         draw_view_controls(ui, rect, &mut actions, tools, start.flatten());
         app.apply_settings(settings);
@@ -694,6 +700,8 @@ struct ViewTools<'a> {
     eyedropper: &'a mut bool,
     section: &'a mut Option<crate::renderer::Section>,
     invert_zoom: &'a mut bool,
+    /// Assi del centro cabina (zero della scena) nella vista
+    center: &'a mut bool,
 }
 
 fn draw_view_controls(
@@ -703,7 +711,7 @@ fn draw_view_controls(
     tools: ViewTools,
     section_start: Option<crate::renderer::Section>,
 ) {
-    let ViewTools { measure, eyedropper, section, invert_zoom } = tools;
+    let ViewTools { measure, eyedropper, section, invert_zoom, center } = tools;
     use crate::renderer::camera::StandardView as V;
     let area = rect.shrink(10.0);
 
@@ -754,6 +762,14 @@ fn draw_view_controls(
                 .clicked()
             {
                 *section = if cutting { None } else { section_start };
+            }
+            let shown = *center;
+            if ui
+                .selectable_label(shown, icon_text(ui, icon::CROSSHAIR, "Centro"))
+                .on_hover_text("Centro cabina: assi nello zero della scena con le coordinate, anche senza cabina (riferimento per allineare i 3D)")
+                .clicked()
+            {
+                *center = !shown;
             }
             ui.separator();
             let inverted = *invert_zoom;

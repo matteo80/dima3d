@@ -6,6 +6,7 @@ pub mod color_menu;
 pub mod measure;
 pub mod pdf_panel;
 pub mod position_panel;
+pub mod program_panel;
 pub mod progress;
 pub mod properties;
 pub mod reduce_panel;
@@ -78,6 +79,8 @@ pub struct UiState {
     pub pdf: pdf_panel::PdfPanel,
     /// Finestra dei robot aperta
     pub robot_open: bool,
+    /// Finestra «Programma» del robot, con la traiettoria nella vista
+    pub program: program_panel::ProgramPanel,
     /// Cabina su cui lavora la finestra Cabina (`None`: l'ultima costruita)
     pub cabin_target: Option<crate::cabin::CabinChoice>,
     /// Selezione trascinando nell'albero: riga da cui è partita
@@ -128,6 +131,7 @@ impl Default for UiState {
             position: Default::default(),
             cabin_open: false,
             robot_open: false,
+            program: Default::default(),
             pdf: Default::default(),
             cabin_target: None,
             tree_sweep: None,
@@ -543,6 +547,7 @@ pub fn draw_main_layout(ctx: &egui::Context, app: &mut crate::app::GestoreApp) {
     position_panel::draw(ctx, app, dock::Pass::Docked);
     cabin_panel::draw(ctx, app, dock::Pass::Docked);
     robot_panel::draw(ctx, app, dock::Pass::Docked);
+    program_panel::draw(ctx, app, dock::Pass::Docked);
     pdf_panel::draw(ctx, app, dock::Pass::Docked);
 
     // ── CentralPanel: viewport 3D ──────────────────────────────────────────────

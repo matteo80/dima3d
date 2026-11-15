@@ -140,10 +140,13 @@ pub struct Settings {
     pub dock_cabin: crate::ui::dock::DockState,
     pub dock_reduce: crate::ui::dock::DockState,
     pub dock_pdf: crate::ui::dock::DockState,
+    pub dock_program: crate::ui::dock::DockState,
+    /// Ultimo programma del robot aperto (per la cartella della finestra di scelta)
+    pub last_program: Option<PathBuf>,
 }
 
 /// Sezioni richiudibili della finestra Posizione
-pub const POSITION_SECTIONS: usize = 5;
+pub const POSITION_SECTIONS: usize = 6;
 
 impl Default for Settings {
     fn default() -> Self {
@@ -165,7 +168,7 @@ impl Default for Settings {
             invert_zoom: false,
             saved_colors: Vec::new(),
             step: StepMesh::default(),
-            position_sections: [true, true, true, true, false],
+            position_sections: [true, true, true, true, false, false],
             check_updates: true,
             skipped_version: String::new(),
             cabin: crate::cabin::CabinParams::default(),
@@ -176,6 +179,8 @@ impl Default for Settings {
             dock_cabin: Default::default(),
             dock_reduce: Default::default(),
             dock_pdf: Default::default(),
+            dock_program: Default::default(),
+            last_program: None,
         }
     }
 }
@@ -309,6 +314,8 @@ impl Settings {
                 "aggancio_cabina" => s.dock_cabin = crate::ui::dock::DockState::from_text(value).unwrap_or_default(),
                 "aggancio_riduci" => s.dock_reduce = crate::ui::dock::DockState::from_text(value).unwrap_or_default(),
                 "aggancio_pdf" => s.dock_pdf = crate::ui::dock::DockState::from_text(value).unwrap_or_default(),
+                "aggancio_programma" => s.dock_program = crate::ui::dock::DockState::from_text(value).unwrap_or_default(),
+                "ultimo_programma" => s.last_program = (!value.is_empty()).then(|| PathBuf::from(value)),
                 "step_deviazione" => {
                     if let Ok(v) = value.parse::<f32>() {
                         s.step.deviation = v.clamp(*STEP_DEVIATION_RANGE.start(), *STEP_DEVIATION_RANGE.end());
@@ -390,6 +397,10 @@ impl Settings {
         out.push_str(&format!("aggancio_cabina = {}\n", self.dock_cabin.to_text()));
         out.push_str(&format!("aggancio_riduci = {}\n", self.dock_reduce.to_text()));
         out.push_str(&format!("aggancio_pdf = {}\n", self.dock_pdf.to_text()));
+        out.push_str(&format!("aggancio_programma = {}\n", self.dock_program.to_text()));
+        if let Some(p) = &self.last_program {
+            out.push_str(&format!("ultimo_programma = {}\n", p.display()));
+        }
         if !self.skipped_version.is_empty() {
             out.push_str(&format!("versione_saltata = {}\n", self.skipped_version));
         }
@@ -449,7 +460,7 @@ mod tests {
             invert_zoom: true,
             saved_colors: vec![[0.1, 0.2, 0.3], [1.0, 0.5, 0.0]],
             step: StepMesh { deviation: 0.025, angle: 12.5, relative: true },
-            position_sections: [false, true, false, true, true],
+            position_sections: [false, true, false, true, true, false],
             check_updates: false,
             skipped_version: "0.3.1".to_string(),
             cabin: crate::cabin::CabinParams {
@@ -473,6 +484,8 @@ mod tests {
             dock_cabin: Default::default(),
             dock_reduce: crate::ui::dock::DockState { side: crate::ui::dock::Side::Bottom, width: 0.0, height: 210.0 },
             dock_pdf: crate::ui::dock::DockState { side: crate::ui::dock::Side::Right, width: 640.0, height: 0.0 },
+            dock_program: crate::ui::dock::DockState { side: crate::ui::dock::Side::Left, width: 300.0, height: 0.0 },
+            last_program: Some(PathBuf::from(r"D:\a b\R11\PROVA.TIS")),
         };
         s.add_recent(Path::new(r"C:\a b\uno.wrl"));
         s.add_recent(Path::new(r"C:\due.wrl"));

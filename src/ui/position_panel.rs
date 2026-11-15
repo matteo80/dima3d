@@ -16,6 +16,7 @@ use glam::{Mat4, Vec3};
 
 use super::theme::{icon, icon_text};
 use crate::app::{Action, GestoreApp};
+use crate::scene_graph::bbox::Aabb;
 use crate::scene_graph::linkage::FourBar;
 use crate::scene_graph::motion::Motion;
 use crate::scene_graph::placement::{
@@ -29,6 +30,46 @@ pub enum Target {
     File(u32),
     /// I nodi selezionati nell'albero o nella vista
     Selection,
+}
+
+/// Su cosa si allinea l'oggetto, lungo gli assi scelti della cabina.
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+pub enum AlignMode {
+    /// Centro del riquadro (bounding box)
+    #[default]
+    Center,
+    /// Lato basso del riquadro
+    Min,
+    /// Lato alto del riquadro
+    Max,
+    /// Due copie dello stesso pezzo: dalla geometria, anche se sono girate in modo diverso
+    SamePiece,
+}
+
+impl AlignMode {
+    const ALL: [(AlignMode, &'static str, &'static str); 4] = [
+        (AlignMode::Center, "Centro", "Centro del riquadro dei pezzi"),
+        (AlignMode::Min, "Min", "Lato basso del riquadro (X, Y o Z più piccola)"),
+        (AlignMode::Max, "Max", "Lato alto del riquadro (X, Y o Z più grande)"),
+        (AlignMode::SamePiece, "Stesso pezzo", "Due copie dello stesso pezzo (una sola parte per lato): si sovrappongono dalla geometria"),
+    ];
+}
+
+/// Spostamento (coordinate della cabina) che porta il riquadro `moving` su `reference` (o sullo
+/// zero della scena) lungo gli assi accesi.
+pub fn align_delta(moving: &Aabb, reference: Option<&Aabb>, mode: AlignMode, axes: [bool; 3]) -> Vec3 {
+    let pick = |b: &Aabb| match mode {
+        AlignMode::Min => b.min,
+        AlignMode::Max => b.max,
+        AlignMode::Center | AlignMode::SamePiece => b.center(),
+    };
+    let to = reference.map_or(Vec3::ZERO, pick);
+    only_axes(to - pick(moving), axes)
+}
+
+/// Solo le componenti degli assi accesi.
+fn only_axes(v: Vec3, axes: [bool; 3]) -> Vec3 {
+    Vec3::select(glam::BVec3::new(axes[0], axes[1], axes[2]), v, Vec3::ZERO)
 }
 
 /// Calcolo dell'offset.
@@ -83,6 +124,10 @@ pub struct PositionPanel {
     pub hinge: Hinge,
     /// Guida illustrata della cerniera a 4 perni aperta
     pub guide: bool,
+    /// «Allinea»: su cosa (vuoto = zero della scena), lungo quali assi, come
+    pub align_reference: Vec<u32>,
+    pub align_axes: [bool; 3],
+    pub align_mode: AlignMode,
 }
 
 impl Default for PositionPanel {
@@ -111,6 +156,9 @@ impl Default for PositionPanel {
             error: None,
             hinge: Hinge::default(),
             guide: false,
+            align_reference: Vec::new(),
+            align_axes: [true, true, true],
+            align_mode: AlignMode::Center,
         }
     }
 }
@@ -127,6 +175,8 @@ impl PositionPanel {
             world: self.world,
             calc: self.calc,
             guide: self.guide,
+            align_axes: self.align_axes,
+            align_mode: self.align_mode,
             hinge: Hinge { step, mode, ..Hinge::default() },
             ..Self::default()
         };
@@ -948,6 +998,92 @@ pub fn draw(ctx: &egui::Context, app: &mut GestoreApp, pass: super::dock::Pass) 
                 {
                     actions.push(Action::ResetPosition(nodes.clone()));
                 }
+                });
+
+                // ── Allinea ────────────────────────────────────────────────────
+                section(ui, "posizione_allinea", "Allinea", &mut sections[5], |ui| {
+                    ui.label(
+                        egui::RichText::new("L'oggetto qui sopra si sposta sul riferimento lungo gli assi scelti della cabina, senza ruotare.")
+                            .weak()
+                            .small(),
+                    );
+                    ui.horizontal_wrapped(|ui| {
+                        ui.label("Su");
+                        let (short, full) = slot_text(app, &panel.align_reference);
+                        let zero = panel.align_reference.is_empty();
+                        ui.label(egui::RichText::new(if zero { "Zero della scena".to_string() } else { short }).strong())
+                            .on_hover_text(if zero { "Centro cabina (lo zero della scena)".to_string() } else { full });
+                        if ui
+                            .add_enabled(!selection.is_empty(), egui::Button::new("Usa selezione").small())
+                            .on_hover_text("Il riferimento diventa la selezione: un pezzo, un gruppo o più pezzi insieme")
+                            .clicked()
+                        {
+                            panel.align_reference = selection.clone();
+                        }
+                        if !zero && ui.small_button("Zero").on_hover_text("Allinea sullo zero della scena (centro cabina)").clicked() {
+                            panel.align_reference.clear();
+                        }
+                    });
+                    ui.horizontal_wrapped(|ui| {
+                        for k in 0..3 {
+                            ui.checkbox(&mut panel.align_axes[k], egui::RichText::new(AXES[k].0).color(AXES[k].1).strong());
+                        }
+                        ui.separator();
+                        for (mode, name, hint) in AlignMode::ALL {
+                            ui.selectable_value(&mut panel.align_mode, mode, name).on_hover_text(hint);
+                        }
+                    });
+                    let reference: Vec<u32> =
+                        panel.align_reference.iter().copied().filter(|&n| (n as usize) < scene.nodes.len()).collect();
+                    let bbox = |list: &[u32]| {
+                        let mut b = Aabb::empty();
+                        for &n in list {
+                            let s = scene.subtree_bounding_box(n);
+                            if s.is_valid() {
+                                b.extend_aabb(&s);
+                            }
+                        }
+                        b.is_valid().then_some(b)
+                    };
+                    let axes = panel.align_axes;
+                    let delta: Result<Vec3, String> = match bbox(&nodes) {
+                        None => Err("Scegli l'oggetto da spostare".to_string()),
+                        Some(_) if !axes.contains(&true) => Err("Scegli almeno un asse".to_string()),
+                        Some(_) if reference.iter().any(|r| nodes.contains(r)) => Err("Il riferimento è anche l'oggetto da spostare".to_string()),
+                        Some(moving) if panel.align_mode == AlignMode::SamePiece => match (nodes.as_slice(), reference.as_slice()) {
+                            ([n], [r]) => scene
+                                .geometric_offset(*n, *r)
+                                .map(|fit| {
+                                    let c = moving.center();
+                                    only_axes(fit.matrix.transform_point3(c) - c, axes)
+                                })
+                                .map_err(|why| format!("Non sono lo stesso pezzo: {why}")),
+                            _ => Err("«Stesso pezzo»: un solo oggetto da spostare e un solo riferimento".to_string()),
+                        },
+                        Some(moving) => Ok(align_delta(&moving, bbox(&reference).as_ref(), panel.align_mode, axes)),
+                    };
+                    match &delta {
+                        Ok(d) => {
+                            ui.horizontal_wrapped(|ui| {
+                                ui.label("Spostamento");
+                                for k in (0..3).filter(|&k| axes[k]) {
+                                    ui.label(egui::RichText::new(AXES[k].0).color(AXES[k].1).strong());
+                                    ui.monospace(format!("{:+.2}", d[k] + 0.0));
+                                }
+                                ui.label("mm");
+                            });
+                        }
+                        Err(e) => {
+                            ui.label(egui::RichText::new(e).small().weak());
+                        }
+                    }
+                    let ok = delta.as_ref().ok().filter(|d| d.length() > 1e-4).copied();
+                    if ui.add_enabled(ok.is_some(), egui::Button::new(icon_text(ui, icon::ALIGN_CENTER_HORIZONTAL, "Allinea"))).clicked() {
+                        if let Some(d) = ok {
+                            actions.push(Action::Move { nodes: nodes.clone(), matrix: Mat4::from_translation(d) });
+                            status = Some(format!("Allineato: spostato di X {:+.2} Y {:+.2} Z {:+.2} mm", d.x, d.y, d.z));
+                        }
+                    }
                 });
 
                 // ── Rotazione su un asse (cerniere) ─────────────────────────────
@@ -1880,6 +2016,50 @@ DEF Destinazione Group { children [
                 .center();
             self.press_at(app, at);
         }
+    }
+
+    #[test]
+    fn align_delta_on_the_chosen_axes() {
+        let b = |min: [f32; 3], max: [f32; 3]| Aabb { min: Vec3::from(min), max: Vec3::from(max) };
+        let moving = b([0.0, 0.0, 0.0], [10.0, 20.0, 30.0]);
+        let reference = b([100.0, 50.0, -10.0], [120.0, 60.0, 0.0]);
+        let only_x = [true, false, false];
+        assert_eq!(align_delta(&moving, Some(&reference), AlignMode::Center, only_x), Vec3::new(105.0, 0.0, 0.0));
+        assert_eq!(align_delta(&moving, Some(&reference), AlignMode::Min, [true, true, true]), Vec3::new(100.0, 50.0, -10.0));
+        assert_eq!(align_delta(&moving, Some(&reference), AlignMode::Max, [false, false, true]), Vec3::new(0.0, 0.0, -30.0));
+        assert_eq!(align_delta(&moving, None, AlignMode::Center, [false, true, false]), Vec3::new(0.0, -10.0, 0.0), "sullo zero");
+    }
+
+    /// «Allinea»: lungo X sul riferimento scelto con «Usa selezione»; «Stesso pezzo» rimette
+    /// la copia spostata sopra l'originale.
+    #[test]
+    fn align_moves_the_object_onto_the_reference() {
+        let mut app = app();
+        let ui = Ui { ctx: egui::Context::default() };
+        let (rif, dest, copy) = (node(&app, "Riferimento", 0), node(&app, "Destinazione", 0), node(&app, "Riferimento", 1));
+        let center = |app: &GestoreApp, n| app.scene_graph.as_ref().unwrap().subtree_bounding_box(n).center();
+        app.ui_state.select_single(Some(dest));
+        ui.run(&mut app, vec![]);
+        ui.click(&mut app, "Allinea", 0);
+        ui.click(&mut app, "Usa selezione", 0);
+        assert_eq!(app.ui_state.position.align_reference, [dest]);
+        app.ui_state.select_single(Some(rif));
+        app.ui_state.position.align_axes = [true, false, false];
+        let before = center(&app, rif);
+        ui.click(&mut app, "Allinea", 1);
+        let after = center(&app, rif);
+        assert!((after.x - center(&app, dest).x).abs() < 1e-3, "{after:?}");
+        assert!((after.y - before.y).abs() < 1e-3 && (after.z - before.z).abs() < 1e-3);
+
+        app.apply(Action::Move { nodes: vec![copy], matrix: Mat4::from_translation(Vec3::new(10.0, 20.0, 30.0)) });
+        app.ui_state.select_single(Some(rif));
+        ui.click(&mut app, "Usa selezione", 0);
+        app.ui_state.select_single(Some(copy));
+        app.ui_state.position.align_axes = [true, true, true];
+        app.ui_state.position.align_mode = AlignMode::SamePiece;
+        ui.click(&mut app, "Allinea", 1);
+        let (va, vb) = (first_vertex(&app, copy), first_vertex(&app, rif));
+        assert!((va - vb).length() < 1e-2, "{va:?} {vb:?}");
     }
 
     /// Cerniera salvata: «Salva cerniera» ricorda asse e parte; la parte si apre ai gradi scritti
