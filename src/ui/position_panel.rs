@@ -873,6 +873,7 @@ pub fn draw(ctx: &egui::Context, app: &mut GestoreApp, pass: super::dock::Pass) 
         .as_ref()
         .map(|p| p.used_points().into_iter().filter_map(|u| Some((u.name.clone(), u.point?.position()?))).collect())
         .unwrap_or_default();
+    let program_object = app.ui_state.program.program.as_ref().and_then(|p| p.argument_of("SETOBJECT"));
 
     let mut open = true;
     let mut actions: Vec<Action> = Vec::new();
@@ -1267,6 +1268,33 @@ pub fn draw(ctx: &egui::Context, app: &mut GestoreApp, pass: super::dock::Pass) 
                             {
                                 actions.push(Action::Move { nodes: nodes.clone(), matrix: f.matrix });
                                 status = Some(format!("Allineato sui punti: scarto medio {:.2} mm, massimo {:.2} mm", f.rms, f.max));
+                            }
+                            // Oggetto del robot dagli stessi punti (sperimentale)
+                            ui.separator();
+                            ui.label(egui::RichText::new("Oggetto del robot (sperimentale)").strong()).on_hover_text(
+                                "Riferimenti presi in cabina con l'oggetto a 0 nel robot; i punti del 3D contano nelle                                  coordinate della matematica (oggetto a 0), anche se è già stata spostata. Solo X Y Z dei                                  punti. Nelle stazioni in tracking cambia solo X.",
+                            );
+                            match pa.object_fit(frame) {
+                                Ok(o) => {
+                                    let pose = Pose::from_matrix(o.matrix);
+                                    pose_grid(ui, "posizione_punti_oggetto", &pose);
+                                    let line = crate::scene_graph::placement::RobotBase {
+                                        name: program_object.clone().unwrap_or_else(|| "OGGETTO".to_string()),
+                                        pose,
+                                        format: crate::scene_graph::placement::BaseFormat::Object,
+                                    }
+                                    .to_line();
+                                    ui.add(egui::Label::new(egui::RichText::new(&line).monospace()).wrap());
+                                    ui.horizontal_wrapped(|ui| {
+                                        if ui.button(icon_text(ui, icon::COPY, "Copia")).on_hover_text("Copia la riga dell'oggetto").clicked() {
+                                            copy = Some(line.clone());
+                                        }
+                                        ui.label(egui::RichText::new(format!("scarto medio {:.2}  max {:.2} mm", o.rms, o.max)).small().weak());
+                                    });
+                                }
+                                Err(e) => {
+                                    ui.label(egui::RichText::new(e).small().weak());
+                                }
                             }
                         }
                         Err(e) => {
@@ -2279,7 +2307,11 @@ DEF Destinazione Group { children [
         assert!(app.ui_state.status_message.starts_with("Allineato sui punti"), "{}", app.ui_state.status_message);
         let after = first_vertex(&app, file);
         assert!(after.distance(moved.transform_point3(before)) < 1e-2, "{after:?}");
-        ui.run(&mut app, vec![]);
+        let texts = ui.run(&mut app, vec![]);
+        // L'oggetto non cambia con l'allineamento: i punti del 3D contano nelle coordinate della matematica
+        let line = texts.iter().find(|(t, _)| t.starts_with("OGGETTO : OBJECT := (")).expect("riga dell'oggetto").0.clone();
+        let object = crate::scene_graph::placement::parse_robot_base(&line).unwrap().pose.matrix();
+        assert!(object.abs_diff_eq(moved, 1e-2), "{line}");
         for p in &app.ui_state.position.points.pairs {
             let d = p.cad.unwrap().pos.distance(p.target);
             assert!(d < 1e-2, "{} resta a {d}", p.name);

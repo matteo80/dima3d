@@ -962,13 +962,18 @@ Fatto:
       %LOCALAPPDATA%\Programs\Dima3D senza permessi da amministratore, menu Start, desktop facoltativo,
       associazione dei .dima3d facoltativa, disinstallazione. `pacchetto.ps1` lo crea, `pubblica.ps1` lo carica nella
       Release accanto allo zip; dopo un aggiornamento dal programma si aggiorna la versione in «App installate».
+- [x] (2026-11-16, 0.2.28) **Oggetto del robot dai punti (sperimentale).** In «Allinea su punti»: riferimenti
+      presi in cabina con l'oggetto a 0 nel robot, punti del 3D riportati nelle coordinate della matematica
+      (`PointAlign::object_fit`, inverso delle coordinate dell'oggetto: vale anche dopo «Allinea»); solo X Y Z
+      dei punti. Mostra X Y Z A B C, la riga `NOME : OBJECT := (…)` (nome dal SETOBJECT del programma) da
+      copiare e lo scarto. Nelle stazioni in tracking cambia solo X. Da provare dall'utente.
 - [x] (2026-11-16, 0.2.27) **Allinea su punti** (`ui/point_align.rs`, finestra Posizione): la matematica si
       sposta sui riferimenti presi in cabina (punti `Object` del programma attivo, aggiunti uno per uno, tutti
       o scritti a mano) abbinati agli stessi punti cliccati sul 3D (aggancio al vertice, il punto segue il
       pezzo). Almeno 4 coppie accese; `fit_rigid` ai minimi quadrati; per ogni punto distanza ora e scarto
       dopo, scarto medio e massimo, spostamento World da copiare; avvisa con i punti in fila o presi su pezzi
       che non si spostano. Il messaggio della finestra Posizione ora vince su quello dello spostamento. Da
-      fare (sperimentale): calcolo dell'oggetto del robot dagli stessi punti.
+      fare (sperimentale): calcolo dell'oggetto del robot dagli stessi punti (fatto nella 0.2.28).
 - [x] (2026-11-16, 0.2.26) **Programma: vista punti e menu del tasto destro.** Come il controllore
       (foto dell'utente): due pulsanti in alto passano dalle righe («logica») alla tabella dei punti usati, in
       ordine di comparsa (Nome, Coord, X Y Z A B C, Aux; clic = sceglie le righe che lo usano). Tasto destro su
