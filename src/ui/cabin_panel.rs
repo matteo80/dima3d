@@ -88,25 +88,13 @@ fn label_section(ui: &mut egui::Ui, label: &mut crate::cabin::CabinLabel) {
     });
 }
 
-/// Coordinate del centro cabina nella scena (mm) e rotazione attorno a Z.
-fn center_text(center: glam::Vec3, m: glam::Mat4) -> String {
-    let x_axis = m.transform_vector3(glam::Vec3::X);
-    let angle = x_axis.y.atan2(x_axis.x).to_degrees();
-    let mut text = format!("X {:.1}\nY {:.1}\nZ {:.1}", center.x, center.y, center.z);
-    if angle.abs() > 0.005 {
-        text.push_str(&format!("\nRotazione Z {angle:.2}°"));
-    }
-    text
-}
-
-/// Assi della cabina nel suo centro, con le coordinate (vista 3D).
+/// Assi della cabina nel suo centro (vista 3D): solo la terna, senza riquadro delle coordinate.
 pub fn draw_center(
     ui: &mut egui::Ui,
     rect: egui::Rect,
     center: glam::Vec3,
     m: glam::Mat4,
     size: f32,
-    in_cabin: Option<glam::Vec3>,
     to_screen: impl Fn(glam::Vec3) -> Option<egui::Pos2>,
 ) {
     let painter = ui.painter_at(rect);
@@ -123,18 +111,6 @@ pub fn draw_center(
         }
     }
     painter.circle(origin, 5.0, egui::Color32::WHITE, egui::Stroke::new(1.5_f32, egui::Color32::BLACK));
-    let text = match in_cabin {
-        Some(c) => format!("Centro cabina\nnella cabina\n{}", center_text(c, m)),
-        None => format!("Centro cabina\n{}", center_text(center, m)),
-    };
-    let galley = painter.layout_no_wrap(text, egui::FontId::monospace(12.0), egui::Color32::WHITE);
-    let at = origin + egui::vec2(12.0, 12.0);
-    painter.rect_filled(
-        egui::Rect::from_min_size(at, galley.size()).expand(4.0),
-        4.0,
-        egui::Color32::from_black_alpha(170),
-    );
-    painter.galley(at, galley, egui::Color32::WHITE);
 }
 
 /// Passa a un'altra cabina: le misure nella finestra diventano le sue (con «Nuova cabina» restano).
@@ -501,9 +477,6 @@ mod tests {
         app.apply(crate::app::Action::Move { nodes: vec![node], matrix: glam::Mat4::from_translation(glam::Vec3::new(-1500.0, 200.0, -500.0)) });
         let (moved, _) = app.cabin_center().unwrap();
         assert_eq!(moved, glam::Vec3::new(8500.0, 200.0, -500.0));
-        assert_eq!(center_text(moved, glam::Mat4::IDENTITY), "X 8500.0\nY 200.0\nZ -500.0");
-        let rotated = glam::Mat4::from_rotation_z(90f32.to_radians());
-        assert!(center_text(moved, rotated).ends_with("Rotazione Z 90.00°"));
         let after = texts(&ctx, &mut app);
         assert!(after.iter().any(|t| t.ends_with("Aggiorna la cabina")), "{after:?}");
     }

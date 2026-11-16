@@ -112,8 +112,6 @@ pub struct PositionPanel {
     pub base_b: String,
     /// Offset calcolato in coordinate del riferimento (come gli script e i BASE del robot)
     pub result: Option<Pose>,
-    /// Lo stesso offset in coordinate della cabina (World)
-    pub result_world: Option<Pose>,
     /// Riga dell'oggetto del robot a cui applicare l'offset («Nuovo oggetto del robot»)
     pub robot_line: String,
     /// Come è stato calcolato il risultato (dalla geometria o dai Transform)
@@ -150,7 +148,6 @@ impl Default for PositionPanel {
             base_a: String::new(),
             base_b: String::new(),
             result: None,
-            result_world: None,
             robot_line: String::new(),
             result_note: None,
             error: None,
@@ -624,6 +621,17 @@ pub fn axis_motion(axis: usize, amount: f32) -> Mat4 {
     }
 }
 
+/// Movimento elementare del cursore («Trasformazione»). World spento: assi e origine dell'oggetto.
+/// World acceso: assi della cabina, ma le rotazioni girano attorno all'origine dell'oggetto, così
+/// X Y Z dell'oggetto restano quelli impostati (come scrivere X Y Z A B C di una posa).
+pub fn slider_motion(motion: Mat4, frame: Mat4, world: bool) -> Mat4 {
+    if !world {
+        return in_frame(motion, frame, false);
+    }
+    let origin = Pose::from_matrix(frame).xyz;
+    Mat4::from_translation(origin) * motion * Mat4::from_translation(-origin)
+}
+
 /// `motion` espresso nel riferimento `frame` (coordinate dell'oggetto) diventa una matrice in
 /// coordinate mondo; con `world` resta com'è (assi e origine della cabina).
 pub fn in_frame(motion: Mat4, frame: Mat4, world: bool) -> Mat4 {
@@ -983,13 +991,14 @@ pub fn draw(ctx: &egui::Context, app: &mut GestoreApp, pass: super::dock::Pass) 
                         .response
                         .on_hover_text("Passo del cursore e delle frecce (mm o gradi)");
                     ui.checkbox(&mut panel.world, "Modifica in coordinate World").on_hover_text(
-                        "Acceso: assi e origine della cabina. Spento: assi e centro dell'oggetto \
-                         (le sue coordinate, uguali per tutti i suoi pezzi)",
+                        "Acceso: assi della cabina; le rotazioni girano attorno all'origine dell'oggetto, \
+                         quindi X Y Z restano. Spento: assi e centro dell'oggetto (le sue coordinate, \
+                         uguali per tutti i suoi pezzi)",
                     );
                 });
                 if panel.value != before && !nodes.is_empty() {
                     let motion = axis_motion(panel.axis, panel.value - before);
-                    actions.push(Action::Move { nodes: nodes.clone(), matrix: in_frame(motion, frame, panel.world) });
+                    actions.push(Action::Move { nodes: nodes.clone(), matrix: slider_motion(motion, frame, panel.world) });
                 }
                 if ui.button(icon_text(ui, icon::ARROW_COUNTER_CLOCKWISE, "Ripristina"))
                     .on_hover_text("Riporta l'oggetto nella posizione in cui è stato aperto")
@@ -1623,7 +1632,15 @@ pub fn draw(ctx: &egui::Context, app: &mut GestoreApp, pass: super::dock::Pass) 
                         if !panel.robot_line.trim().is_empty() {
                             match parse_robot_base(&panel.robot_line) {
                                 Some(base) => {
-                                    let line = base.moved(&panel.offset, panel.world).to_line();
+                                    // Con World acceso l'offset è quello visto dalla scena per l'oggetto qui
+                                    // sopra: si riporta nelle sue coordinate, che sono quelle del BASE
+                                    let offset = if panel.world {
+                                        let f = frame_pose.matrix();
+                                        Pose::from_matrix(f.inverse() * panel.offset.matrix() * f)
+                                    } else {
+                                        panel.offset
+                                    };
+                                    let line = base.moved(&offset, false).to_line();
                                     ui.add(egui::Label::new(egui::RichText::new(&line).monospace().strong()).wrap());
                                     ui.horizontal_wrapped(|ui| {
                                         if ui.button(icon_text(ui, icon::COPY, "Copia")).clicked() {
@@ -1655,8 +1672,8 @@ pub fn draw(ctx: &egui::Context, app: &mut GestoreApp, pass: super::dock::Pass) 
                             ui.selectable_value(&mut panel.calc, CalcMode::Bases, "Tra due CONST BASE")
                                 .on_hover_text("Come BaseOffsetCalculator: CONST BASE NOME = X Y Z A B C");
                         });
-                        // (titolo, offset nel riferimento, riferimento)
-                        let mut calc_result: Option<Result<(String, Pose, Pose), String>> = None;
+                        // (titolo, offset nel riferimento)
+                        let mut calc_result: Option<Result<(String, Pose), String>> = None;
                         match panel.calc {
                             CalcMode::Objects => {
                                 egui::Grid::new("posizione_oggetti").num_columns(3).spacing([8.0, 4.0]).show(ui, |ui| {
@@ -1697,14 +1714,14 @@ pub fn draw(ctx: &egui::Context, app: &mut GestoreApp, pass: super::dock::Pass) 
                                                 Ok(fit) => {
                                                     let m = a.matrix();
                                                     panel.result_note = Some("Calcolato dalla geometria: i due oggetti sono lo stesso pezzo".to_string());
-                                                    Ok((title, Pose::from_matrix(m.inverse() * fit.matrix * m), a))
+                                                    Ok((title, Pose::from_matrix(m.inverse() * fit.matrix * m)))
                                                 }
                                                 Err(why) => {
                                                     let b = Pose::from_matrix(scene.object_frame(d));
                                                     panel.result_note = Some(format!(
                                                         "Calcolato dai Transform del file (non dalla geometria: {why})"
                                                     ));
-                                                    Ok((title, a.offset_to(&b), a))
+                                                    Ok((title, a.offset_to(&b)))
                                                 }
                                             }
                                         }
@@ -1722,7 +1739,7 @@ pub fn draw(ctx: &egui::Context, app: &mut GestoreApp, pass: super::dock::Pass) 
                                 if ui.button("Calcola").clicked() {
                                     panel.result_note = None;
                                     calc_result = Some(match (parse_const_base(&panel.base_a), parse_const_base(&panel.base_b)) {
-                                        (Some((na, a)), Some((nb, b))) => Ok((format!("{na}  ->  {nb}"), a.offset_to(&b), a)),
+                                        (Some((na, a)), Some((nb, b))) => Ok((format!("{na}  ->  {nb}"), a.offset_to(&b))),
                                         (None, _) => Err("BASE di origine non riconosciuto".to_string()),
                                         (_, None) => Err("BASE di destinazione non riconosciuto".to_string()),
                                     });
@@ -1730,15 +1747,13 @@ pub fn draw(ctx: &egui::Context, app: &mut GestoreApp, pass: super::dock::Pass) 
                             }
                         }
                         match calc_result {
-                            Some(Ok((title, p, frame))) => {
+                            Some(Ok((title, p))) => {
                                 panel.result = Some(p);
-                                panel.result_world = Some(offset_in_world(&p, &frame));
                                 panel.error = None;
                                 status = Some(format!("Offset calcolato: {title}"));
                             }
                             Some(Err(e)) => {
                                 panel.result = None;
-                                panel.result_world = None;
                                 panel.error = Some(e);
                             }
                             None => {}
@@ -1753,8 +1768,10 @@ pub fn draw(ctx: &egui::Context, app: &mut GestoreApp, pass: super::dock::Pass) 
                                 ),
                                 (
                                     "Offset in coordinate World",
-                                    "Lo stesso spostamento visto dalla cabina: assi e origine della cabina",
-                                    panel.result_world.unwrap_or(p),
+                                    "Lo stesso spostamento visto dalla scena, per l'oggetto scelto in alto: \
+                                     assi e origine della scena. Se il file non ha Transform (matematica nelle \
+                                     coordinate del veicolo) è uguale a quello nell'oggetto",
+                                    offset_in_world(&p, &frame_pose),
                                     true,
                                 ),
                             ];
@@ -2305,8 +2322,83 @@ DEF Destinazione Group { children [
                 texts.iter().map(|t| &t.0).filter(|t| t.contains("BASE_A")).collect::<Vec<_>>()
             );
         }
-        let w = app.ui_state.position.result_world.expect("offset World");
-        assert!(w.xyz.abs().max_element() > 1.0 && (w.xyz - p.xyz).length() > 1.0, "diverso da quello nell'oggetto: {w:?}");
+        // La riga World è lo stesso spostamento visto dalla scena per l'oggetto scelto
+        let w = app.ui_state.position.offset;
+        let target = match app.ui_state.position.target {
+            Some(Target::File(n)) => n,
+            other => panic!("{other:?}"),
+        };
+        let f = Pose::from_matrix(app.scene_graph.as_ref().unwrap().object_frame(target));
+        assert!(w.matrix().abs_diff_eq(offset_in_world(&p, &f).matrix(), 1e-2), "{w:?}");
+    }
+
+    /// Matematica senza Transform (nelle coordinate del BASE con cui è stata fatta, come un
+    /// paraurti): l'offset tra due BASE si applica uguale con World spento o acceso, e la riga
+    /// World coincide con quella nell'oggetto, come nel visualizzatore usato in azienda.
+    #[test]
+    fn offset_between_bases_on_a_file_without_transform() {
+        const PEZZO: &[u8] = br#"#VRML V2.0 utf8
+DEF Cantonale Group { children [
+  Shape { geometry IndexedFaceSet { coord Coordinate { point [ 3800 -700 10, 3900 -700 10, 3800 -600 90 ] } coordIndex [ 0 1 2 -1 ] } }
+] }
+"#;
+        let mut app = GestoreApp::new_headless();
+        let mut scene = crate::parser::parse_wrl(PEZZO);
+        scene.into_file("pezzo.wrl".into(), None);
+        app.project.on_loaded(scene.revision);
+        app.scene_graph = Some(scene);
+        app.ui_state.position.open = true;
+        let ui = Ui { ctx: egui::Context::default() };
+        let piece = node(&app, "Cantonale", 0);
+        let vertices = |app: &GestoreApp| {
+            let s = app.scene_graph.as_ref().unwrap();
+            s.shapes_data[s.meshes_of(&[piece])[0] as usize].world_vertices.clone()
+        };
+        let start = vertices(&app);
+        app.ui_state.select_single(Some(piece));
+        ui.run(&mut app, vec![]);
+        ui.click(&mut app, "Calcola offset", 0);
+        ui.click(&mut app, "Tra due CONST BASE", 0);
+        app.ui_state.position.base_a = "CONST BASE BASE_A = -1900 3600 900 0.5 -0.5 -90".into();
+        app.ui_state.position.base_b = "CONST BASE BASE_B = -2300 3300 1700 4 -8 -86".into();
+        ui.click(&mut app, "Calcola", 0);
+        let p = app.ui_state.position.result.expect("offset");
+        let expected: Vec<Vec3> = start.iter().map(|v| p.matrix().transform_point3(Vec3::from(*v))).collect();
+
+        let mut moved = Vec::new();
+        for (k, world) in [(0, false), (1, true)] {
+            ui.click(&mut app, "Usa come offset", k);
+            assert_eq!(app.ui_state.position.world, world);
+            assert!(app.ui_state.position.offset.matrix().abs_diff_eq(p.matrix(), 1e-3), "riga {k}: {:?}", app.ui_state.position.offset);
+            ui.click(&mut app, "Applica", 0);
+            moved.push(vertices(&app));
+            app.undo();
+        }
+        for got in moved {
+            for (a, b) in got.iter().zip(&expected) {
+                assert!((Vec3::from(*a) - *b).length() < 0.05, "{a:?} invece di {b:?}");
+            }
+        }
+    }
+
+    /// Con World acceso, scrivere a mano X Y Z e poi A B C con il cursore dà la posa X Y Z A B C:
+    /// le rotazioni girano attorno all'origine dell'oggetto, X Y Z non cambiano.
+    #[test]
+    fn world_rotations_keep_the_object_position() {
+        let target = Pose { xyz: Vec3::new(240.5, -515.25, 930.75), abc: Vec3::new(3.5, 9.25, 6.0) };
+        for frame0 in [Mat4::IDENTITY, Mat4::from_translation(Vec3::new(30.0, -20.0, 5.0))] {
+            let mut frame = frame0;
+            for axis in 0..6 {
+                let v = if axis < 3 { target.xyz[axis] } else { target.abc[axis - 3] };
+                frame = slider_motion(axis_motion(axis, v), frame, true) * frame;
+                if axis >= 3 {
+                    let xyz = Pose::from_matrix(frame).xyz;
+                    assert!((xyz - frame0.w_axis.truncate() - target.xyz).length() < 1e-2, "dopo {axis}: {xyz:?}");
+                }
+            }
+            let want = Mat4::from_translation(frame0.w_axis.truncate()) * target.matrix();
+            assert!(frame.abs_diff_eq(want, 1e-2), "{:?}", Pose::from_matrix(frame));
+        }
     }
 
     /// Cerniera: asse verticale da due punti, la freccia dell'angolo ruota il pezzo attorno

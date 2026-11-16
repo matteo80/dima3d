@@ -962,6 +962,17 @@ Fatto:
       %LOCALAPPDATA%\Programs\Dima3D senza permessi da amministratore, menu Start, desktop facoltativo,
       associazione dei .dima3d facoltativa, disinstallazione. `pacchetto.ps1` lo crea, `pubblica.ps1` lo carica nella
       Release accanto allo zip; dopo un aggiornamento dal programma si aggiorna la versione in «App installate».
+- [x] (2026-11-16, 0.2.25) **Offset World sul pezzo da spostare; rotazioni World sull'origine
+      dell'oggetto; Centro senza riquadro.** Il tasto «Centro» mostra solo la terna degli assi, senza il
+      riquadro delle coordinate. Prova dell'utente (paraurti: front e cantonali misurati con BASE diversi, matematica senza
+      Transform, nelle coordinate del BASE del front): l'offset tra due BASE andava applicato in coordinate
+      dell'oggetto, mentre la riga World (S·F⁻¹, la cabina del robot) spostava il pezzo altrove. Nel visualizzatore
+      usato in azienda gli stessi valori vanno in World, perché lì il World è quello della matematica. Ora la riga
+      World è calcolata con le coordinate dell'oggetto scelto in alto (F_pezzo·O·F_pezzo⁻¹): senza Transform coincide
+      con quella nell'oggetto, con la matematica messa in cabina (skid) resta S·F⁻¹. «Applica offset» in World è
+      invariato (attorno all'origine della scena). Il cursore «Trasformazione» con World acceso ora ruota attorno
+      all'origine dell'oggetto (`slider_motion`): scrivendo X Y Z e poi A B C si ottiene la posa, X Y Z non cambiano.
+      «Nuovo oggetto del robot» con World acceso riporta l'offset nelle coordinate dell'oggetto e fa base·O.
 - [x] (2026-11-15, 0.2.24) **Programmi del robot, Allinea, tasto Centro.** Finestra «Programma»: apre `.TIS`/`.tip`
       (o il `.tid`), punti dal `.tid` con lo stesso nome e dai `.tid` globali (`_*.tid`); righe da scegliere, copiare,
       tagliare, incollare, invertire, eliminare e trascinare (annulla/ripeti, Ctrl+C/X/V/Z con il mouse sulla finestra);

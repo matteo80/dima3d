@@ -485,13 +485,12 @@ pub fn draw_viewport(ui: &mut egui::Ui, app: &mut crate::app::GestoreApp) {
         super::measure::draw(ui, rect, m, |v| to_screen(camera, rect, v), size);
         ui.ctx().set_cursor_icon(egui::CursorIcon::Crosshair);
     }
-    // Centro cabina: lo zero della scena, con il punto della cabina su cui sta
+    // Centro cabina: la terna nello zero della scena
     if app.settings.cabin_center {
         if let (Some(renderer), Some(scene)) = (&app.renderer, &app.scene_graph) {
             let camera = &renderer.camera;
             let size = scene.compute_bounding_box().diagonal();
-            let in_cabin = app.center_in_cabin();
-            super::cabin_panel::draw_center(ui, rect, glam::Vec3::ZERO, glam::Mat4::IDENTITY, size, in_cabin, |v| to_screen(camera, rect, v));
+            super::cabin_panel::draw_center(ui, rect, glam::Vec3::ZERO, glam::Mat4::IDENTITY, size, |v| to_screen(camera, rect, v));
         }
     }
     // Traiettoria del programma del robot
@@ -766,7 +765,7 @@ fn draw_view_controls(
             let shown = *center;
             if ui
                 .selectable_label(shown, icon_text(ui, icon::CROSSHAIR, "Centro"))
-                .on_hover_text("Centro cabina: assi nello zero della scena con le coordinate, anche senza cabina (riferimento per allineare i 3D)")
+                .on_hover_text("Centro cabina: terna degli assi nello zero della scena, anche senza cabina (riferimento per allineare i 3D)")
                 .clicked()
             {
                 *center = !shown;
