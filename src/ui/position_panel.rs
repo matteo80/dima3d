@@ -621,6 +621,11 @@ pub fn axis_motion(axis: usize, amount: f32) -> Mat4 {
     }
 }
 
+/// Due offset uguali come si leggono (millesimi): la stessa matrice.
+fn same_offset(a: &Pose, b: &Pose) -> bool {
+    a.matrix().abs_diff_eq(b.matrix(), 5e-4)
+}
+
 /// Movimento elementare del cursore («Trasformazione»). World spento: assi e origine dell'oggetto.
 /// World acceso: assi della cabina, ma le rotazioni girano attorno all'origine dell'oggetto, così
 /// X Y Z dell'oggetto restano quelli impostati (come scrivere X Y Z A B C di una posa).
@@ -1759,38 +1764,46 @@ pub fn draw(ctx: &egui::Context, app: &mut GestoreApp, pass: super::dock::Pass) 
                             None => {}
                         }
                         if let Some(p) = panel.result {
-                            let rows = [
-                                (
-                                    "Offset in coordinate dell'oggetto",
-                                    "Negli assi e nell'origine del riferimento: come gli script e i BASE del robot",
-                                    p,
-                                    false,
-                                ),
-                                (
-                                    "Offset in coordinate World",
-                                    "Lo stesso spostamento visto dalla scena, per l'oggetto scelto in alto: \
-                                     assi e origine della scena. Se il file non ha Transform (matematica nelle \
-                                     coordinate del veicolo) è uguale a quello nell'oggetto",
-                                    offset_in_world(&p, &frame_pose),
-                                    true,
-                                ),
-                            ];
+                            let in_world = offset_in_world(&p, &frame_pose);
+                            // (titolo, spiegazione, valori, World acceso con «Usa come offset»: None = come è)
+                            let rows: Vec<(&str, &str, Pose, Option<bool>)> = if same_offset(&p, &in_world) {
+                                // Oggetto senza Transform né rotazioni: nell'oggetto e in World è lo stesso
+                                vec![("Offset", "Vale sia con World spento sia acceso", p, None)]
+                            } else {
+                                vec![
+                                    (
+                                        "Offset in coordinate dell'oggetto",
+                                        "Negli assi e nell'origine del riferimento: come gli script e i BASE del robot",
+                                        p,
+                                        Some(false),
+                                    ),
+                                    (
+                                        "Offset in coordinate World",
+                                        "Lo stesso spostamento visto dalla scena, per l'oggetto scelto in alto: \
+                                         assi e origine della scena",
+                                        in_world,
+                                        Some(true),
+                                    ),
+                                ]
+                            };
                             for (k, (title, hover, pose, world)) in rows.into_iter().enumerate() {
                                 ui.add_space(4.0);
                                 ui.label(egui::RichText::new(title).strong()).on_hover_text(hover);
                                 pose_grid(ui, &format!("posizione_risultato_{k}"), &pose);
                                 ui.horizontal_wrapped(|ui| {
                                     if ui.button(icon_text(ui, icon::COPY, "Copia")).clicked() {
-                                        copy = Some(offset_text(if world { "Offset World" } else { "Offset" }, &pose));
+                                        copy = Some(offset_text(if world == Some(true) { "Offset World" } else { "Offset" }, &pose));
                                     }
-                                    let what = if world { "acceso" } else { "spento" };
-                                    if ui
-                                        .button("Usa come offset")
-                                        .on_hover_text(format!("Copia i valori in «Applica offset», con World {what}"))
-                                        .clicked()
-                                    {
+                                    let hover = match world {
+                                        Some(true) => "Copia i valori in «Applica offset», con World acceso",
+                                        Some(false) => "Copia i valori in «Applica offset», con World spento",
+                                        None => "Copia i valori in «Applica offset»",
+                                    };
+                                    if ui.button("Usa come offset").on_hover_text(hover).clicked() {
                                         panel.offset = pose;
-                                        panel.world = world;
+                                        if let Some(w) = world {
+                                            panel.world = w;
+                                        }
                                     }
                                 });
                             }
@@ -2297,6 +2310,9 @@ DEF Destinazione Group { children [
     fn offset_between_two_bases() {
         let mut app = app();
         let ui = Ui { ctx: egui::Context::default() };
+        // Oggetto con un Transform ruotato (C = 90°): nell'oggetto e in World l'offset è diverso
+        let rif = node(&app, "Riferimento", 0);
+        app.ui_state.select_single(Some(rif));
         ui.run(&mut app, vec![]);
         ui.click(&mut app, "Calcola offset", 0);
         ui.click(&mut app, "Tra due CONST BASE", 0);
@@ -2324,12 +2340,9 @@ DEF Destinazione Group { children [
         }
         // La riga World è lo stesso spostamento visto dalla scena per l'oggetto scelto
         let w = app.ui_state.position.offset;
-        let target = match app.ui_state.position.target {
-            Some(Target::File(n)) => n,
-            other => panic!("{other:?}"),
-        };
-        let f = Pose::from_matrix(app.scene_graph.as_ref().unwrap().object_frame(target));
+        let f = Pose::from_matrix(app.scene_graph.as_ref().unwrap().object_frame(rif));
         assert!(w.matrix().abs_diff_eq(offset_in_world(&p, &f).matrix(), 1e-2), "{w:?}");
+        assert!((w.xyz - p.xyz).length() > 1.0, "diverso da quello nell'oggetto: {w:?}");
     }
 
     /// Matematica senza Transform (nelle coordinate del BASE con cui è stata fatta, come un
@@ -2365,11 +2378,16 @@ DEF Cantonale Group { children [
         let p = app.ui_state.position.result.expect("offset");
         let expected: Vec<Vec3> = start.iter().map(|v| p.matrix().transform_point3(Vec3::from(*v))).collect();
 
+        // Un solo risultato, senza «oggetto» o «World»
+        let texts = ui.run(&mut app, vec![]);
+        assert_eq!(texts.iter().filter(|(t, _)| t == "Usa come offset").count(), 1);
+        assert!(!texts.iter().any(|(t, _)| t == "Offset in coordinate World"));
         let mut moved = Vec::new();
-        for (k, world) in [(0, false), (1, true)] {
-            ui.click(&mut app, "Usa come offset", k);
-            assert_eq!(app.ui_state.position.world, world);
-            assert!(app.ui_state.position.offset.matrix().abs_diff_eq(p.matrix(), 1e-3), "riga {k}: {:?}", app.ui_state.position.offset);
+        for world in [false, true] {
+            app.ui_state.position.world = world;
+            ui.click(&mut app, "Usa come offset", 0);
+            assert_eq!(app.ui_state.position.world, world, "il selettore resta com'è");
+            assert!(app.ui_state.position.offset.matrix().abs_diff_eq(p.matrix(), 1e-3), "{:?}", app.ui_state.position.offset);
             ui.click(&mut app, "Applica", 0);
             moved.push(vertices(&app));
             app.undo();

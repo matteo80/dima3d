@@ -962,6 +962,23 @@ Fatto:
       %LOCALAPPDATA%\Programs\Dima3D senza permessi da amministratore, menu Start, desktop facoltativo,
       associazione dei .dima3d facoltativa, disinstallazione. `pacchetto.ps1` lo crea, `pubblica.ps1` lo carica nella
       Release accanto allo zip; dopo un aggiornamento dal programma si aggiorna la versione in «App installate».
+- [x] (2026-11-16, 0.2.26) **Programma: vista punti e menu del tasto destro.** Come il controllore
+      (foto dell'utente): due pulsanti in alto passano dalle righe («logica») alla tabella dei punti usati, in
+      ordine di comparsa (Nome, Coord, X Y Z A B C, Aux; clic = sceglie le righe che lo usano). Tasto destro su
+      una riga: Annulla, Ripeti, Taglia, Copia, Incolla, Elimina, Modifica… (testo della riga in una
+      finestrella, tiene il rientro), Commenta riga (`--` o `//` dopo il rientro), Togli commento (i separatori
+      restano), Inverti sequenza. Le voci dopo «Inverti» del controllore per ora non servono. «Apri…» non
+      propone più i `.tid` (si aprono ancora trascinandoli). I pulsanti sopra le righe restano.
+- [x] (2026-11-16, 0.2.26) **Più programmi del robot.** «Apri…» accetta più file e li aggiunge;
+      anche trascinati sulla finestra. Elenco in alto nella finestra Programma: clic = attivo (le righe
+      mostrate), occhio = traiettoria visibile o no, X = chiudi (con modifiche non salvate chiede conferma).
+      Ogni programma tiene scelta, modifiche e annulla (`ProgramDoc`); lo stesso file non si apre due volte.
+      Nella vista si vedono tutte le traiettorie, quelle non attive più tenui. L'utente lo guarderà meglio
+      più avanti per migliorarlo.
+- [x] (2026-11-16, 0.2.26) **Calcola offset: un solo risultato quando coincidono.** Provata la
+      0.2.25 dall'utente: funziona. Se l'offset nell'oggetto e quello World sono uguali (oggetto senza Transform né
+      rotazioni) si mostra una sola riga «Offset», e «Usa come offset» lascia il selettore World com'è. Il
+      selettore World resta: conta dopo una rotazione del pezzo e con i file con Transform (skid).
 - [x] (2026-11-16, 0.2.25) **Offset World sul pezzo da spostare; rotazioni World sull'origine
       dell'oggetto; Centro senza riquadro.** Il tasto «Centro» mostra solo la terna degli assi, senza il
       riquadro delle coordinate. Prova dell'utente (paraurti: front e cantonali misurati con BASE diversi, matematica senza

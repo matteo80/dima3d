@@ -138,6 +138,16 @@ pub struct EventPoint {
     pub position: Vec3,
 }
 
+/// Punto usato dal programma (tabella dei punti).
+#[derive(Debug, Clone, PartialEq)]
+pub struct UsedPoint<'a> {
+    pub name: String,
+    /// `None`: non c'è nei file dei punti
+    pub point: Option<&'a TeachPoint>,
+    /// Righe che lo usano
+    pub lines: Vec<usize>,
+}
+
 /// Byte → testo, un carattere per byte.
 pub fn decode(bytes: &[u8]) -> String {
     bytes.iter().map(|&b| b as char).collect()
@@ -295,6 +305,33 @@ impl Program {
         out
     }
 
+    /// Punti usati dal programma, nell'ordine in cui compaiono (movimenti e comandi come
+    /// `SETBRUSH` o `GUN`), ognuno una volta sola, con le righe che lo usano. Gli argomenti che non
+    /// sono punti (nomi di pistole, numeri…) restano fuori; i movimenti verso punti che mancano ci
+    /// sono, senza punto.
+    pub fn used_points(&self) -> Vec<UsedPoint<'_>> {
+        let mut out: Vec<UsedPoint> = Vec::new();
+        for (i, l) in self.lines.iter().enumerate() {
+            let names: Vec<&str> = match (l.motion(), l.call()) {
+                (Some((_, name)), _) => vec![name],
+                (None, Some((_, args))) => args.into_iter().filter(|a| self.point(a).is_some()).collect(),
+                _ => continue,
+            };
+            for name in names {
+                match out.iter_mut().find(|u| u.name.eq_ignore_ascii_case(name)) {
+                    Some(u) => u.lines.push(i),
+                    None => out.push(UsedPoint { name: name.to_string(), point: self.point(name), lines: vec![i] }),
+                }
+            }
+        }
+        out
+    }
+
+    /// Segno di commento del programma: `//` per i `.tip`, `--` per i `.TIS`.
+    pub fn comment_mark(&self) -> &'static str {
+        if has_ext(&self.program_path, &["tip"]) { "//" } else { "--" }
+    }
+
     /// Primo argomento di un comando (es. `SETOBJECT`), per l'intestazione.
     pub fn argument_of(&self, command: &str) -> Option<String> {
         self.lines.iter().find_map(|l| {
@@ -366,6 +403,32 @@ pub fn move_to(lines: &mut Vec<Line>, selected: &[usize], before: usize) -> Vec<
     let at = before - selected.iter().filter(|&&i| i < before).count();
     remove(lines, selected);
     insert(lines, at, moved)
+}
+
+/// Mette in commento le righe scelte (il segno dopo il rientro); quelle già commentate restano.
+pub fn comment(lines: &mut [Line], selected: &[usize], mark: &str) {
+    for &i in selected {
+        let Some(l) = lines.get_mut(i) else { continue };
+        if l.is_comment() {
+            continue;
+        }
+        let cut = l.0.len() - l.0.trim_start().len();
+        l.0.insert_str(cut, mark);
+    }
+}
+
+/// Toglie il commento dalle righe scelte. I separatori (solo `--` o `//`) restano.
+pub fn uncomment(lines: &mut [Line], selected: &[usize]) {
+    for &i in selected {
+        let Some(l) = lines.get_mut(i) else { continue };
+        let cut = l.0.len() - l.0.trim_start().len();
+        let rest = &l.0[cut..];
+        let Some(body) = rest.strip_prefix("--").or_else(|| rest.strip_prefix("//")) else { continue };
+        if body.trim().is_empty() {
+            continue;
+        }
+        l.0 = format!("{}{}", &l.0[..cut], body);
+    }
 }
 
 /// Rientro della riga `at` (per le righe incollate): quello della riga sopra, o della sotto.
@@ -509,6 +572,31 @@ mod tests {
         assert_eq!(names(&l), ["b"]);
         assert_eq!(insert(&mut l, 1, cut), vec![1, 2]);
         assert_eq!(names(&l), ["b", "a", "c"]);
+    }
+
+    #[test]
+    fn comment_and_uncomment() {
+        let mut l = vec![Line("    LIN( A_1)".into()), Line("  --".into()), Line("    --LIN( A_9)".into())];
+        comment(&mut l, &[0, 1], "--");
+        assert_eq!(l[0].0, "    --LIN( A_1)");
+        assert_eq!(l[1].0, "  --", "già commentata");
+        uncomment(&mut l, &[0, 1, 2]);
+        assert_eq!(l[0].0, "    LIN( A_1)");
+        assert_eq!(l[1].0, "  --", "il separatore resta");
+        assert_eq!(l[2].0, "    LIN( A_9)");
+        let p = Program::from_text("x.tip".into(), "");
+        assert_eq!(p.comment_mark(), "//");
+    }
+
+    #[test]
+    fn used_points_in_order() {
+        let mut p = Program::from_text("PROVA.TIS".into(), SPACES);
+        parse_points(SPACES_DATA, &mut p.points);
+        let used = p.used_points();
+        let names: Vec<&str> = used.iter().map(|u| u.name.as_str()).collect();
+        assert_eq!(names, ["A_1", "P1", "A_2", "CASA"], "Gun1, 6, TR1 non sono punti; CASA manca ma è un movimento");
+        assert_eq!(used[1].lines, [6]);
+        assert!(used[3].point.is_none());
     }
 
     #[test]

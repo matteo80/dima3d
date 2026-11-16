@@ -2,15 +2,40 @@
 //! `.tid`), con la traiettoria disegnata nella vista. Le righe si scelgono (Ctrl e Shift come
 //! nell'albero), si copiano, tagliano, incollano, invertono, e si trascinano sopra o sotto per
 //! cambiare l'ordine dei movimenti.
+//!
+//! Si possono aprire più programmi: le loro traiettorie si vedono tutte insieme, le righe sono
+//! quelle del programma attivo (scelto nell'elenco in alto). Gli altri restano con la loro scelta,
+//! le modifiche e l'annulla, e tornano attivi con un clic.
 
 use super::theme::{icon, icon_text};
 use crate::app::GestoreApp;
 use crate::robot_program::{self as rp, Line, Motion, Program};
 
+/// Un programma aperto ma non attivo, con il suo stato.
+#[derive(Debug)]
+pub struct ProgramDoc {
+    pub program: Program,
+    selected: Vec<usize>,
+    anchor: Option<usize>,
+    modified: bool,
+    undo: Vec<Vec<Line>>,
+    redo: Vec<Vec<Line>>,
+    hidden: bool,
+}
+
 #[derive(Debug, Default)]
 pub struct ProgramPanel {
     pub open: bool,
+    /// Programma attivo (le righe nella finestra)
     pub program: Option<Program>,
+    /// Gli altri programmi aperti, nell'ordine dell'elenco senza quello attivo
+    pub others: Vec<ProgramDoc>,
+    /// Posto del programma attivo nell'elenco
+    pub active: usize,
+    /// Traiettoria del programma attivo nascosta
+    pub hidden: bool,
+    /// Programma con modifiche non salvate di cui si è chiesta la chiusura (posto nell'elenco)
+    confirm_close: Option<usize>,
     /// Righe scelte, in ordine crescente
     pub selected: Vec<usize>,
     /// Riga da cui parte la scelta con Shift (e dove si incolla dopo aver tagliato)
@@ -29,6 +54,35 @@ pub struct ProgramPanel {
     pub hide_path: bool,
     /// Riga sotto il mouse: il suo punto si evidenzia nella vista
     pub hovered: Option<usize>,
+    /// Righe del programma o tabella dei punti
+    pub view: ProgramView,
+    /// «Modifica…»: riga e testo in scrittura
+    editing: Option<(usize, String)>,
+}
+
+/// Cosa mostra la finestra, come i due pulsanti del controllore.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub enum ProgramView {
+    /// Le righe del programma
+    #[default]
+    Logic,
+    /// I punti usati, con le coordinate
+    Points,
+}
+
+/// Voce scelta nel menu del tasto destro.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum MenuAction {
+    Undo,
+    Redo,
+    Cut,
+    Copy,
+    Paste,
+    Delete,
+    Change,
+    Comment,
+    Uncomment,
+    Reverse,
 }
 
 impl ProgramPanel {
@@ -101,6 +155,62 @@ impl ProgramPanel {
         self.anchor = first;
     }
 
+    pub fn comment(&mut self) {
+        let mark = self.program.as_ref().map_or("--", Program::comment_mark);
+        self.edit(|lines, sel| {
+            rp::comment(lines, sel, mark);
+            sel.to_vec()
+        });
+    }
+
+    pub fn uncomment(&mut self) {
+        self.edit(|lines, sel| {
+            rp::uncomment(lines, sel);
+            sel.to_vec()
+        });
+    }
+
+    /// «Modifica…»: il testo della prima riga scelta si scrive in una finestrella.
+    fn start_change(&mut self) {
+        if let Some(&i) = self.selected.first() {
+            if let Some(l) = self.lines().get(i) {
+                self.editing = Some((i, l.command().to_string()));
+            }
+        }
+    }
+
+    /// Conferma di «Modifica…»: la riga prende il testo nuovo, con il suo rientro.
+    fn finish_change(&mut self) {
+        let Some((i, text)) = self.editing.take() else { return };
+        self.edit(|lines, _| {
+            if let Some(l) = lines.get_mut(i) {
+                let indent: String = l.0.chars().take_while(|c| c.is_whitespace()).collect();
+                l.0 = format!("{indent}{}", text.trim());
+            }
+            vec![i]
+        });
+    }
+
+    /// Voce del menu del tasto destro. Ritorna il testo per gli appunti (Copia, Taglia).
+    fn apply_menu(&mut self, action: MenuAction) -> Option<String> {
+        match action {
+            MenuAction::Undo => self.undo(),
+            MenuAction::Redo => self.redo(),
+            MenuAction::Cut => return self.cut(),
+            MenuAction::Copy => return self.copy(),
+            MenuAction::Paste => {
+                let new = self.clipboard.clone();
+                self.paste(new);
+            }
+            MenuAction::Delete => self.delete(),
+            MenuAction::Change => self.start_change(),
+            MenuAction::Comment => self.comment(),
+            MenuAction::Uncomment => self.uncomment(),
+            MenuAction::Reverse => self.reverse(),
+        }
+        None
+    }
+
     fn move_before(&mut self, before: usize) {
         self.edit(|lines, sel| rp::move_to(lines, sel, before));
     }
@@ -154,23 +264,127 @@ impl ProgramPanel {
         }
     }
 
+    /// Aggiunge un programma e lo rende attivo. Se è già aperto (stesso file) torna attivo quello.
     fn load(&mut self, program: Program) {
-        *self = ProgramPanel { open: true, program: Some(program), hide_path: self.hide_path, clipboard: std::mem::take(&mut self.clipboard), ..Default::default() };
+        self.open = true;
+        if let Some(j) = self.position_of(&program.program_path) {
+            self.switch_to(j);
+            return;
+        }
+        if let Some(d) = self.take_active() {
+            let at = self.active.min(self.others.len());
+            self.others.insert(at, d);
+        }
+        self.active = self.others.len();
+        self.set_active(ProgramDoc { program, selected: Vec::new(), anchor: None, modified: false, undo: Vec::new(), redo: Vec::new(), hidden: false });
     }
 
-    /// Intestazione come nel controllore: robot : oggetto : programma.
-    pub fn title(&self) -> String {
-        let Some(p) = &self.program else { return String::new() };
-        let stem = p.program_path.file_stem().and_then(|s| s.to_str()).unwrap_or_default().to_string();
-        let robot = p.argument_of("SELECT").or_else(|| p.argument_of("RSELECT"));
-        [robot, p.argument_of("SETOBJECT"), Some(stem)].into_iter().flatten().collect::<Vec<_>>().join(" : ")
+    /// Quanti programmi sono aperti.
+    pub fn count(&self) -> usize {
+        self.others.len() + usize::from(self.program.is_some())
     }
+
+    /// Posto nell'elenco del programma aperto da `path`.
+    fn position_of(&self, path: &std::path::Path) -> Option<usize> {
+        (0..self.count()).find(|&j| self.get(j).is_some_and(|(p, ..)| p.program_path == path))
+    }
+
+    /// Programma al posto `j` dell'elenco: (programma, modificato, nascosto).
+    fn get(&self, j: usize) -> Option<(&Program, bool, bool)> {
+        if j == self.active {
+            return self.program.as_ref().map(|p| (p, self.modified, self.hidden));
+        }
+        let k = if j < self.active { j } else { j - 1 };
+        self.others.get(k).map(|d| (&d.program, d.modified, d.hidden))
+    }
+
+    fn take_active(&mut self) -> Option<ProgramDoc> {
+        let program = self.program.take()?;
+        self.drag = None;
+        self.hovered = None;
+        self.confirm_close = None;
+        self.editing = None;
+        Some(ProgramDoc {
+            program,
+            selected: std::mem::take(&mut self.selected),
+            anchor: self.anchor.take(),
+            modified: std::mem::replace(&mut self.modified, false),
+            undo: std::mem::take(&mut self.undo),
+            redo: std::mem::take(&mut self.redo),
+            hidden: std::mem::replace(&mut self.hidden, false),
+        })
+    }
+
+    fn set_active(&mut self, d: ProgramDoc) {
+        self.program = Some(d.program);
+        self.selected = d.selected;
+        self.anchor = d.anchor;
+        self.modified = d.modified;
+        self.undo = d.undo;
+        self.redo = d.redo;
+        self.hidden = d.hidden;
+    }
+
+    /// Rende attivo il programma al posto `j` dell'elenco.
+    pub fn switch_to(&mut self, j: usize) {
+        if j == self.active || j >= self.count() {
+            return;
+        }
+        if let Some(d) = self.take_active() {
+            let at = self.active.min(self.others.len());
+            self.others.insert(at, d);
+        }
+        let d = self.others.remove(j);
+        self.set_active(d);
+        self.active = j;
+    }
+
+    /// Chiude il programma al posto `j` dell'elenco (senza salvare).
+    pub fn close(&mut self, j: usize) {
+        self.confirm_close = None;
+        if j >= self.count() {
+            return;
+        }
+        if j == self.active {
+            self.take_active();
+            if !self.others.is_empty() {
+                let k = j.min(self.others.len() - 1);
+                let d = self.others.remove(k);
+                self.set_active(d);
+                self.active = k;
+            } else {
+                self.active = 0;
+            }
+        } else if j < self.active {
+            self.others.remove(j);
+            self.active -= 1;
+        } else {
+            self.others.remove(j - 1);
+        }
+    }
+
+    /// Mostra o nasconde nella vista la traiettoria del programma al posto `j`.
+    fn toggle_hidden(&mut self, j: usize) {
+        if j == self.active {
+            self.hidden = !self.hidden;
+        } else if let Some(d) = self.others.get_mut(if j < self.active { j } else { j - 1 }) {
+            d.hidden = !d.hidden;
+        }
+    }
+
+}
+
+/// Intestazione di un programma come nel controllore: robot : oggetto : programma.
+fn program_title(p: &Program) -> String {
+    let stem = p.program_path.file_stem().and_then(|s| s.to_str()).unwrap_or_default().to_string();
+    let robot = p.argument_of("SELECT").or_else(|| p.argument_of("RSELECT"));
+    [robot, p.argument_of("SETOBJECT"), Some(stem)].into_iter().flatten().collect::<Vec<_>>().join(" : ")
 }
 
 /// Scorciatoie quando il puntatore è sulla finestra. Ritorna `true` se ne ha usata una.
 pub fn shortcuts(ctx: &egui::Context, app: &mut GestoreApp) -> bool {
     let panel = &mut app.ui_state.program;
-    if !panel.open || !panel.has_pointer || panel.program.is_none() {
+    if !panel.open || !panel.has_pointer || panel.program.is_none() || panel.editing.is_some() {
         return false;
     }
     let (copy, cut, paste, undo, redo, delete, all, save) = ctx.input(|i| {
@@ -220,12 +434,13 @@ pub fn shortcuts(ctx: &egui::Context, app: &mut GestoreApp) -> bool {
 fn open_dialog(app: &mut GestoreApp) {
     let mut dialog = rfd::FileDialog::new()
         .set_title("Apri un programma del robot")
-        .add_filter("Programmi del robot (TIS, TIP, TID)", &["tis", "TIS", "tip", "TIP", "tid", "TID"])
+        .add_filter("Programmi del robot (TIS, TIP)", &["tis", "TIS", "tip", "TIP"])
         .add_filter("Tutti i file", &["*"]);
     if let Some(dir) = app.settings.last_program.as_ref().and_then(|p| p.parent()) {
         dialog = dialog.set_directory(dir);
     }
-    if let Some(path) = dialog.pick_file() {
+    // Anche più programmi insieme: si aggiungono a quelli già aperti
+    for path in dialog.pick_files().unwrap_or_default() {
         open_program(app, &path);
     }
 }
@@ -300,9 +515,47 @@ fn missing(program: &Program, name: &str) -> Option<&'static str> {
     }
 }
 
-/// Le righe, con scelta e trascinamento.
-fn lines_ui(ui: &mut egui::Ui, panel: &mut ProgramPanel) {
-    let Some(program) = &panel.program else { return };
+/// Menu del tasto destro sulle righe, come nel controllore (fino a «Inverti sequenza»).
+fn menu_items(panel: &ProgramPanel) -> [(Option<MenuAction>, &'static str, &'static str, bool); 13] {
+    let some = !panel.selected.is_empty();
+    let lines = panel.lines();
+    let any = |f: &dyn Fn(&Line) -> bool| panel.selected.iter().any(|&i| lines.get(i).is_some_and(f));
+    [
+        (Some(MenuAction::Undo), icon::ARROW_U_UP_LEFT, "Annulla", !panel.undo.is_empty()),
+        (Some(MenuAction::Redo), icon::ARROW_U_UP_RIGHT, "Ripeti", !panel.redo.is_empty()),
+        (None, "", "", false),
+        (Some(MenuAction::Cut), icon::SCISSORS, "Taglia", some),
+        (Some(MenuAction::Copy), icon::COPY, "Copia", some),
+        (Some(MenuAction::Paste), icon::CLIPBOARD, "Incolla", !panel.clipboard.is_empty()),
+        (Some(MenuAction::Delete), icon::X, "Elimina", some),
+        (Some(MenuAction::Change), icon::PENCIL_SIMPLE, "Modifica…", some),
+        (None, "", "", false),
+        (Some(MenuAction::Comment), icon::CHAT_TEXT, "Commenta riga", any(&|l| !l.is_comment())),
+        (Some(MenuAction::Uncomment), icon::CHAT_SLASH, "Togli commento", any(&|l| l.is_comment())),
+        (None, "", "", false),
+        (Some(MenuAction::Reverse), icon::ARROWS_DOWN_UP, "Inverti sequenza", panel.selected.len() > 1),
+    ]
+}
+
+fn context_menu(ui: &mut egui::Ui, items: &[(Option<MenuAction>, &str, &str, bool)], chosen: &mut Option<MenuAction>) {
+    for &(action, ic, label, enabled) in items {
+        let Some(action) = action else {
+            ui.separator();
+            continue;
+        };
+        if ui.add_enabled(enabled, egui::Button::new(icon_text(ui, ic, label))).clicked() {
+            *chosen = Some(action);
+            ui.close_menu();
+        }
+    }
+}
+
+/// Le righe, con scelta e trascinamento. Ritorna la voce scelta nel menu del tasto destro.
+fn lines_ui(ui: &mut egui::Ui, panel: &mut ProgramPanel) -> Option<MenuAction> {
+    let mut chosen = None;
+    let mut right_clicked = None;
+    let items = menu_items(panel);
+    let Some(program) = &panel.program else { return None };
     let font = egui::TextStyle::Monospace.resolve(ui.style());
     let row_h = ui.fonts(|f| f.row_height(&font)) + 4.0;
     let n = program.lines.len();
@@ -349,6 +602,11 @@ fn lines_ui(ui: &mut egui::Ui, panel: &mut ProgramPanel) {
                 if resp.clicked() {
                     clicked = Some((i, ui.input(|inp| inp.modifiers)));
                 }
+                // Tasto destro su una riga non scelta: si sceglie lei sola, poi il menu
+                if resp.secondary_clicked() {
+                    right_clicked = Some(i);
+                }
+                resp.context_menu(|ui| context_menu(ui, &items, &mut chosen));
                 if resp.drag_started() {
                     drag_start = Some(i);
                 }
@@ -378,6 +636,12 @@ fn lines_ui(ui: &mut egui::Ui, panel: &mut ProgramPanel) {
     if let Some((i, m)) = clicked {
         panel.click(i, m);
     }
+    if let Some(i) = right_clicked {
+        if panel.selected.binary_search(&i).is_err() {
+            panel.selected = vec![i];
+            panel.anchor = Some(i);
+        }
+    }
     if let Some(i) = drag_start {
         if panel.selected.binary_search(&i).is_err() {
             panel.selected = vec![i];
@@ -389,6 +653,66 @@ fn lines_ui(ui: &mut egui::Ui, panel: &mut ProgramPanel) {
         if let Some(Some(target)) = panel.drag.take() {
             panel.move_before(target);
         }
+    }
+    chosen
+}
+
+/// Tabella dei punti usati dal programma, come la seconda vista del controllore. Clic su un punto:
+/// si scelgono le righe che lo usano (e il punto si evidenzia nella vista).
+fn points_ui(ui: &mut egui::Ui, panel: &mut ProgramPanel) {
+    let Some(program) = &panel.program else { return };
+    let used = program.used_points();
+    let extra = used.iter().filter_map(|u| u.point).map(|p| p.values.len().saturating_sub(6)).max().unwrap_or(0).min(6);
+    let visuals = ui.visuals().clone();
+    let warn = visuals.warn_fg_color;
+    let mut pick: Option<Vec<usize>> = None;
+    let mut hovered = None;
+    let frame = egui::Frame::new().fill(visuals.extreme_bg_color).inner_margin(4.0);
+    frame.show(ui, |ui| {
+        egui::ScrollArea::both().auto_shrink([false, false]).show(ui, |ui| {
+            egui::Grid::new("punti_programma").striped(true).spacing([10.0, 3.0]).show(ui, |ui| {
+                let head = |ui: &mut egui::Ui, t: &str| {
+                    ui.label(egui::RichText::new(t).strong());
+                };
+                for h in ["Nome", "Coord", "X", "Y", "Z", "A", "B", "C"] {
+                    head(ui, h);
+                }
+                for k in 0..extra {
+                    head(ui, &format!("Aux{}", k + 1));
+                }
+                ui.end_row();
+                for u in &used {
+                    let chosen = !u.lines.is_empty() && u.lines.iter().all(|i| panel.selected.binary_search(i).is_ok());
+                    let r = ui.selectable_label(chosen, egui::RichText::new(&u.name).monospace());
+                    if r.clicked() {
+                        pick = Some(u.lines.clone());
+                    }
+                    if r.hovered() {
+                        hovered = u.lines.first().copied();
+                    }
+                    let mono = |ui: &mut egui::Ui, t: String| {
+                        ui.label(egui::RichText::new(t).monospace());
+                    };
+                    match u.point {
+                        Some(p) => {
+                            mono(ui, format!("{:?}", p.frame));
+                            for k in 0..6 + extra {
+                                mono(ui, p.values.get(k).map(|v| format!("{v:.3}")).unwrap_or_default());
+                            }
+                        }
+                        None => {
+                            ui.label(egui::RichText::new("manca").color(warn).small());
+                        }
+                    }
+                    ui.end_row();
+                }
+            });
+        });
+    });
+    panel.hovered = hovered;
+    if let Some(lines) = pick {
+        panel.anchor = lines.first().copied();
+        panel.selected = lines;
     }
 }
 
@@ -417,7 +741,15 @@ pub fn draw(ctx: &egui::Context, app: &mut GestoreApp, pass: super::dock::Pass) 
     };
     let pointer = super::dock::show(ctx, pass, window, |ui| {
         ui.horizontal_wrapped(|ui| {
-            if ui.button(icon_text(ui, icon::FOLDER_OPEN, "Apri…")).on_hover_text("Programma .TIS o .tip (o il suo file dei punti .tid): i punti si leggono dal .tid con lo stesso nome e dai .tid globali della cartella (che iniziano con _)").clicked() {
+            // Le due viste del controllore: righe del programma o punti con le coordinate
+            ui.spacing_mut().item_spacing.x = 2.0;
+            ui.selectable_value(&mut panel.view, ProgramView::Logic, egui::RichText::new(icon::TEXT_ALIGN_LEFT).size(16.0))
+                .on_hover_text("Righe del programma");
+            ui.selectable_value(&mut panel.view, ProgramView::Points, egui::RichText::new(icon::TABLE).size(16.0))
+                .on_hover_text("Punti con le coordinate");
+            ui.separator();
+            ui.spacing_mut().item_spacing.x = 8.0;
+            if ui.button(icon_text(ui, icon::FOLDER_OPEN, "Apri…")).on_hover_text("Programma .TIS o .tip: i punti si leggono dal .tid con lo stesso nome e dai .tid globali della cartella (che iniziano con _). Si possono sceglierne più di uno: si aggiungono a quelli aperti").clicked() {
                 choose = true;
             }
             let has = panel.program.is_some();
@@ -431,6 +763,56 @@ pub fn draw(ctx: &egui::Context, app: &mut GestoreApp, pass: super::dock::Pass) 
         if panel.program.is_none() {
             ui.label(egui::RichText::new("Apri un programma del robot per vedere la traiettoria. I punti in coordinate dell'oggetto si disegnano nella scena così come sono: metti la matematica con il riferimento oggetto nello zero.").weak());
             return ui.ui_contains_pointer();
+        }
+        // Programmi aperti: clic per renderlo attivo, occhio per la traiettoria, X per chiudere
+        {
+            // close: (posto, confermato)
+            let (mut pick, mut toggle, mut close) = (None, None, None::<(usize, bool)>);
+            for j in 0..panel.count() {
+                let Some((p, modified, hidden)) = panel.get(j) else { continue };
+                let name = format!("{}{}", program_title(p), if modified { "  •" } else { "" });
+                let path = p.program_path.display().to_string();
+                ui.horizontal(|ui| {
+                    ui.spacing_mut().item_spacing.x = 2.0;
+                    let eye = if hidden { icon::EYE_SLASH } else { icon::EYE };
+                    if ui.small_button(eye).on_hover_text(if hidden { "Mostra la traiettoria" } else { "Nascondi la traiettoria" }).clicked() {
+                        toggle = Some(j);
+                    }
+                    if ui.small_button(icon::X).on_hover_text("Chiudi il programma").clicked() {
+                        close = Some((j, false));
+                    }
+                    if ui.selectable_label(j == panel.active, name).on_hover_text(path).clicked() {
+                        pick = Some(j);
+                    }
+                });
+                if panel.confirm_close == Some(j) {
+                    ui.horizontal_wrapped(|ui| {
+                        ui.label(egui::RichText::new("Modifiche non salvate:").color(ui.visuals().warn_fg_color).small());
+                        if ui.small_button("Chiudi senza salvare").clicked() {
+                            close = Some((j, true));
+                        }
+                        if ui.small_button("Annulla").clicked() {
+                            panel.confirm_close = None;
+                        }
+                    });
+                }
+            }
+            if let Some(j) = toggle {
+                panel.toggle_hidden(j);
+            }
+            if let Some((c, confirmed)) = close {
+                if !confirmed && panel.get(c).is_some_and(|(_, modified, _)| modified) {
+                    panel.confirm_close = Some(c);
+                } else {
+                    panel.close(c);
+                }
+            } else if let Some(j) = pick {
+                panel.switch_to(j);
+            }
+            ui.separator();
+            if panel.program.is_none() {
+                return ui.ui_contains_pointer();
+            }
         }
         ui.horizontal_wrapped(|ui| {
             ui.spacing_mut().item_spacing.x = 2.0;
@@ -460,23 +842,53 @@ pub fn draw(ctx: &egui::Context, app: &mut GestoreApp, pass: super::dock::Pass) 
             }
         });
         let mut show = !panel.hide_path;
-        ui.checkbox(&mut show, "Traiettoria nella vista").on_hover_text("Linea dei movimenti LIN (piena) e PTP (tratteggiata), con i punti; le righe scelte mostrano il nome del punto");
+        ui.checkbox(&mut show, "Traiettorie nella vista").on_hover_text("Linea dei movimenti LIN (piena) e PTP (tratteggiata), con i punti; le righe scelte mostrano il nome del punto. I programmi non attivi si vedono più tenui");
         panel.hide_path = !show;
         if let Some(p) = &panel.program {
             let moves = p.path();
             let drawn = moves.iter().filter(|m| m.position.is_some()).count();
-            let title = panel.title();
-            ui.label(egui::RichText::new(format!("{}{}", title, if panel.modified { "  •" } else { "" })).strong())
-                .on_hover_text(p.program_path.display().to_string());
             let mut info = format!("{} movimenti, {drawn} nella vista", moves.len());
             if drawn < moves.len() {
                 info.push_str(" (gli altri sono in World, Axis o senza punto)");
             }
             ui.label(egui::RichText::new(info).weak().small());
         }
-        lines_ui(ui, panel);
+        match panel.view {
+            ProgramView::Logic => {
+                if let Some(action) = lines_ui(ui, panel) {
+                    if let Some(text) = panel.apply_menu(action) {
+                        clipboard_text = Some(text);
+                    }
+                }
+            }
+            ProgramView::Points => points_ui(ui, panel),
+        }
         ui.ui_contains_pointer()
     });
+    // «Modifica…»: il testo della riga in una finestrella
+    let panel = &mut app.ui_state.program;
+    let (mut ok, mut cancel) = (false, false);
+    if let Some((i, text)) = &mut panel.editing {
+        egui::Window::new(format!("Modifica riga {}", *i + 1)).collapsible(false).resizable(false).show(ctx, |ui| {
+            let r = ui.add(egui::TextEdit::singleline(text).font(egui::TextStyle::Monospace).desired_width(360.0));
+            r.request_focus();
+            if r.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
+                ok = true;
+            }
+            if ui.input(|i| i.key_pressed(egui::Key::Escape)) {
+                cancel = true;
+            }
+            ui.horizontal(|ui| {
+                ok |= ui.button("OK").clicked();
+                cancel |= ui.button("Annulla").clicked();
+            });
+        });
+    }
+    if ok {
+        panel.finish_change();
+    } else if cancel {
+        panel.editing = None;
+    }
     let panel = &mut app.ui_state.program;
     panel.has_pointer = pointer.unwrap_or(false);
     if clipboard_text.is_some() {
@@ -502,18 +914,36 @@ pub fn draw(ctx: &egui::Context, app: &mut GestoreApp, pass: super::dock::Pass) 
 /// Traiettoria nella vista 3D: linee tra i punti in coordinate dell'oggetto, i punti e i nomi
 /// di quelli scelti (e di quello sotto il mouse, nella lista o nella vista).
 pub fn draw_overlay(ui: &egui::Ui, rect: egui::Rect, panel: &ProgramPanel, to_screen: impl Fn(glam::Vec3) -> Option<egui::Pos2>) {
-    let Some(program) = &panel.program else { return };
     if !panel.open || panel.hide_path {
         return;
     }
+    // Prima gli altri programmi, più tenui e senza righe scelte; sopra quello attivo
+    for d in panel.others.iter().filter(|d| !d.hidden) {
+        draw_path(ui, rect, &d.program, &|_| false, true, &to_screen);
+    }
+    if let (Some(program), false) = (&panel.program, panel.hidden) {
+        let selected = |line: usize| panel.selected.binary_search(&line).is_ok() || panel.hovered == Some(line);
+        draw_path(ui, rect, program, &selected, false, &to_screen);
+    }
+}
+
+/// Traiettoria di un programma; `faded` per quelli non attivi.
+fn draw_path(
+    ui: &egui::Ui,
+    rect: egui::Rect,
+    program: &Program,
+    selected: &dyn Fn(usize) -> bool,
+    faded: bool,
+    to_screen: &dyn Fn(glam::Vec3) -> Option<egui::Pos2>,
+) {
     let painter = ui.painter_at(rect);
-    let lin = egui::Color32::from_rgb(255, 170, 40);
-    let ptp = egui::Color32::from_rgb(200, 200, 210);
-    let event = egui::Color32::from_rgb(60, 210, 230);
+    let dim = |c: egui::Color32| if faded { c.gamma_multiply(0.45) } else { c };
+    let lin = dim(egui::Color32::from_rgb(255, 170, 40));
+    let ptp = dim(egui::Color32::from_rgb(200, 200, 210));
+    let event = dim(egui::Color32::from_rgb(60, 210, 230));
     let highlight = egui::Color32::from_rgb(255, 240, 120);
     let shadow = egui::Color32::from_black_alpha(160);
     let pointer = ui.ctx().pointer_hover_pos().filter(|p| rect.contains(*p));
-    let selected = |line: usize| panel.selected.binary_search(&line).is_ok() || panel.hovered == Some(line);
     let label = |at: egui::Pos2, text: &str| {
         let font = egui::FontId::proportional(12.0);
         let pos = at + egui::vec2(7.0, -7.0);
@@ -522,7 +952,7 @@ pub fn draw_overlay(ui: &egui::Ui, rect: egui::Rect, panel: &ProgramPanel, to_sc
     };
 
     let moves = program.path();
-    let screen: Vec<Option<egui::Pos2>> = moves.iter().map(|m| m.position.and_then(&to_screen)).collect();
+    let screen: Vec<Option<egui::Pos2>> = moves.iter().map(|m| m.position.and_then(to_screen)).collect();
     for (k, pair) in moves.windows(2).enumerate() {
         let (Some(a), Some(b)) = (screen[k], screen[k + 1]) else { continue };
         if pair[1].motion == Motion::Lin {
@@ -674,10 +1104,119 @@ mod tests {
         assert_eq!(names(&app.ui_state.program), ["a", "b", "c", "d"]);
     }
 
+    /// Più programmi aperti: ognuno tiene righe, scelta e annulla; lo stesso file non si apre due
+    /// volte; chiudendo quello attivo diventa attivo il vicino.
+    #[test]
+    fn several_programs_keep_their_state() {
+        let prog = |name: &str, lines: &[&str]| {
+            let text = lines.iter().map(|n| format!("  {n}\r\n")).collect::<String>();
+            Program::from_text(name.into(), &text)
+        };
+        let mut p = ProgramPanel::default();
+        p.load(prog("A.TIS", &["a1", "a2"]));
+        p.selected = vec![1];
+        p.delete();
+        assert_eq!(names(&p), ["a1"]);
+        p.load(prog("B.TIS", &["b1", "b2", "b3"]));
+        p.load(prog("C.TIS", &["c1"]));
+        assert_eq!((p.count(), p.active), (3, 2));
+        assert_eq!(names(&p), ["c1"]);
+
+        // Torna su A: le sue modifiche e l'annulla ci sono ancora
+        p.switch_to(0);
+        assert_eq!(names(&p), ["a1"]);
+        assert!(p.modified);
+        p.undo();
+        assert_eq!(names(&p), ["a1", "a2"]);
+        // Riaprire B lo rende attivo, senza doppioni
+        p.load(prog("B.TIS", &["altro"]));
+        assert_eq!((p.count(), p.active), (3, 1));
+        assert_eq!(names(&p), ["b1", "b2", "b3"]);
+        let order: Vec<String> = (0..p.count()).map(|j| p.get(j).unwrap().0.program_path.display().to_string()).collect();
+        assert_eq!(order, ["A.TIS", "B.TIS", "C.TIS"]);
+
+        // Traiettoria nascosta per un programma solo
+        p.toggle_hidden(2);
+        assert!(p.get(2).unwrap().2 && !p.get(1).unwrap().2);
+
+        // Chiudo B (attivo): diventa attivo C, al suo posto
+        p.close(1);
+        assert_eq!((p.count(), p.active), (2, 1));
+        assert_eq!(names(&p), ["c1"]);
+        p.close(0);
+        assert_eq!((p.count(), p.active), (1, 0));
+        p.close(0);
+        assert!(p.program.is_none() && p.count() == 0);
+    }
+
+    /// Finestra vera: tasto destro su «b» la sceglie e apre il menu; «Commenta riga» la commenta.
+    /// La vista dei punti mostra la tabella.
+    #[test]
+    fn right_click_opens_the_menu_in_the_window() {
+        let mut app = GestoreApp::new_headless();
+        app.settings.dock_program = Default::default();
+        app.ui_state.program = panel(&["LIN( a)", "LIN( b)"]);
+        let ctx = egui::Context::default();
+        let screen = egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(1280.0, 800.0));
+        let run = |app: &mut GestoreApp, events: Vec<egui::Event>| {
+            let out = ctx.run(egui::RawInput { screen_rect: Some(screen), events, ..Default::default() }, |ctx| draw(ctx, app, crate::ui::dock::Pass::Floating));
+            let mut texts = Vec::new();
+            fn walk(s: &egui::Shape, out: &mut Vec<(String, egui::Rect)>) {
+                match s {
+                    egui::Shape::Text(t) => out.push((t.galley.text().to_string(), t.galley.rect.translate(t.pos.to_vec2()))),
+                    egui::Shape::Vec(v) => v.iter().for_each(|s| walk(s, out)),
+                    _ => {}
+                }
+            }
+            out.shapes.iter().for_each(|c| walk(&c.shape, &mut texts));
+            texts
+        };
+        let click = |app: &mut GestoreApp, at: egui::Pos2, button: egui::PointerButton| {
+            let ev = |pressed| egui::Event::PointerButton { pos: at, button, pressed, modifiers: Default::default() };
+            run(app, vec![egui::Event::PointerMoved(at)]);
+            run(app, vec![ev(true)]);
+            run(app, vec![ev(false)]);
+            run(app, vec![])
+        };
+        run(&mut app, vec![]);
+        let texts = run(&mut app, vec![]);
+        let b = texts.iter().find(|(t, _)| t == "  LIN( b)").expect("riga b").1.center();
+        let texts = click(&mut app, b, egui::PointerButton::Secondary);
+        assert_eq!(app.ui_state.program.selected, [1]);
+        let item = texts.iter().find(|(t, _)| t.ends_with("Commenta riga")).unwrap_or_else(|| panic!("menu: {texts:?}")).1.center();
+        click(&mut app, item, egui::PointerButton::Primary);
+        assert_eq!(names(&app.ui_state.program), ["LIN( a)", "--LIN( b)"]);
+
+        app.ui_state.program.view = ProgramView::Points;
+        let texts = run(&mut app, vec![]);
+        assert!(texts.iter().any(|(t, _)| t == "Coord"), "tabella dei punti");
+    }
+
+    /// Voci del menu del tasto destro: commenta, togli commento, modifica, inverti.
+    #[test]
+    fn right_click_menu_actions() {
+        let mut p = panel(&["LIN( A)", "LIN( B)", "LIN( C)"]);
+        p.selected = vec![0, 2];
+        p.apply_menu(MenuAction::Comment);
+        assert_eq!(names(&p), ["--LIN( A)", "LIN( B)", "--LIN( C)"]);
+        p.apply_menu(MenuAction::Uncomment);
+        assert_eq!(names(&p), ["LIN( A)", "LIN( B)", "LIN( C)"]);
+        p.apply_menu(MenuAction::Reverse);
+        assert_eq!(names(&p), ["LIN( C)", "LIN( B)", "LIN( A)"]);
+        p.selected = vec![1];
+        p.apply_menu(MenuAction::Change);
+        assert_eq!(p.editing, Some((1, "LIN( B)".to_string())));
+        p.editing.as_mut().unwrap().1 = "PTP( Z) ".into();
+        p.finish_change();
+        assert_eq!(p.lines()[1].0, "  PTP( Z)", "tiene il rientro");
+        assert_eq!(p.apply_menu(MenuAction::Copy).as_deref(), Some("  PTP( Z)"));
+        p.apply_menu(MenuAction::Undo);
+        assert_eq!(names(&p), ["LIN( C)", "LIN( B)", "LIN( A)"]);
+    }
+
     #[test]
     fn title_like_the_controller() {
         let program = Program::from_text("PEZZO_AP.TIS".into(), "  SELECT( \"R11\")\r\n  SETOBJECT( PEZZO)\r\n");
-        let p = ProgramPanel { program: Some(program), ..Default::default() };
-        assert_eq!(p.title(), "R11 : PEZZO : PEZZO_AP");
+        assert_eq!(program_title(&program), "R11 : PEZZO : PEZZO_AP");
     }
 }

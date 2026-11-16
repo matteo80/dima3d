@@ -1129,7 +1129,7 @@ impl eframe::App for GestoreApp {
             .partition(|p| crate::ui::pdf_panel::is_pdf(p));
         // Programmi del robot trascinati sulla finestra: si aprono nella finestra Programma
         let (programs, dropped): (Vec<_>, Vec<_>) = dropped.into_iter().partition(|p| crate::robot_program::is_program_file(p));
-        if let Some(p) = programs.into_iter().next() {
+        for p in programs {
             crate::ui::program_panel::open_program(self, &p);
         }
         if let Some(pdf) = pdfs.into_iter().next() {
