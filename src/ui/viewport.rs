@@ -280,6 +280,20 @@ pub fn draw_viewport(ui: &mut egui::Ui, app: &mut crate::app::GestoreApp) {
                 }
             }
         }
+        // «Allinea su punti»: il clic prende il punto del 3D della coppia in scelta
+        let align_picking = app.ui_state.position.open && app.ui_state.position.points.picking.is_some() && !hinge_picking;
+        if align_picking && response.clicked() {
+            if let (Some(scene), Some(pos)) = (&app.scene_graph, response.interact_pointer_pos()) {
+                renderer.sync_with_scene(scene, &app.ui_state.selected_nodes());
+                let (origin, dir) = pointer_ray(&renderer.camera, rect, pos);
+                if let Some((mesh, t, triangle)) = pick(scene, &renderer.visibility, section, (origin, dir)) {
+                    let camera = &renderer.camera;
+                    let point = super::measure::snap(triangle, origin + dir * t, |v| to_screen(camera, rect, v), pos);
+                    app.ui_state.position.points.add_point(super::measure::Measure::anchored(scene, mesh, point));
+                }
+            }
+        }
+        let hinge_picking = hinge_picking || align_picking;
         let measuring = app.ui_state.measure.is_some() || hinge_picking;
         if app.ui_state.measure.is_some() && !hinge_picking && response.clicked() {
             if let (Some(scene), Some(pos)) = (&app.scene_graph, response.interact_pointer_pos()) {
@@ -389,7 +403,10 @@ pub fn draw_viewport(ui: &mut egui::Ui, app: &mut crate::app::GestoreApp) {
         app.apply(a);
     }
     // Menu del tasto destro (dopo le azioni: la selezione è già quella del pezzo cliccato)
-    let menu_open = !(app.ui_state.measure.is_some() || app.ui_state.eyedropper || app.ui_state.position.hinge.picking);
+    let menu_open = !(app.ui_state.measure.is_some()
+        || app.ui_state.eyedropper
+        || app.ui_state.position.hinge.picking
+        || app.ui_state.position.points.picking.is_some());
     if menu_open && app.scene_graph.is_some() {
         let mut chosen = Vec::new();
         response.context_menu(|ui| context_menu(ui, app, &mut chosen));
@@ -510,8 +527,9 @@ pub fn draw_viewport(ui: &mut egui::Ui, app: &mut crate::app::GestoreApp) {
             let camera = &renderer.camera;
             let size = scene.compute_bounding_box().diagonal();
             super::position_panel::draw_overlay(ui, rect, &app.ui_state.position.hinge, |v| to_screen(camera, rect, v), size);
+            super::point_align::draw_overlay(ui, rect, &app.ui_state.position.points, |v| to_screen(camera, rect, v));
         }
-        if app.ui_state.position.hinge.picking && response.hovered() {
+        if (app.ui_state.position.hinge.picking || app.ui_state.position.points.picking.is_some()) && response.hovered() {
             ui.ctx().set_cursor_icon(egui::CursorIcon::Crosshair);
         }
     }

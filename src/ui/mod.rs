@@ -5,6 +5,7 @@ pub mod hinge_label;
 pub mod color_menu;
 pub mod measure;
 pub mod pdf_panel;
+pub mod point_align;
 pub mod position_panel;
 pub mod program_panel;
 pub mod progress;

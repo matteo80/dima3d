@@ -683,6 +683,12 @@ impl GestoreApp {
             self.ui_state.measure = if self.ui_state.measure.is_some() { None } else { Some(Default::default()) };
             self.ui_state.eyedropper = false;
             self.ui_state.position.hinge.picking = false;
+            self.ui_state.position.points.picking = None;
+        }
+        if esc_key && self.ui_state.position.points.picking.is_some() {
+            self.ui_state.position.points.picking = None;
+            self.ui_state.status_message = "Scelta dei punti sul 3D finita".to_string();
+            return;
         }
         if esc_key && self.ui_state.position.hinge.picking {
             let hinge = &mut self.ui_state.position.hinge;

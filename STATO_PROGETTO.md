@@ -962,6 +962,13 @@ Fatto:
       %LOCALAPPDATA%\Programs\Dima3D senza permessi da amministratore, menu Start, desktop facoltativo,
       associazione dei .dima3d facoltativa, disinstallazione. `pacchetto.ps1` lo crea, `pubblica.ps1` lo carica nella
       Release accanto allo zip; dopo un aggiornamento dal programma si aggiorna la versione in «App installate».
+- [x] (2026-11-16, 0.2.27) **Allinea su punti** (`ui/point_align.rs`, finestra Posizione): la matematica si
+      sposta sui riferimenti presi in cabina (punti `Object` del programma attivo, aggiunti uno per uno, tutti
+      o scritti a mano) abbinati agli stessi punti cliccati sul 3D (aggancio al vertice, il punto segue il
+      pezzo). Almeno 4 coppie accese; `fit_rigid` ai minimi quadrati; per ogni punto distanza ora e scarto
+      dopo, scarto medio e massimo, spostamento World da copiare; avvisa con i punti in fila o presi su pezzi
+      che non si spostano. Il messaggio della finestra Posizione ora vince su quello dello spostamento. Da
+      fare (sperimentale): calcolo dell'oggetto del robot dagli stessi punti.
 - [x] (2026-11-16, 0.2.26) **Programma: vista punti e menu del tasto destro.** Come il controllore
       (foto dell'utente): due pulsanti in alto passano dalle righe («logica») alla tabella dei punti usati, in
       ordine di comparsa (Nome, Coord, X Y Z A B C, Aux; clic = sceglie le righe che lo usano). Tasto destro su
@@ -1015,7 +1022,7 @@ Fatto:
       «Nuovo oggetto del robot» (in «Applica offset»): legge `CONST BASE NOME = X Y Z A B C` o
       `NOME : OBJECT := (X, Y, Z, A, B, C)` (`parse_robot_base`) e la riscrive nello stesso formato spostata
       dell'offset (base·O con World spento, O·base acceso), in doppia precisione. Per `OBJECT` si assume la
-      stessa convenzione degli angoli del CONST BASE (Rz(C)·Ry(B)·Rx(A)): da verificare.
+      stessa convenzione degli angoli del CONST BASE (Rz(C)·Ry(B)·Rx(A)): confermata dall'utente.
 - [x] (2026-11-13, 0.2.20) **Cerniere a 4 perni salvate** (`SavedLinkage` in `scene_graph/hinge.rs`): «Salva
       cerniera» anche in «4 perni (cofano)» ricorda perni, parte che si apre e bielle. I perni sono nelle coordinate
       del pezzo di riferimento con il meccanismo a 0° (dalla posizione attuale e dall'angolo si ricava quella a 0°,

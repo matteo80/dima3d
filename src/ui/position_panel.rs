@@ -126,6 +126,8 @@ pub struct PositionPanel {
     pub align_reference: Vec<u32>,
     pub align_axes: [bool; 3],
     pub align_mode: AlignMode,
+    /// «Allinea su punti»: riferimenti presi in cabina e sul 3D
+    pub points: super::point_align::PointAlign,
 }
 
 impl Default for PositionPanel {
@@ -156,6 +158,7 @@ impl Default for PositionPanel {
             align_reference: Vec::new(),
             align_axes: [true, true, true],
             align_mode: AlignMode::Center,
+            points: Default::default(),
         }
     }
 }
@@ -861,6 +864,16 @@ pub fn draw(ctx: &egui::Context, app: &mut GestoreApp, pass: super::dock::Pass) 
         }
     });
 
+    // «Allinea su punti»: i punti presi sul 3D seguono i pezzi; riferimenti dal programma attivo
+    panel.points.follow(scene);
+    let program_points: Vec<(String, Vec3)> = app
+        .ui_state
+        .program
+        .program
+        .as_ref()
+        .map(|p| p.used_points().into_iter().filter_map(|u| Some((u.name.clone(), u.point?.position()?))).collect())
+        .unwrap_or_default();
+
     let mut open = true;
     let mut actions: Vec<Action> = Vec::new();
     let mut copy: Option<String> = None;
@@ -1096,6 +1109,170 @@ pub fn draw(ctx: &egui::Context, app: &mut GestoreApp, pass: super::dock::Pass) 
                         if let Some(d) = ok {
                             actions.push(Action::Move { nodes: nodes.clone(), matrix: Mat4::from_translation(d) });
                             status = Some(format!("Allineato: spostato di X {:+.2} Y {:+.2} Z {:+.2} mm", d.x, d.y, d.z));
+                        }
+                    }
+                });
+
+                // ── Allinea su punti ───────────────────────────────────────────
+                section(ui, "posizione_punti", "Allinea su punti", &mut sections[6], |ui| {
+                    let pa = &mut panel.points;
+                    ui.label(
+                        egui::RichText::new(format!(
+                            "L'oggetto qui sopra si sposta sui riferimenti presi in cabina (punti del programma). \
+                             Almeno {} punti; sul 3D il clic si aggancia al vertice vicino.",
+                            super::point_align::MIN_POINTS
+                        ))
+                        .weak()
+                        .small(),
+                    );
+                    if program_points.is_empty() {
+                        ui.label(
+                            egui::RichText::new("Apri il programma con i riferimenti nella finestra Programma (punti Object)")
+                                .weak()
+                                .small(),
+                        );
+                    } else {
+                        ui.horizontal_wrapped(|ui| {
+                            egui::ComboBox::from_id_salt("posizione_punti_programma")
+                                .width(110.0)
+                                .selected_text(pa.choice.clone().unwrap_or_else(|| "Punto…".to_string()))
+                                .show_ui(ui, |ui| {
+                                    for (name, _) in &program_points {
+                                        ui.selectable_value(&mut pa.choice, Some(name.clone()), name);
+                                    }
+                                })
+                                .response
+                                .on_hover_text("Punti del programma attivo, nell'ordine in cui li usa");
+                            let chosen = pa.choice.as_ref().and_then(|c| program_points.iter().find(|(n, _)| n == c)).cloned();
+                            if ui.add_enabled(chosen.is_some(), egui::Button::new(icon_text(ui, icon::PLUS, "Aggiungi"))).clicked() {
+                                if let Some((name, p)) = chosen {
+                                    pa.add(&name, p);
+                                }
+                            }
+                            if ui.button("Tutti").on_hover_text("Aggiunge tutti i punti del programma attivo").clicked() {
+                                for (name, p) in &program_points {
+                                    pa.add(name, *p);
+                                }
+                            }
+                        });
+                    }
+                    ui.horizontal_wrapped(|ui| {
+                        ui.label("A mano");
+                        ui.add(egui::TextEdit::singleline(&mut pa.manual_name).desired_width(60.0).hint_text("Nome"));
+                        for k in 0..3 {
+                            ui.label(egui::RichText::new(AXES[k].0).color(AXES[k].1).strong());
+                            ui.add(egui::DragValue::new(&mut pa.manual[k]).speed(0.1).max_decimals(3));
+                        }
+                        let name = pa.manual_name.trim().to_string();
+                        if ui.add_enabled(!name.is_empty(), egui::Button::new(icon::PLUS).small()).on_hover_text("Aggiunge il punto scritto a mano").clicked() {
+                            let p = pa.manual;
+                            pa.add(&name, p);
+                            pa.manual_name.clear();
+                        }
+                    });
+                    let fit = pa.fit();
+                    let residuals = fit.as_ref().ok().map(|f| f.residuals.clone());
+                    // Pezzi che si spostano: i punti presi altrove non seguono l'allineamento
+                    let moving = scene.meshes_of(&nodes);
+                    let mut outside = 0;
+                    let mut remove: Option<usize> = None;
+                    let mut pick: Option<Option<usize>> = None;
+                    if !pa.pairs.is_empty() {
+                        egui::Grid::new("posizione_punti_tabella").num_columns(6).spacing([6.0, 3.0]).striped(true).show(ui, |ui| {
+                            ui.label("");
+                            ui.label(egui::RichText::new("Punto").small().strong());
+                            ui.label(egui::RichText::new("Sul 3D").small().strong());
+                            ui.label(egui::RichText::new("Ora").small().strong()).on_hover_text("Distanza tra il punto del 3D e il riferimento (mm)");
+                            ui.label(egui::RichText::new("Dopo").small().strong()).on_hover_text("Scarto che resta dopo «Allinea» (mm)");
+                            ui.label("");
+                            ui.end_row();
+                            for (i, p) in pa.pairs.iter_mut().enumerate() {
+                                ui.checkbox(&mut p.on, "").on_hover_text("Usa questo punto nel calcolo");
+                                let t = p.target;
+                                ui.label(egui::RichText::new(&p.name).monospace())
+                                    .on_hover_text(format!("X {:.3}  Y {:.3}  Z {:.3}", t.x, t.y, t.z));
+                                let picking = pa.picking == Some(i);
+                                let (text, hover) = match (&p.cad, picking) {
+                                    (_, true) => (format!("{} …", icon::CROSSHAIR), "Clicca il punto sul 3D (Esc per smettere)"),
+                                    (Some(_), _) => (icon::CHECK.to_string(), "Preso: clic per riprenderlo"),
+                                    (None, _) => (format!("{} Prendi", icon::CROSSHAIR), "Clicca poi il punto sul 3D"),
+                                };
+                                if ui.add(egui::Button::new(text).small().selected(picking)).on_hover_text(hover).clicked() {
+                                    pick = Some(Some(i));
+                                }
+                                if p.cad.as_ref().and_then(|c| c.anchor).is_some_and(|a| moving.binary_search(&a.mesh).is_err()) {
+                                    outside += 1;
+                                }
+                                let weak = |s: String| if p.on { egui::RichText::new(s).monospace() } else { egui::RichText::new(s).monospace().weak() };
+                                ui.label(weak(p.cad.as_ref().map_or("—".to_string(), |c| format!("{:.2}", c.pos.distance(t)))));
+                                ui.label(weak(residuals.as_ref().and_then(|r| r[i]).map_or("—".to_string(), |r| format!("{r:.2}"))));
+                                if ui.small_button(icon::X).on_hover_text("Togli il punto").clicked() {
+                                    remove = Some(i);
+                                }
+                                ui.end_row();
+                            }
+                        });
+                        ui.horizontal_wrapped(|ui| {
+                            let missing = pa.pairs.iter().any(|p| p.cad.is_none());
+                            if ui.add_enabled(missing, egui::Button::new(icon_text(ui, icon::CROSSHAIR, "Prendi i mancanti")))
+                                .on_hover_text("Clicca sul 3D i punti che mancano, uno dopo l'altro")
+                                .clicked()
+                            {
+                                pick = Some(None);
+                            }
+                            if ui.button("Svuota").on_hover_text("Toglie tutti i punti").clicked() {
+                                pa.pairs.clear();
+                                pa.picking = None;
+                            }
+                        });
+                    }
+                    if let Some(i) = remove {
+                        pa.pairs.remove(i);
+                        pa.picking = None;
+                    }
+                    if let Some(i) = pick {
+                        pa.start_picking(i);
+                        panel.hinge.picking = false;
+                        start_picking = true;
+                    }
+                    match &fit {
+                        Ok(f) => {
+                            ui.horizontal_wrapped(|ui| {
+                                ui.label("Scarto");
+                                ui.monospace(format!("medio {:.2}  max {:.2}", f.rms, f.max));
+                                ui.label("mm");
+                            });
+                            let pose = Pose::from_matrix(f.matrix);
+                            ui.horizontal_wrapped(|ui| {
+                                ui.label(egui::RichText::new("Spostamento (coordinate World)").strong());
+                                if ui.small_button(icon::COPY).on_hover_text("Copia X Y Z A B C").clicked() {
+                                    copy = Some(offset_text("Offset World", &pose));
+                                }
+                            });
+                            pose_grid(ui, "posizione_punti_spostamento", &pose);
+                            if outside > 0 {
+                                ui.label(
+                                    egui::RichText::new(format!(
+                                        "{outside} punti sono su pezzi che non fanno parte dell'oggetto qui sopra: non lo seguiranno"
+                                    ))
+                                    .small()
+                                    .color(egui::Color32::from_rgb(230, 160, 60)),
+                                );
+                            }
+                            let ready = !nodes.is_empty() && !f.matrix.abs_diff_eq(Mat4::IDENTITY, 1e-6);
+                            if ui
+                                .add_enabled(ready, egui::Button::new(icon_text(ui, icon::ALIGN_CENTER_HORIZONTAL, "Allinea")))
+                                .on_hover_text("Sposta l'oggetto qui sopra sui riferimenti")
+                                .clicked()
+                            {
+                                actions.push(Action::Move { nodes: nodes.clone(), matrix: f.matrix });
+                                status = Some(format!("Allineato sui punti: scarto medio {:.2} mm, massimo {:.2} mm", f.rms, f.max));
+                            }
+                        }
+                        Err(e) => {
+                            if !pa.pairs.is_empty() {
+                                ui.label(egui::RichText::new(e).small().weak());
+                            }
                         }
                     }
                 });
@@ -1832,12 +2009,14 @@ pub fn draw(ctx: &egui::Context, app: &mut GestoreApp, pass: super::dock::Pass) 
         ctx.copy_text(text);
         status = Some("Copiato negli appunti".to_string());
     }
-    if let Some(s) = status {
-        app.ui_state.status_message = s;
-    }
     panel.open = open;
+    if panel.hinge.picking {
+        // La scelta dell'asse della cerniera ha la precedenza
+        panel.points.picking = None;
+    }
     if !open {
         panel.hinge.picking = false;
+        panel.points.picking = None;
     }
     if let Some(first) = select_first {
         let file = match first.as_slice() {
@@ -1857,6 +2036,10 @@ pub fn draw(ctx: &egui::Context, app: &mut GestoreApp, pass: super::dock::Pass) 
     }
     for a in actions {
         app.apply(a);
+    }
+    // Dopo le azioni: il messaggio della finestra è più preciso di quello dello spostamento
+    if let Some(s) = status {
+        app.ui_state.status_message = s;
     }
     if let Some((name, nodes, o, d, angle)) = save_hinge {
         app.save_hinge(&name, nodes, o, d, angle);
@@ -2058,6 +2241,51 @@ DEF Destinazione Group { children [
         assert_eq!(align_delta(&moving, Some(&reference), AlignMode::Min, [true, true, true]), Vec3::new(100.0, 50.0, -10.0));
         assert_eq!(align_delta(&moving, Some(&reference), AlignMode::Max, [false, false, true]), Vec3::new(0.0, 0.0, -30.0));
         assert_eq!(align_delta(&moving, None, AlignMode::Center, [false, true, false]), Vec3::new(0.0, -10.0, 0.0), "sullo zero");
+    }
+
+    /// «Allinea su punti»: quattro vertici del file presi sul 3D e i riferimenti (gli stessi punti
+    /// spostati e ruotati, come presi in cabina): «Allinea» porta il file sui riferimenti, i punti
+    /// del 3D lo seguono e Annulla lo rimette dov'era.
+    #[test]
+    fn align_on_points_brings_the_file_onto_the_references() {
+        let mut app = app();
+        let ui = Ui { ctx: egui::Context::default() };
+        app.settings.position_sections[6] = true;
+        let file = app.scene_graph.as_ref().unwrap().open_files().nth(1).unwrap().node;
+        app.ui_state.position.target = Some(Target::File(file));
+        let moved = crate::scene_graph::placement::rigid(Vec3::new(15.0, -8.0, 4.0), Vec3::new(0.5, -0.4, 2.0), Vec3::ZERO);
+        {
+            let s = app.scene_graph.as_ref().unwrap();
+            let meshes = s.meshes_of(&[file]);
+            // Vertici lontani tra loro: gli angoli del riquadro più vicini
+            let all: Vec<(u32, Vec3)> = meshes
+                .iter()
+                .flat_map(|&m| s.shapes_data[m as usize].world_vertices.iter().map(move |v| (m, Vec3::from(*v))))
+                .collect();
+            let b = s.subtree_bounding_box(file);
+            let corners = [b.min, Vec3::new(b.max.x, b.min.y, b.min.z), Vec3::new(b.min.x, b.max.y, b.min.z), b.max];
+            for (k, c) in corners.iter().enumerate() {
+                let &(mesh, v) = all.iter().min_by(|a, b| a.1.distance(*c).total_cmp(&b.1.distance(*c))).unwrap();
+                let pa = &mut app.ui_state.position.points;
+                pa.add(&format!("RIF_{}", k + 1), moved.transform_point3(v));
+                pa.pairs[k].cad = Some(crate::ui::measure::Measure::anchored(s, mesh, crate::ui::measure::MeasurePoint::free(v, true)));
+            }
+        }
+        let before = first_vertex(&app, file);
+        // La sezione «Allinea» è chiusa: il secondo «Allinea» è il pulsante dei punti
+        // Un disegno in più: la sezione appena aperta allarga la finestra
+        ui.run(&mut app, vec![]);
+        ui.click(&mut app, "Allinea", 1);
+        assert!(app.ui_state.status_message.starts_with("Allineato sui punti"), "{}", app.ui_state.status_message);
+        let after = first_vertex(&app, file);
+        assert!(after.distance(moved.transform_point3(before)) < 1e-2, "{after:?}");
+        ui.run(&mut app, vec![]);
+        for p in &app.ui_state.position.points.pairs {
+            let d = p.cad.unwrap().pos.distance(p.target);
+            assert!(d < 1e-2, "{} resta a {d}", p.name);
+        }
+        app.undo();
+        assert!(first_vertex(&app, file).distance(before) < 1e-3);
     }
 
     /// «Allinea»: lungo X sul riferimento scelto con «Usa selezione»; «Stesso pezzo» rimette
