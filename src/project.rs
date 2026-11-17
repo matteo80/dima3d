@@ -43,6 +43,50 @@ pub fn is_project(path: &std::path::Path) -> bool {
     path.extension().is_some_and(|e| e.eq_ignore_ascii_case(crate::project_file::EXTENSION))
 }
 
+/// RAM che serve, a occhio, per aprire `path` (MB): il file intero più il lavoro della
+/// conversione. Il JT da 775 MB ha chiesto circa 5 GB al convertitore.
+fn memory_needed_mb(path: &std::path::Path) -> u64 {
+    let mb = std::fs::metadata(path).map_or(0, |m| m.len() >> 20);
+    let ext = path.extension().map(|e| e.to_string_lossy().to_ascii_lowercase()).unwrap_or_default();
+    let factor = match ext.as_str() {
+        "jt" => 7,
+        "stp" | "step" => 8,
+        _ => 3,
+    };
+    mb * factor
+}
+
+/// Prima di aprire file grandi controlla la RAM libera: se sembra non bastare, avvisa e chiede
+/// se aprire lo stesso. `true` = si apre.
+fn enough_memory(paths: &[PathBuf]) -> bool {
+    // Il controllo vale per il file più pesante: gli altri si caricano uno dopo l'altro
+    let Some((path, need)) = paths.iter().map(|p| (p, memory_needed_mb(p))).max_by_key(|(_, n)| *n) else { return true };
+    let Some((_, free)) = crate::log::memory_mb() else { return true };
+    if cfg!(test) || need < 500 || need <= free {
+        return true;
+    }
+    let size = std::fs::metadata(path).map_or(0, |m| m.len() >> 20);
+    let name = path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+    tracing::warn!("Avviso RAM: {} MB, servono circa {need} MB, liberi {free} MB", size);
+    let text = format!(
+        "{name} pesa {size} MB: per aprirlo servono circa {} GB di RAM, ma ora ne sono liberi {} GB.\n\n\
+         Il PC potrebbe rallentare molto e l'apertura potrebbe non riuscire. Conviene chiudere \
+         altri programmi (browser, Teams, altri CAD) prima di continuare.\n\n\
+         Aprire comunque?",
+        crate::log::gigabytes(need),
+        crate::log::gigabytes(free)
+    );
+    let answer = rfd::MessageDialog::new()
+        .set_level(rfd::MessageLevel::Warning)
+        .set_title("RAM forse insufficiente")
+        .set_description(text)
+        .set_buttons(rfd::MessageButtons::YesNo)
+        .show();
+    let open = answer == rfd::MessageDialogResult::Yes;
+    tracing::info!("Avviso RAM: {}", if open { "aperto comunque" } else { "apertura annullata" });
+    open
+}
+
 /// Export in corso in un thread separato: la scena è stata affidata al thread e torna con il
 /// risultato. Intanto la finestra resta reattiva (prima si bloccava per 5–8 s sui file grandi).
 pub struct ExportJob {
@@ -256,6 +300,9 @@ impl GestoreApp {
             self.request_open_project(path);
             return;
         }
+        if !enough_memory(std::slice::from_ref(&path)) {
+            return;
+        }
         if crate::parser::external::is_step(&path) {
             self.ask_step_options(StepRequest::Open(path));
             return;
@@ -285,6 +332,9 @@ impl GestoreApp {
             if !self.ui_state.is_loading {
                 self.request_open_project(project.clone());
             }
+            return;
+        }
+        if !enough_memory(&paths) {
             return;
         }
         if paths.iter().any(|p| crate::parser::external::is_step(p)) {

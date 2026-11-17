@@ -97,6 +97,44 @@ pub fn memory_mb() -> Option<(u64, u64)> {
     None
 }
 
+/// MB scritti in GB, con una cifra decimale e la virgola.
+pub fn gigabytes(mb: u64) -> String {
+    format!("{:.1}", mb as f64 / 1024.0).replace('.', ",")
+}
+
+/// Memoria fisica usata da Dima 3D (working set), in MB.
+#[cfg(windows)]
+pub fn process_memory_mb() -> Option<u64> {
+    #[repr(C)]
+    #[derive(Default)]
+    struct ProcessMemoryCounters {
+        cb: u32,
+        page_fault_count: u32,
+        peak_working_set_size: usize,
+        working_set_size: usize,
+        quota_peak_paged_pool_usage: usize,
+        quota_paged_pool_usage: usize,
+        quota_peak_non_paged_pool_usage: usize,
+        quota_non_paged_pool_usage: usize,
+        pagefile_usage: usize,
+        peak_pagefile_usage: usize,
+    }
+    #[link(name = "kernel32")]
+    extern "system" {
+        fn GetCurrentProcess() -> isize;
+        fn K32GetProcessMemoryInfo(process: isize, counters: *mut ProcessMemoryCounters, cb: u32) -> i32;
+    }
+    let mut c = ProcessMemoryCounters { cb: std::mem::size_of::<ProcessMemoryCounters>() as u32, ..Default::default() };
+    // SAFETY: struttura PROCESS_MEMORY_COUNTERS con la dimensione in cb; GetCurrentProcess è uno
+    // pseudo-handle che non va chiuso
+    (unsafe { K32GetProcessMemoryInfo(GetCurrentProcess(), &mut c, c.cb) } != 0).then_some(c.working_set_size as u64 >> 20)
+}
+
+#[cfg(not(windows))]
+pub fn process_memory_mb() -> Option<u64> {
+    None
+}
+
 /// Apre il log e installa il registratore (e il panic hook che scrive nel log).
 pub fn init() {
     let file = path().and_then(|p| {

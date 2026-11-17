@@ -986,7 +986,12 @@ impl GestoreApp {
                 if let LoadEvent::Finished(scene) = &mut event {
                     self.project.mark_loaded_step(scene);
                     let triangles: usize = scene.shapes_data.iter().map(|s| s.indices.len() / 3).sum();
-                    tracing::info!("Aperto: {} pezzi, {triangles} triangoli", scene.shapes_data.len());
+                    let (_, free) = crate::log::memory_mb().unwrap_or_default();
+                    tracing::info!(
+                        "Aperto: {} pezzi, {triangles} triangoli; memoria di Dima 3D {} MB, RAM libera {free} MB",
+                        scene.shapes_data.len(),
+                        crate::log::process_memory_mb().unwrap_or_default()
+                    );
                 }
                 match event {
                     LoadEvent::Started { path, file_size_bytes } => {

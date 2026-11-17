@@ -962,6 +962,13 @@ Fatto:
       %LOCALAPPDATA%\Programs\Dima3D senza permessi da amministratore, menu Start, desktop facoltativo,
       associazione dei .dima3d facoltativa, disinstallazione. `pacchetto.ps1` lo crea, `pubblica.ps1` lo carica nella
       Release accanto allo zip; dopo un aggiornamento dal programma si aggiorna la versione in «App installate».
+- [x] (2026-11-17, 0.2.36) **Barra di stato: RAM e fotogrammi; avviso sui file grandi**: a destra una barra
+      della RAM del PC (blu = Dima 3D, grigio = altri programmi, vuoto = libera; gialla sotto il 10% libero) con
+      «libera X GB» e i dettagli al passaggio del mouse; scelta dall'utente dopo un confronto con la versione solo
+      testo. Accanto, i fotogrammi al secondo mentre si muove la vista (media ogni 0,5 s, resta l'ultimo valore,
+      giallo sotto 15). Prima di aprire o aggiungere file, se la RAM stimata (JT 7×, STEP 8×, altri 3× la
+      dimensione; il JT da 775 MB ha chiesto ~5 GB) supera quella libera, chiede se aprire lo stesso. Nel log la
+      memoria di Dima 3D e la RAM libera a fine apertura.
 - [x] (2026-11-17, 0.2.35) **Avviso linee/punti più chiaro e uscita del convertitore in UTF-8**: con la 0.2.34 il
       JT da 775 MB si apre (8455 pezzi, 11,1 M triangoli, 112 s, picco jt2wrl 5,1 GB, 73 pezzi saltati senza
       errore). L'avviso sulle linee ora dice che è normale e, se nessun pezzo è saltato, che le superfici ci sono
