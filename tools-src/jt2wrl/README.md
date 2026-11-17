@@ -23,6 +23,8 @@ lettura, 3 nessun pezzo con triangoli.
 `JTReader.patch` corregge la lettura dei JT 10.5+ scritti con la disposizione precedente
 (byte di versione nel nodo partizione, elementi proprietà con un secondo terminatore nel
 segmento LSG), come certi JT 10.6 esportati da NX.
+Accetta anche le proprietà con date non valide (giorno o mese a 0), che fermavano la
+lettura di tutto il file.
 
 ## Compilazione
 

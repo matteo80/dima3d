@@ -63,3 +63,19 @@ index bdc61c7..fbf4e0a 100644
              }
  
              partitionFlags = data.ReadI32();
+diff --git a/JTReader/PropertyAtom/DatePropertyAtomData.cs b/JTReader/PropertyAtom/DatePropertyAtomData.cs
+index a89c8ed..2e40a4e 100644
+--- a/JTReader/PropertyAtom/DatePropertyAtomData.cs
++++ b/JTReader/PropertyAtom/DatePropertyAtomData.cs
+@@ -19,7 +19,10 @@ namespace DLAT.JTReader {
+             var hour = data.ReadI16();
+             var minute = data.ReadI16();
+             var second = data.ReadI16();
+-            date = new DateTime(year, month, day, hour, minute, second);
++            // Alcuni JT (es. da Teamcenter) hanno date non valide (giorno o mese a 0): restano
++            // senza data invece di fermare la lettura di tutto il file
++            try { date = new DateTime(year, month, day, hour, minute, second); }
++            catch (ArgumentOutOfRangeException) { date = DateTime.MinValue; }
+         }
+         
+         public override string ToString() {

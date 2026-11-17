@@ -962,6 +962,10 @@ Fatto:
       %LOCALAPPDATA%\Programs\Dima3D senza permessi da amministratore, menu Start, desktop facoltativo,
       associazione dei .dima3d facoltativa, disinstallazione. `pacchetto.ps1` lo crea, `pubblica.ps1` lo carica nella
       Release accanto allo zip; dopo un aggiornamento dal programma si aggiorna la versione in «App installate».
+- [x] (2026-11-17, 0.2.32) **JT con date non valide**: un JT 10.5 di 775 MB ("DM 10.2.2.8") si fermava
+      su una proprietà data con giorno/mese a 0 (`DatePropertyAtomData`, ArgumentOutOfRange). Trovato con il log;
+      ora la data resta vuota (patch aggiornata). Il messaggio d'errore mostra la causa vera invece di
+      TargetInvocationException. Uscita identica sui JT di prova.
 - [x] (2026-11-17, 0.2.31) **Log** (`src/log.rs`): `%APPDATA%\Dima3D\dima3d.log`, ora locale, al massimo
       1 MB + `dima3d.old.log`; pulsante Log nella finestra Info e accanto al messaggio d'errore. Registra avvio
       (RAM, GPU), aperture, conversioni (righe del convertitore, durata, codice di uscita) ed errori/panic.

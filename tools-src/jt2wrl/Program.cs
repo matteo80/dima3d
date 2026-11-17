@@ -476,6 +476,8 @@ namespace Jt2Wrl {
                 // Traccia completa per il log (in Dima 3D non diventa il messaggio d'errore)
                 foreach (var line in e.ToString().Split((char)10))
                     Console.Error.WriteLine("Dettaglio: " + line.TrimEnd((char)13));
+                // Gli errori nei costruttori degli elementi arrivano incartati dalla riflessione
+                while (e is System.Reflection.TargetInvocationException && e.InnerException != null) e = e.InnerException;
                 var msg = e is OutOfMemoryException || e.InnerException is OutOfMemoryException
                     ? "Memoria insufficiente per convertire questo file."
                     : e.Message.Contains("big endian")
