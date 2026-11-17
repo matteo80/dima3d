@@ -1,0 +1,65 @@
+diff --git a/JTReader/Common/DataSegment.cs b/JTReader/Common/DataSegment.cs
+index fdc694d..690db35 100644
+--- a/JTReader/Common/DataSegment.cs
++++ b/JTReader/Common/DataSegment.cs
+@@ -88,7 +88,11 @@ namespace DLAT.JTReader {
+             for(;dataStream.Position < dataStream.Length ; ) {
+                 var ele = new Element(this);
+                 if (ele.objectTypeID.isEOE()) {
+-                    if (segmentID != file.lsgSegmentID || graphElementsRead)
++                    if (segmentID != file.lsgSegmentID)
++                        break;
++                    // Alcuni JT 10.5+ (es. 10.6 da NX) usano ancora la disposizione vecchia:
++                    // dopo il grafo seguono gli elementi proprieta' con un secondo EOE.
++                    if (graphElementsRead && !NextIsElement(dataStream))
+                         break;
+                     graphElementsRead = true;
+                 }
+@@ -109,5 +113,16 @@ namespace DLAT.JTReader {
+         }
+ 
+         
++    
++        static bool NextIsElement(StreamReader data) {
++            var save = data.Position;
++            var rem = data.Length - save;
++            if (rem < 20) return false;
++            var len = data.ReadI32();
++            var guid = data.ReadGUID();
++            data.Position = save;
++            return len >= 16 && len <= rem - 4
++                && (guid.isEOE() || ObjectTypeIdentifiers.types.ContainsKey(guid));
++        }
+     }
+ }
+diff --git a/JTReader/NodeElements/PartitionNodeData.cs b/JTReader/NodeElements/PartitionNodeData.cs
+index bdc61c7..fbf4e0a 100644
+--- a/JTReader/NodeElements/PartitionNodeData.cs
++++ b/JTReader/NodeElements/PartitionNodeData.cs
+@@ -19,8 +19,24 @@ namespace DLAT.JTReader {
+         public PartitionNodeData(Element ele) : base(ele) {
+             var data = ele.dataStream;
+ 
+-            if (ele.majorVersion == 10 && ele.minorVersion < 5) {
+-                var localVersionFlag = data.ReadU8();
++            if (ele.majorVersion == 10) {
++                if (ele.minorVersion < 5) {
++                    data.ReadU8(); // versione
++                } else {
++                    // Alcuni JT 10.5+ (es. 10.6 da NX) hanno ancora il byte di versione:
++                    // lo si riconosce dalla lunghezza dei dati rimasti.
++                    var save = data.Position;
++                    var rem = data.Length - save;
++                    long need = -1;
++                    if (rem >= 8) {
++                        data.ReadI32();
++                        var n = data.ReadI32();
++                        if (n >= 0) need = 60 + 2L * n;
++                    }
++                    data.Position = save;
++                    if (rem != need && rem != need + 24)
++                        data.ReadU8(); // versione
++                }
+             }
+ 
+             partitionFlags = data.ReadI32();

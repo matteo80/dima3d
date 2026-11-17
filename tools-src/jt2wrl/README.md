@@ -18,6 +18,12 @@ Stdout: righe `PROGRESS <0..1> <testo>`, alla fine `DONE <pezzi> <triangoli> <sa
 Stderr: avvisi (`Avviso: ...`) ed errori. Codice di uscita: 0 riuscito, 1 argomenti, 2 errore di
 lettura, 3 nessun pezzo con triangoli.
 
+## Modifiche a JTReader
+
+`JTReader.patch` corregge la lettura dei JT 10.5+ scritti con la disposizione precedente
+(byte di versione nel nodo partizione, elementi proprietà con un secondo terminatore nel
+segmento LSG), come certi JT 10.6 esportati da NX.
+
 ## Compilazione
 
 Serve l'SDK .NET 8 e, per NativeAOT, Visual Studio 2022 con gli strumenti C++ (la cartella di
@@ -26,6 +32,7 @@ Serve l'SDK .NET 8 e, per NativeAOT, Visual Studio 2022 con gli strumenti C++ (l
 ```
 git clone https://github.com/svr2kos2/JTReader.git tools-src/JTReader
 git -C tools-src/JTReader checkout 9845868
+git -C tools-src/JTReader apply ../jt2wrl/JTReader.patch
 dotnet publish tools-src/jt2wrl/jt2wrl.csproj -c Release -o tools
 del tools\jt2wrl.pdb
 ```

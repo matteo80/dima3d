@@ -962,6 +962,10 @@ Fatto:
       %LOCALAPPDATA%\Programs\Dima3D senza permessi da amministratore, menu Start, desktop facoltativo,
       associazione dei .dima3d facoltativa, disinstallazione. `pacchetto.ps1` lo crea, `pubblica.ps1` lo carica nella
       Release accanto allo zip; dopo un aggiornamento dal programma si aggiorna la versione in «App installate».
+- [x] (2026-11-17, 0.2.30) **JT 10.6 con struttura vecchia**: certi JT 10.6 (es. da NX) hanno il byte di
+      versione nel nodo partizione e un secondo EOE con gli elementi proprietà nel segmento LSG, come i JT
+      < 10.5; JTReader si fermava con un errore. Corretto con `tools-src/jt2wrl/JTReader.patch` (riconosce la
+      struttura dai byte); sui JT di esempio l'uscita è identica a prima.
 - [x] (2026-11-17, 0.2.29) **Misura dell'oggetto** (`ui/object_measure.rs`, sezione n. 8 della finestra
       Posizione): come il software usato in azienda, l'oggetto del robot si calcola da due file di punti con gli
       stessi nomi: local (`…L.tid`, punti presi sulla matematica in posizione 0) e world (`…W.tid`, stessi punti
