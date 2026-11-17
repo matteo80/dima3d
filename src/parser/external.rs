@@ -171,7 +171,17 @@ fn convert(source: &Path, kind: Kind, sender: &Sender<LoadEvent>) -> Result<(Pat
 
     let stderr = child.stderr.take();
     let errors = std::thread::spawn(move || {
-        stderr.map(|s| BufReader::new(s).lines().map_while(Result::ok).collect::<Vec<_>>()).unwrap_or_default()
+        // Ogni riga va subito nel log: se il convertitore si blocca o Dima 3D viene chiuso resta
+        // traccia di dov'era arrivato
+        stderr
+            .map(|s| {
+                BufReader::new(s)
+                    .lines()
+                    .map_while(Result::ok)
+                    .inspect(|line| tracing::info!("  {label}| {line}"))
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default()
     });
     if let Some(stdout) = child.stdout.take() {
         for line in BufReader::new(stdout).lines().map_while(Result::ok) {
@@ -183,9 +193,6 @@ fn convert(source: &Path, kind: Kind, sender: &Sender<LoadEvent>) -> Result<(Pat
     let status = child.wait().map_err(|e| format!("Convertitore {label}: {e}"))?;
     let stderr = errors.join().unwrap_or_default();
     let seconds = started.elapsed().as_secs_f32();
-    for line in &stderr {
-        tracing::info!("  {label}| {line}");
-    }
     match status.code() {
         Some(0) => tracing::info!("Conversione {label} finita in {seconds:.1} s"),
         Some(c) => tracing::error!("Conversione {label} terminata con codice {c} (0x{:08X}) dopo {seconds:.1} s", c as u32),

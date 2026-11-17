@@ -962,6 +962,14 @@ Fatto:
       %LOCALAPPDATA%\Programs\Dima3D senza permessi da amministratore, menu Start, desktop facoltativo,
       associazione dei .dima3d facoltativa, disinstallazione. `pacchetto.ps1` lo crea, `pubblica.ps1` lo carica nella
       Release accanto allo zip; dopo un aggiornamento dal programma si aggiorna la versione in «App installate».
+- [x] (2026-11-17, 0.2.34) **JT 10.5 da Teamcenter, file da 80 MB analizzato in locale**: le 654 superfici erano
+      già tutte convertite. I «120 pezzi saltati» erano 89 polilinee + 31 insiemi di punti (curve, riferimenti):
+      `TopoMeshCompressedLODData` non ha gli indici (NotImplemented) e si fermava sulle normali. Ora linee e punti
+      si saltano senza errore, con un solo avviso riassuntivo. I 160 «riferimenti mancanti» sono attributi delle
+      superfici di tipo sconosciuto (GUID 96603DD3-5A0F-40F5-97CB-1E9647CBD37E): solo nel log, avviso all'utente
+      solo se mancano figli o istanze. Il log riceve le righe del convertitore mentre lavora (prima solo alla
+      fine). Traccia dei primi 3 errori di decodifica dei pezzi nel log. Resta da provare il file da 775 MB
+      (3,8 GB dopo la sola lettura: la memoria è il rischio successivo).
 - [x] (2026-11-17, 0.2.33) **JT con riferimenti mancanti**: lo stesso JT 10.5 (775 MB, 55.931 segmenti,
       1,47 milioni di elementi, 3,8 GB di RAM dopo la lettura) si fermava costruendo l'albero: un nodo rimanda
       all'id 2190, che non c'è (KeyNotFound in `LSGNode`). Ora attributi, figli, istanze e segmenti mancanti si

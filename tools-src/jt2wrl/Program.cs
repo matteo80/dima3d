@@ -130,7 +130,8 @@ namespace Jt2Wrl {
         readonly Dictionary<string, int> names = new Dictionary<string, int>();
         static readonly CultureInfo Inv = CultureInfo.InvariantCulture;
 
-        public int Shapes, Triangles, Skipped;
+        public int Shapes, Triangles, Skipped, LinesAndPoints;
+        int decodeErrors;
         int visited, totalNodes = 1;
         double lastProgress = -1;
 
@@ -176,7 +177,11 @@ namespace Jt2Wrl {
                 Info("Riferimenti mancanti: " + lsg.Missing.Count + "; segmenti per tipo: " + string.Join(", ", ConvertPairs(types))
                     + "; elementi del grafo: " + ids.Count + (ids.Count > 0 ? " (id " + ids.Min() + ".." + ids.Max() + ")" : ""));
                 for (int i = 0; i < Math.Min(20, lsg.Missing.Count); i++) Info("  manca " + lsg.Missing[i]);
-                Console.Error.WriteLine("Avviso: " + lsg.Missing.Count + " riferimenti interni del file non trovati: le parti collegate potrebbero mancare");
+                // Gli attributi di tipo sconosciuto (es. 160 in un JT 10.5 da Teamcenter, tipo 96603DD3) non
+                // tolgono geometria: l'avviso solo se mancano pezzi
+                int parts = lsg.Missing.Count(m => !m.StartsWith("attributo"));
+                if (parts > 0)
+                    Console.Error.WriteLine("Avviso: " + parts + " parti richiamate nel file non trovate: potrebbero mancare dei pezzi");
             }
             if (root) totalNodes = Math.Max(1, lsg.nodes.Count);
             Visit(lsg, lsg.root, xf, null, depth, Path.GetDirectoryName(full), root);
@@ -209,6 +214,11 @@ namespace Jt2Wrl {
             var elementData = full.elementData;
             var name = NodeName(full);
 
+            // Linee e punti (curve, riferimenti): Dima 3D mostra solo superfici
+            if (elementData is PolyLineSetShapeNodeData || elementData is PointSetShapeNodeData) {
+                LinesAndPoints++;
+                return;
+            }
             if (elementData is BaseShapeNodeData) {
                 WriteShape(full, xf, color, name, depth);
                 return;
@@ -291,6 +301,10 @@ namespace Jt2Wrl {
                 }
             } catch (Exception e) {
                 Console.Error.WriteLine("Avviso: pezzo " + (name ?? "senza nome") + " non decodificato: " + e.Message);
+                // Traccia dei primi errori per il log (le altre sarebbero quasi sempre uguali)
+                if (++decodeErrors <= 3)
+                    foreach (var line in e.ToString().Split((char)10))
+                        Console.Error.WriteLine("Dettaglio: " + line.TrimEnd((char)13));
                 Skipped++;
                 return;
             }
@@ -472,7 +486,10 @@ namespace Jt2Wrl {
                     w.Flush();
                     Converter.Progress(1.0, "Conversione completata");
                     Console.Out.WriteLine("DONE " + conv.Shapes + " " + conv.Triangles + " " + conv.Skipped);
-                    Converter.Info("Fine: " + conv.Shapes + " pezzi, " + conv.Triangles + " triangoli, " + conv.Skipped + " saltati");
+                    Converter.Info("Fine: " + conv.Shapes + " pezzi, " + conv.Triangles + " triangoli, " + conv.Skipped + " saltati, "
+                        + conv.LinesAndPoints + " linee o punti");
+                    if (conv.LinesAndPoints > 0)
+                        Console.Error.WriteLine("Avviso: " + conv.LinesAndPoints + " elementi di linee o punti non convertiti (Dima 3D mostra solo le superfici)");
                     empty = conv.Shapes == 0;
                 }
                 if (empty) {
