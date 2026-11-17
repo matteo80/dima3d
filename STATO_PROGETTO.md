@@ -962,6 +962,11 @@ Fatto:
       %LOCALAPPDATA%\Programs\Dima3D senza permessi da amministratore, menu Start, desktop facoltativo,
       associazione dei .dima3d facoltativa, disinstallazione. `pacchetto.ps1` lo crea, `pubblica.ps1` lo carica nella
       Release accanto allo zip; dopo un aggiornamento dal programma si aggiorna la versione in «App installate».
+- [x] (2026-11-17, 0.2.37) **Programma: terna World e pulsanti Logica/Punti**: con i soli programmi aperti
+      (senza matematica) in alto a sinistra c'è «Centro», la terna World nello zero (stessa impostazione di
+      quando c'è la matematica). Niente terna Object separata: la matematica si mette a 0 World e i punti Object
+      si disegnano così come sono (decisione dell'utente). I pulsanti Logica/Punti sono ora subito sopra l'elenco,
+      con la scritta.
 - [x] (2026-11-17, 0.2.36) **Barra di stato: RAM e fotogrammi; avviso sui file grandi**: a destra una barra
       della RAM del PC (blu = Dima 3D, grigio = altri programmi, vuoto = libera; gialla sotto il 10% libero) con
       «libera X GB» e i dettagli al passaggio del mouse; scelta dall'utente dopo un confronto con la versione solo
