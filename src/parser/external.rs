@@ -119,6 +119,16 @@ fn error_message(label: &str, code: Option<i32>, stderr: &[String]) -> String {
     }
 }
 
+/// Righe di un'uscita del convertitore; i byte non UTF-8 diventano «�» invece di interrompere la
+/// lettura (con `lines()` il resto dell'uscita si perdeva e il convertitore poteva restare fermo
+/// con la pipe piena).
+fn lossy_lines(stream: impl std::io::Read) -> impl Iterator<Item = String> {
+    BufReader::new(stream).split(b'\n').map_while(Result::ok).map(|l| {
+        let text = String::from_utf8_lossy(&l);
+        text.strip_suffix('\r').unwrap_or(&text).to_string()
+    })
+}
+
 /// Righe del convertitore solo per il log: fasi e memoria ("Info:"), traccia di un errore ("Dettaglio:").
 fn is_log_only(line: &str) -> bool {
     line.starts_with("Info:") || line.starts_with("Dettaglio:")
@@ -175,16 +185,14 @@ fn convert(source: &Path, kind: Kind, sender: &Sender<LoadEvent>) -> Result<(Pat
         // traccia di dov'era arrivato
         stderr
             .map(|s| {
-                BufReader::new(s)
-                    .lines()
-                    .map_while(Result::ok)
+                lossy_lines(s)
                     .inspect(|line| tracing::info!("  {label}| {line}"))
                     .collect::<Vec<_>>()
             })
             .unwrap_or_default()
     });
     if let Some(stdout) = child.stdout.take() {
-        for line in BufReader::new(stdout).lines().map_while(Result::ok) {
+        for line in lossy_lines(stdout) {
             if let Some((p, text)) = parse_progress(&line) {
                 let _ = sender.send(LoadEvent::Progress { percent: p * CONVERSION_SHARE, message: format!("{label}: {text}") });
             }
@@ -232,6 +240,9 @@ mod tests {
         assert!(is_step(Path::new("a.STEP")) && !is_step(Path::new("pezzo.wrl")) && Kind::of(Path::new("x"), step).is_none());
         assert_eq!(Kind::Step(step).extra_args(), ["--deviazione", "0.05", "--angolo", "15", "--relativa"]);
         assert!(Kind::Jt.extra_args().is_empty());
+        // Byte non UTF-8 (codepage della console) non fermano la lettura delle righe
+        let raw: &[u8] = b"PROGRESS 0.1 Lettura di p\x85rte.jt\r\nAvviso: \xc3\xa8 normale\n";
+        assert_eq!(lossy_lines(raw).collect::<Vec<_>>(), ["PROGRESS 0.1 Lettura di p\u{FFFD}rte.jt", "Avviso: è normale"]);
     }
 
     /// Percorso completo con un convertitore finto (script .cmd che scrive un WRL di prova):

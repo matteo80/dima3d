@@ -459,6 +459,9 @@ namespace Jt2Wrl {
         }
 
         static int Main(string[] args) {
+            // Dima 3D legge stdout/stderr come UTF-8: senza questo le lettere accentate (messaggi, nomi
+            // dei file) arrivano nella codepage della console e la lettura delle righe si interrompe
+            Console.OutputEncoding = new UTF8Encoding(false);
             JtMaterial.Register();
             if (args.Length == 2 && args[0] == "--diag") {
                 Diagnose(args[1]);
@@ -489,7 +492,9 @@ namespace Jt2Wrl {
                     Converter.Info("Fine: " + conv.Shapes + " pezzi, " + conv.Triangles + " triangoli, " + conv.Skipped + " saltati, "
                         + conv.LinesAndPoints + " linee o punti");
                     if (conv.LinesAndPoints > 0)
-                        Console.Error.WriteLine("Avviso: " + conv.LinesAndPoints + " elementi di linee o punti non convertiti (Dima 3D mostra solo le superfici)");
+                        // Solo informativo: si dice chiaramente che non è un errore
+                        Console.Error.WriteLine("Avviso: " + conv.LinesAndPoints + " linee o punti (curve, riferimenti) non mostrati: "
+                            + "è normale, Dima 3D visualizza solo le superfici" + (conv.Skipped == 0 ? ", che sono tutte presenti" : ""));
                     empty = conv.Shapes == 0;
                 }
                 if (empty) {

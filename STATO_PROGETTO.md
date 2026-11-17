@@ -962,6 +962,12 @@ Fatto:
       %LOCALAPPDATA%\Programs\Dima3D senza permessi da amministratore, menu Start, desktop facoltativo,
       associazione dei .dima3d facoltativa, disinstallazione. `pacchetto.ps1` lo crea, `pubblica.ps1` lo carica nella
       Release accanto allo zip; dopo un aggiornamento dal programma si aggiorna la versione in «App installate».
+- [x] (2026-11-17, 0.2.35) **Avviso linee/punti più chiaro e uscita del convertitore in UTF-8**: con la 0.2.34 il
+      JT da 775 MB si apre (8455 pezzi, 11,1 M triangoli, 112 s, picco jt2wrl 5,1 GB, 73 pezzi saltati senza
+      errore). L'avviso sulle linee ora dice che è normale e, se nessun pezzo è saltato, che le superfici ci sono
+      tutte. jt2wrl scriveva nella codepage della console: un nome di file con lettere accentate interrompeva la
+      lettura delle righe in Dima 3D (`lines()` + `map_while`), con il rischio di bloccare il convertitore a pipe
+      piena. Ora `Console.OutputEncoding` UTF-8 e in Dima `lossy_lines` (byte non validi → «�»).
 - [x] (2026-11-17, 0.2.34) **JT 10.5 da Teamcenter, file da 80 MB analizzato in locale**: le 654 superfici erano
       già tutte convertite. I «120 pezzi saltati» erano 89 polilinee + 31 insiemi di punti (curve, riferimenti):
       `TopoMeshCompressedLODData` non ha gli indici (NotImplemented) e si fermava sulle normali. Ora linee e punti
