@@ -108,38 +108,15 @@ impl PointAlign {
 
     /// Spostamento che porta i punti del 3D sui punti del programma.
     pub fn fit(&self) -> Result<PointFit, String> {
-        self.fit_in(Mat4::IDENTITY)
-    }
-
-    /// Oggetto del robot (sperimentale): i punti del 3D presi nelle coordinate della matematica
-    /// (`frame` = coordinate dell'oggetto nella scena, cioè la matematica con l'oggetto a 0) e i
-    /// riferimenti presi in cabina con l'oggetto a 0 nel robot. Il moto che porta i primi sui
-    /// secondi è l'oggetto. Contano solo X Y Z dei punti.
-    pub fn object_fit(&self, frame: Mat4) -> Result<PointFit, String> {
-        // Solo posizione e orientamento: la scala delle unità non entra
-        let (_, r, t) = frame.to_scale_rotation_translation();
-        self.fit_in(Mat4::from_rotation_translation(r, t).inverse())
-    }
-
-    /// Come `fit`, con i punti del 3D portati prima da `to_object` (dalla scena alle coordinate
-    /// in cui si calcola).
-    fn fit_in(&self, to_object: Mat4) -> Result<PointFit, String> {
         let used: Vec<&PointPair> = self.pairs.iter().filter(|p| p.on && p.cad.is_some()).collect();
         if used.len() < MIN_POINTS {
             return Err(format!("Servono almeno {MIN_POINTS} punti presi sul 3D e accesi (ora {})", used.len()));
         }
-        let cad = |p: &PointPair| p.cad.as_ref().map(|c| to_object.transform_point3(c.pos));
+        let cad = |p: &PointPair| p.cad.as_ref().map(|c| c.pos);
         let a: Vec<DVec3> = used.iter().map(|p| cad(p).unwrap().as_dvec3()).collect();
         let b: Vec<DVec3> = used.iter().map(|p| p.target.as_dvec3()).collect();
         let (m, rms) = fit_rigid(&a, &b).ok_or("Calcolo non riuscito")?;
-        // Punti quasi in fila: la rotazione attorno alla loro retta resta libera
-        let center = a.iter().copied().sum::<DVec3>() / a.len() as f64;
-        let spread = a.iter().map(|p| (*p - center).length()).fold(0.0, f64::max);
-        let spread_out = a.iter().any(|p| {
-            let d = (*p - center).normalize_or_zero();
-            a.iter().any(|q| d.cross(*q - center).length() > spread * 0.02)
-        });
-        if spread < 1e-3 || !spread_out {
+        if in_a_row(&a) {
             return Err("I punti sul 3D sono tutti in fila: prendine qualcuno fuori dalla linea".to_string());
         }
         let matrix = m.as_mat4();
@@ -154,6 +131,21 @@ impl PointAlign {
             .fold(0.0f32, f32::max);
         Ok(PointFit { matrix, residuals, rms: rms as f32, max })
     }
+}
+
+/// Punti quasi in fila (o tutti nello stesso posto): la rotazione attorno alla loro retta resta
+/// libera e il calcolo non vale.
+pub fn in_a_row(a: &[DVec3]) -> bool {
+    if a.is_empty() {
+        return true;
+    }
+    let center = a.iter().copied().sum::<DVec3>() / a.len() as f64;
+    let spread = a.iter().map(|p| (*p - center).length()).fold(0.0, f64::max);
+    let spread_out = a.iter().any(|p| {
+        let d = (*p - center).normalize_or_zero();
+        a.iter().any(|q| d.cross(*q - center).length() > spread * 0.02)
+    });
+    spread < 1e-3 || !spread_out
 }
 
 /// Punti del programma e del 3D sopra la vista, con la linea che li unisce.
@@ -233,25 +225,6 @@ mod tests {
         let fit = align.fit().unwrap();
         assert!(fit.max < 1e-3, "senza il punto sbagliato torna esatto");
         assert!(fit.residuals[3].unwrap() > 4.0, "lo scarto del punto spento si vede ancora");
-    }
-
-    /// Oggetto: i punti del 3D contano nelle coordinate della matematica, anche se la
-    /// matematica è già stata spostata (per esempio dopo «Allinea»).
-    #[test]
-    fn object_from_the_math_coordinates() {
-        let object = crate::scene_graph::placement::rigid(Vec3::new(1500.0, -20.0, 300.0), Vec3::new(0.0, 0.0, 90.0), Vec3::ZERO);
-        let math = [Vec3::new(0.0, 0.0, 0.0), Vec3::new(800.0, 0.0, 0.0), Vec3::new(0.0, 500.0, 0.0), Vec3::new(400.0, 250.0, 300.0)];
-        // Matematica spostata nella scena: i suoi punti sono dove l'ha messa lo spostamento
-        let moved = crate::scene_graph::placement::rigid(Vec3::new(30.0, 40.0, -5.0), Vec3::new(2.0, 0.0, 10.0), Vec3::ZERO);
-        let mut align = PointAlign::default();
-        for (k, m) in math.iter().enumerate() {
-            align.add(&format!("RIF_{}", k + 1), object.transform_point3(*m));
-            align.pairs[k].cad = pt(moved.transform_point3(*m));
-        }
-        let fit = align.object_fit(moved).unwrap();
-        assert!(fit.matrix.abs_diff_eq(object, 1e-3), "{:?}", fit.matrix);
-        let pose = crate::scene_graph::placement::Pose::from_matrix(fit.matrix);
-        assert!((pose.abc.z - 90.0).abs() < 1e-3 && pose.xyz.distance(Vec3::new(1500.0, -20.0, 300.0)) < 1e-2, "{pose:?}");
     }
 
     #[test]

@@ -279,6 +279,23 @@ impl ProgramPanel {
         self.set_active(ProgramDoc { program, selected: Vec::new(), anchor: None, modified: false, undo: Vec::new(), redo: Vec::new(), hidden: false });
     }
 
+    /// Ingombro dei punti disegnati dei programmi aperti e visibili (vuoto se non ce ne sono).
+    pub fn bounds(&self) -> crate::scene_graph::Aabb {
+        let mut b = crate::scene_graph::Aabb::empty();
+        if !self.open || self.hide_path {
+            return b;
+        }
+        let active = self.program.as_ref().filter(|_| !self.hidden);
+        for p in self.others.iter().filter(|d| !d.hidden).map(|d| &d.program).chain(active) {
+            for m in p.path() {
+                if let Some(v) = m.position {
+                    b.extend_point(v);
+                }
+            }
+        }
+        b
+    }
+
     /// Quanti programmi sono aperti.
     pub fn count(&self) -> usize {
         self.others.len() + usize::from(self.program.is_some())
@@ -459,8 +476,21 @@ pub fn open_program(app: &mut GestoreApp, path: &std::path::Path) {
             settings.last_program = Some(program.program_path.clone());
             app.apply_settings(settings);
             app.ui_state.program.load(program);
+            // Senza matematica la vista inquadra la traiettoria
+            if app.scene_graph.is_none() {
+                fit_to_programs(app);
+            }
         }
         Err(e) => app.ui_state.status_message = format!("Programma non aperto: {e}"),
+    }
+}
+
+/// Inquadra i programmi aperti (quando non c'è una matematica caricata).
+pub fn fit_to_programs(app: &mut GestoreApp) {
+    let b = app.ui_state.program.bounds();
+    if let (Some(r), true) = (&mut app.renderer, b.is_valid()) {
+        r.camera.fit_to_bbox(&b);
+        r.camera.scene_bounds = Some(b);
     }
 }
 
@@ -1014,6 +1044,33 @@ mod tests {
 
     fn names(p: &ProgramPanel) -> Vec<&str> {
         p.lines().iter().map(Line::command).collect()
+    }
+
+    /// Senza matematica, un programma con dei punti apre la vista 3D (niente schermata vuota);
+    /// senza punti disegnabili resta la schermata vuota.
+    #[test]
+    fn a_program_opens_the_3d_view_without_a_math() {
+        let mut app = GestoreApp::new_headless();
+        let ctx = egui::Context::default();
+        let empty = |app: &mut GestoreApp| {
+            crate::ui::tests::frame(&ctx, app, vec![]).iter().any(|(t, _)| t == "Trascina qui un file 3D")
+        };
+        assert!(empty(&mut app));
+        let mut program = Program::from_text("prova.tis".into(), "  LIN( A_1)
+  LIN( A_2)
+");
+        crate::robot_program::parse_points(
+            "CONST POINT A_1 = Object 100 0 0 0 0 0
+CONST POINT A_2 = Object 900 400 50 0 0 0
+",
+            &mut program.points,
+        );
+        app.ui_state.program.load(program.clone());
+        let b = app.ui_state.program.bounds();
+        assert_eq!((b.min, b.max), (glam::Vec3::new(100.0, 0.0, 0.0), glam::Vec3::new(900.0, 400.0, 50.0)));
+        assert!(!empty(&mut app), "la vista c'è anche senza matematica");
+        app.ui_state.program.hide_path = true;
+        assert!(empty(&mut app), "traiettoria nascosta: niente da vedere");
     }
 
     #[test]

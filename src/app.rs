@@ -418,6 +418,26 @@ impl GestoreApp {
                 }
                 return;
             }
+            Action::View(v) => {
+                if let Some(r) = &mut self.renderer {
+                    let q = crate::renderer::camera::ArcballCamera::standard_orientation(*v, self.settings.axes);
+                    r.camera.animate_to(q, std::time::Instant::now());
+                }
+                return;
+            }
+            Action::ViewFrom(dir) => {
+                if let Some(r) = &mut self.renderer {
+                    let q = crate::renderer::camera::ArcballCamera::orientation_for_direction(*dir, self.settings.axes);
+                    r.camera.animate_to(q, std::time::Instant::now());
+                }
+                return;
+            }
+            Action::Straighten => {
+                if let Some(r) = &mut self.renderer {
+                    r.camera.straighten(self.settings.axes);
+                }
+                return;
+            }
             _ => {}
         }
         let Some(scene) = &mut self.scene_graph else {
@@ -435,7 +455,10 @@ impl GestoreApp {
             | Action::Paste
             | Action::NewGroup(_)
             | Action::NewEmptyGroup(_)
-            | Action::MoveInto { .. } => {}
+            | Action::MoveInto { .. }
+            | Action::View(_)
+            | Action::ViewFrom(_)
+            | Action::Straighten => {}
             Action::SelectMany { nodes, primary, anchor } => {
                 self.ui_state.status_message = format!("Selezionati: {} elementi", nodes.len());
                 self.ui_state.selected_node = Some(primary);
@@ -536,23 +559,6 @@ impl GestoreApp {
             | Action::ReloadFiles
             | Action::SaveColor(_)
             | Action::ForgetColor(_) => {}
-            Action::View(v) => {
-                if let Some(r) = &mut self.renderer {
-                    let q = crate::renderer::camera::ArcballCamera::standard_orientation(v, self.settings.axes);
-                    r.camera.animate_to(q, std::time::Instant::now());
-                }
-            }
-            Action::ViewFrom(dir) => {
-                if let Some(r) = &mut self.renderer {
-                    let q = crate::renderer::camera::ArcballCamera::orientation_for_direction(dir, self.settings.axes);
-                    r.camera.animate_to(q, std::time::Instant::now());
-                }
-            }
-            Action::Straighten => {
-                if let Some(r) = &mut self.renderer {
-                    r.camera.straighten(self.settings.axes);
-                }
-            }
         }
     }
 

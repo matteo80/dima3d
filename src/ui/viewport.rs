@@ -109,6 +109,9 @@ pub fn draw_viewport(ui: &mut egui::Ui, app: &mut crate::app::GestoreApp) {
 
     let mut actions: Vec<Action> = Vec::new();
     let mut eyedropper_message: Option<String> = None;
+    // Senza matematica: la vista c'è lo stesso se è aperto un programma con dei punti
+    let program_view = app.scene_graph.is_none() && app.ui_state.program.bounds().is_valid();
+    let mut fit_programs = false;
 
     // ── 1. Gestione interazione telecamera con mouse / trackpad ──────────────────
     let section = app.ui_state.section;
@@ -389,7 +392,11 @@ pub fn draw_viewport(ui: &mut egui::Ui, app: &mut crate::app::GestoreApp) {
 
         // Doppio click: inquadra la selezione (o tutte le parti visibili)
         if response.double_clicked() && !measuring {
-            actions.push(app.ui_state.focus_action());
+            if app.scene_graph.is_some() {
+                actions.push(app.ui_state.focus_action());
+            } else {
+                fit_programs = true;
+            }
         }
 
         // Allinea visibilità/selezione GPU allo stato della scena (costo solo se cambiato)
@@ -398,6 +405,9 @@ pub fn draw_viewport(ui: &mut egui::Ui, app: &mut crate::app::GestoreApp) {
         }
     }
 
+    if fit_programs {
+        super::program_panel::fit_to_programs(app);
+    }
     // Le azioni modificano scena/camera: applicale prima del rendering del frame
     for a in actions.drain(..) {
         app.apply(a);
@@ -461,7 +471,7 @@ pub fn draw_viewport(ui: &mut egui::Ui, app: &mut crate::app::GestoreApp) {
     }
 
     // Terna degli assi e centro di rotazione: i riferimenti per orientarsi mentre si ruota
-    if let (Some(renderer), true) = (&app.renderer, app.scene_graph.is_some()) {
+    if let (Some(renderer), true) = (&app.renderer, app.scene_graph.is_some() || program_view) {
         let camera = &renderer.camera;
         draw_axes(ui.painter(), rect, camera);
 
@@ -528,6 +538,11 @@ pub fn draw_viewport(ui: &mut egui::Ui, app: &mut crate::app::GestoreApp) {
             let size = scene.compute_bounding_box().diagonal();
             super::position_panel::draw_overlay(ui, rect, &app.ui_state.position.hinge, |v| to_screen(camera, rect, v), size);
             super::point_align::draw_overlay(ui, rect, &app.ui_state.position.points, |v| to_screen(camera, rect, v));
+            // «Misura dell'oggetto» aperta: i punti local sulla matematica in posizione 0
+            if app.settings.position_sections[7] {
+                let (rows, _) = app.ui_state.position.measure.compute();
+                super::object_measure::draw_overlay(ui, rect, &rows, |v| to_screen(camera, rect, v));
+            }
         }
         if (app.ui_state.position.hinge.picking || app.ui_state.position.points.picking.is_some()) && response.hovered() {
             ui.ctx().set_cursor_icon(egui::CursorIcon::Crosshair);
@@ -547,8 +562,14 @@ pub fn draw_viewport(ui: &mut egui::Ui, app: &mut crate::app::GestoreApp) {
             egui::StrokeKind::Inside,
         );
     }
-    if app.scene_graph.is_none() && !app.ui_state.is_loading && !app.project.busy() {
+    if app.scene_graph.is_none() && !program_view && !app.ui_state.is_loading && !app.project.busy() {
         draw_empty_state(ui, rect, app.settings.background, dragging_file);
+    }
+    if program_view {
+        // Solo il cubo delle viste: gli strumenti lavorano sui pezzi
+        if let Some(renderer) = &app.renderer {
+            actions.extend(super::view_cube::draw(ui, rect, &renderer.camera, app.settings.axes));
+        }
     }
     if app.scene_graph.is_some() {
         let start = app.scene_graph.as_ref().map(default_section);

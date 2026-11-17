@@ -128,6 +128,8 @@ pub struct PositionPanel {
     pub align_mode: AlignMode,
     /// «Allinea su punti»: riferimenti presi in cabina e sul 3D
     pub points: super::point_align::PointAlign,
+    /// «Misura dell'oggetto»: file local e world
+    pub measure: super::object_measure::ObjectMeasure,
 }
 
 impl Default for PositionPanel {
@@ -159,6 +161,7 @@ impl Default for PositionPanel {
             align_axes: [true, true, true],
             align_mode: AlignMode::Center,
             points: Default::default(),
+            measure: Default::default(),
         }
     }
 }
@@ -761,6 +764,32 @@ fn pose_grid(ui: &mut egui::Ui, _id: &str, pose: &Pose) {
     }
 }
 
+/// «Misura dell'oggetto»: scelta del file local (0), world (1) o degli oggetti del robot (2).
+fn pick_measure_file(m: &mut super::object_measure::ObjectMeasure, kind: u8, last_program: Option<&std::path::Path>) {
+    let title = match kind {
+        0 => "Apri il file local (punti presi sulla matematica)",
+        1 => "Apri il file world (punti presi con il robot)",
+        _ => "Apri il file degli oggetti del robot",
+    };
+    let near = [m.local.as_ref(), m.world.as_ref()].into_iter().flatten().map(|f| f.path.clone()).next();
+    let mut dialog = rfd::FileDialog::new()
+        .set_title(title)
+        .add_filter("Dati del robot (TID)", &["tid", "TID"])
+        .add_filter("Tutti i file", &["*"]);
+    if let Some(dir) = near.as_deref().or(last_program).and_then(|p| p.parent()) {
+        dialog = dialog.set_directory(dir);
+    }
+    let Some(path) = dialog.pick_file() else { return };
+    match kind {
+        0 | 1 => m.open(&path, kind == 1),
+        _ => match m.read_bases(&path) {
+            Ok(0) => m.error = Some(format!("Nessun oggetto (CONST BASE o OBJECT) in {}", path.display())),
+            Ok(_) => m.error = None,
+            Err(e) => m.error = Some(e),
+        },
+    }
+}
+
 /// Testo dell'offset come lo scrivono gli script (si può incollare in «Applica offset»).
 fn offset_text(title: &str, p: &Pose) -> String {
     format!(
@@ -873,13 +902,14 @@ pub fn draw(ctx: &egui::Context, app: &mut GestoreApp, pass: super::dock::Pass) 
         .as_ref()
         .map(|p| p.used_points().into_iter().filter_map(|u| Some((u.name.clone(), u.point?.position()?))).collect())
         .unwrap_or_default();
-    let program_object = app.ui_state.program.program.as_ref().and_then(|p| p.argument_of("SETOBJECT"));
 
     let mut open = true;
     let mut actions: Vec<Action> = Vec::new();
     let mut copy: Option<String> = None;
     let mut status: Option<String> = None;
     let mut start_picking = false;
+    // «Misura dell'oggetto»: file da scegliere (0 local, 1 world, 2 oggetti), dopo la finestra
+    let mut pick_measure: Option<u8> = None;
     // Dopo «Calcola l'asse»: i pezzi della prima posizione che si muovono diventano l'oggetto da ruotare
     let mut select_first: Option<Vec<u32>> = None;
     let mut save_hinge: Option<(String, Vec<u32>, Vec3, Vec3, f32)> = None;
@@ -1269,38 +1299,127 @@ pub fn draw(ctx: &egui::Context, app: &mut GestoreApp, pass: super::dock::Pass) 
                                 actions.push(Action::Move { nodes: nodes.clone(), matrix: f.matrix });
                                 status = Some(format!("Allineato sui punti: scarto medio {:.2} mm, massimo {:.2} mm", f.rms, f.max));
                             }
-                            // Oggetto del robot dagli stessi punti (sperimentale)
-                            ui.separator();
-                            ui.label(egui::RichText::new("Oggetto del robot (sperimentale)").strong()).on_hover_text(
-                                "Riferimenti presi in cabina con l'oggetto a 0 nel robot; i punti del 3D contano nelle                                  coordinate della matematica (oggetto a 0), anche se è già stata spostata. Solo X Y Z dei                                  punti. Nelle stazioni in tracking cambia solo X.",
-                            );
-                            match pa.object_fit(frame) {
-                                Ok(o) => {
-                                    let pose = Pose::from_matrix(o.matrix);
-                                    pose_grid(ui, "posizione_punti_oggetto", &pose);
-                                    let line = crate::scene_graph::placement::RobotBase {
-                                        name: program_object.clone().unwrap_or_else(|| "OGGETTO".to_string()),
-                                        pose,
-                                        format: crate::scene_graph::placement::BaseFormat::Object,
-                                    }
-                                    .to_line();
-                                    ui.add(egui::Label::new(egui::RichText::new(&line).monospace()).wrap());
-                                    ui.horizontal_wrapped(|ui| {
-                                        if ui.button(icon_text(ui, icon::COPY, "Copia")).on_hover_text("Copia la riga dell'oggetto").clicked() {
-                                            copy = Some(line.clone());
-                                        }
-                                        ui.label(egui::RichText::new(format!("scarto medio {:.2}  max {:.2} mm", o.rms, o.max)).small().weak());
-                                    });
-                                }
-                                Err(e) => {
-                                    ui.label(egui::RichText::new(e).small().weak());
-                                }
-                            }
                         }
                         Err(e) => {
                             if !pa.pairs.is_empty() {
                                 ui.label(egui::RichText::new(e).small().weak());
                             }
+                        }
+                    }
+                });
+
+                // ── Misura dell'oggetto (file local e world) ─────────────────────
+                section(ui, "posizione_misura_oggetto", "Misura dell'oggetto", &mut sections[7], |ui| {
+                    let m = &mut panel.measure;
+                    ui.label(
+                        egui::RichText::new(
+                            "Oggetto del robot da due file di punti con gli stessi nomi: local (presi sulla matematica in \
+                             posizione 0) e world (presi con il robot in cabina, oggetto a 0). Contano solo X Y Z.",
+                        )
+                        .weak()
+                        .small(),
+                    );
+                    for (world, title) in [(false, "Local"), (true, "World")] {
+                        ui.horizontal_wrapped(|ui| {
+                            ui.label(egui::RichText::new(title).strong());
+                            let file = if world { &m.world } else { &m.local };
+                            let text = file.as_ref().map_or("—".to_string(), |f| format!("{}  ({} punti)", f.name(), f.points.len()));
+                            let label = ui.label(egui::RichText::new(text).monospace());
+                            if let Some(f) = file {
+                                label.on_hover_text(f.path.display().to_string());
+                            }
+                            if ui.small_button(icon::FOLDER_OPEN).on_hover_text(format!("Apri il file {} (.tid)", title.to_lowercase())).clicked() {
+                                pick_measure = Some(if world { 1 } else { 0 });
+                            }
+                        });
+                    }
+                    if let Some(e) = &m.error {
+                        ui.colored_label(egui::Color32::from_rgb(230, 90, 80), e);
+                    }
+                    let (rows, result) = m.compute();
+                    let mut toggle: Option<(String, bool)> = None;
+                    if !rows.is_empty() {
+                        let worst = rows.iter().filter(|r| r.on).filter_map(|r| r.deviation).fold(0.0f64, f64::max);
+                        egui::Grid::new("posizione_misura_tabella").num_columns(3).spacing([8.0, 3.0]).striped(true).show(ui, |ui| {
+                            ui.label("");
+                            ui.label(egui::RichText::new("Punto").small().strong());
+                            ui.label(egui::RichText::new("Deviazione").small().strong())
+                                .on_hover_text("Distanza tra il punto world e il punto local portato dall'oggetto calcolato (mm)");
+                            ui.end_row();
+                            for r in &rows {
+                                let mut on = r.on;
+                                if ui.checkbox(&mut on, "").on_hover_text("Usa questo punto nel calcolo").changed() {
+                                    toggle = Some((r.name.clone(), on));
+                                }
+                                ui.label(egui::RichText::new(&r.name).monospace()).on_hover_text(format!(
+                                    "Local  X {:.3}  Y {:.3}  Z {:.3}\nWorld  X {:.3}  Y {:.3}  Z {:.3}",
+                                    r.local.x, r.local.y, r.local.z, r.world.x, r.world.y, r.world.z
+                                ));
+                                let text = r.deviation.map_or("—".to_string(), |d| format!("{d:.2}"));
+                                let mut rich = egui::RichText::new(text).monospace();
+                                if !r.on {
+                                    rich = rich.weak();
+                                } else if r.deviation.is_some_and(|d| d == worst && d > 0.5) {
+                                    rich = rich.color(egui::Color32::from_rgb(230, 160, 60));
+                                }
+                                ui.label(rich);
+                                ui.end_row();
+                            }
+                        });
+                    }
+                    let unmatched = m.unmatched();
+                    if !unmatched.is_empty() {
+                        ui.label(egui::RichText::new(format!("In un file solo: {}", unmatched.join(", "))).small().weak());
+                    }
+                    if let Some((name, on)) = toggle {
+                        m.set_on(&name, on);
+                    }
+                    match &result {
+                        Ok(res) => {
+                            ui.horizontal_wrapped(|ui| {
+                                ui.label("Deviazione");
+                                ui.monospace(format!("media {:.2}  max {:.2}", res.rms, res.max));
+                                ui.label("mm");
+                            });
+                            ui.horizontal_wrapped(|ui| {
+                                ui.label(egui::RichText::new("Oggetto calcolato").strong());
+                                if ui.small_button(icon::COPY).on_hover_text("Copia X Y Z A B C").clicked() {
+                                    copy = Some(offset_text("Oggetto calcolato", &res.pose));
+                                }
+                            });
+                            pose_grid(ui, "posizione_misura_oggetto_calcolato", &res.pose);
+                            // Confronto con l'oggetto attuale del robot
+                            ui.horizontal_wrapped(|ui| {
+                                ui.label("Oggetto attuale");
+                                egui::ComboBox::from_id_salt("posizione_misura_base")
+                                    .width(120.0)
+                                    .selected_text(m.base.clone().unwrap_or_else(|| "—".to_string()))
+                                    .show_ui(ui, |ui| {
+                                        ui.selectable_value(&mut m.base, None, "—");
+                                        for b in &m.bases {
+                                            ui.selectable_value(&mut m.base, Some(b.name.clone()), &b.name);
+                                        }
+                                    })
+                                    .response
+                                    .on_hover_text(m.base_file.as_ref().map_or("Nessun file degli oggetti".to_string(), |f| f.display().to_string()));
+                                if ui.small_button(icon::FOLDER_OPEN).on_hover_text("Apri il file degli oggetti del robot (es. _GLOBAL.TID)").clicked() {
+                                    pick_measure = Some(2);
+                                }
+                            });
+                            if let Some(b) = m.current_base() {
+                                let d = super::object_measure::difference(&res.pose, &b.pose);
+                                ui.label(egui::RichText::new("Differenza (calcolato − attuale)").small())
+                                    .on_hover_text("Nelle stazioni in tracking la X dipende dalla posizione sul convogliatore");
+                                pose_grid(ui, "posizione_misura_differenza", &d);
+                            }
+                            let line = m.robot_line(res.pose);
+                            ui.add(egui::Label::new(egui::RichText::new(&line).monospace()).wrap());
+                            if ui.button(icon_text(ui, icon::COPY, "Copia la riga")).on_hover_text("Riga dell'oggetto da incollare nel file del robot").clicked() {
+                                copy = Some(line.clone());
+                            }
+                        }
+                        Err(e) => {
+                            ui.label(egui::RichText::new(e).small().weak());
                         }
                     }
                 });
@@ -2056,6 +2175,9 @@ pub fn draw(ctx: &egui::Context, app: &mut GestoreApp, pass: super::dock::Pass) 
         panel.last_selection = app.ui_state.selected_nodes();
         panel.target = Some(file.map_or(Target::Selection, Target::File));
     }
+    if let Some(kind) = pick_measure {
+        pick_measure_file(&mut panel.measure, kind, app.settings.last_program.as_deref());
+    }
     app.ui_state.position = panel;
     if start_picking {
         // La pipetta si spegne; la misura resta (con la calamita serve mentre si ruota) ma i clic
@@ -2307,17 +2429,42 @@ DEF Destinazione Group { children [
         assert!(app.ui_state.status_message.starts_with("Allineato sui punti"), "{}", app.ui_state.status_message);
         let after = first_vertex(&app, file);
         assert!(after.distance(moved.transform_point3(before)) < 1e-2, "{after:?}");
-        let texts = ui.run(&mut app, vec![]);
-        // L'oggetto non cambia con l'allineamento: i punti del 3D contano nelle coordinate della matematica
-        let line = texts.iter().find(|(t, _)| t.starts_with("OGGETTO : OBJECT := (")).expect("riga dell'oggetto").0.clone();
-        let object = crate::scene_graph::placement::parse_robot_base(&line).unwrap().pose.matrix();
-        assert!(object.abs_diff_eq(moved, 1e-2), "{line}");
         for p in &app.ui_state.position.points.pairs {
             let d = p.cad.unwrap().pos.distance(p.target);
             assert!(d < 1e-2, "{} resta a {d}", p.name);
         }
         app.undo();
         assert!(first_vertex(&app, file).distance(before) < 1e-3);
+    }
+
+    /// «Misura dell'oggetto»: con i file local e world e l'oggetto attuale la sezione mostra le
+    /// deviazioni, l'oggetto calcolato e la riga con lo stesso nome; escludere un punto ricalcola.
+    #[test]
+    fn object_measure_from_local_and_world_files() {
+        use crate::ui::object_measure::{parse_bases, parse_point_file};
+        let mut app = app();
+        let ui = Ui { ctx: egui::Context::default() };
+        app.settings.position_sections[7] = true;
+        let object = crate::scene_graph::placement::rigid(Vec3::new(-1000.0, -4000.0, 100.0), Vec3::new(0.0, 0.0, 90.0), Vec3::ZERO);
+        let local = [Vec3::new(4600.0, -860.0, -20.0), Vec3::new(4900.0, -480.0, 440.0), Vec3::new(4900.0, 480.0, 440.0), Vec3::new(4600.0, 860.0, -20.0)];
+        let text = |pts: &mut dyn Iterator<Item = Vec3>| {
+            pts.enumerate().map(|(k, p)| format!("CONST POINT P{} = Object {} {} {} 0 0 0 0 0 0
+", k + 1, p.x, p.y, p.z)).collect::<String>()
+        };
+        let m = &mut app.ui_state.position.measure;
+        m.local = Some(parse_point_file("RIFL.tid".into(), &text(&mut local.iter().copied())).unwrap());
+        m.world = Some(parse_point_file("RIFW.tid".into(), &text(&mut local.iter().map(|p| object.transform_point3(*p)))).unwrap());
+        m.bases = parse_bases("CONST BASE BASE_A = -1001 -4000 100 0 0 90
+");
+        m.base = Some("BASE_A".into());
+        ui.run(&mut app, vec![]);
+        let texts = ui.run(&mut app, vec![]);
+        assert!(texts.iter().any(|(t, _)| t == "CONST BASE BASE_A = -1000 -4000 100 0 0 90"), "riga dell'oggetto");
+        assert!(texts.iter().any(|(t, _)| t == "Differenza (calcolato − attuale)"));
+        assert!(texts.iter().filter(|(t, _)| t == "0.00").count() >= 4, "deviazioni dei punti");
+        app.ui_state.position.measure.set_on("P4", false);
+        let texts = ui.run(&mut app, vec![]);
+        assert!(texts.iter().any(|(t, _)| t.starts_with("Servono almeno 4 punti")), "tre punti non bastano");
     }
 
     /// «Allinea»: lungo X sul riferimento scelto con «Usa selezione»; «Stesso pezzo» rimette

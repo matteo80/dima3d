@@ -962,7 +962,20 @@ Fatto:
       %LOCALAPPDATA%\Programs\Dima3D senza permessi da amministratore, menu Start, desktop facoltativo,
       associazione dei .dima3d facoltativa, disinstallazione. `pacchetto.ps1` lo crea, `pubblica.ps1` lo carica nella
       Release accanto allo zip; dopo un aggiornamento dal programma si aggiorna la versione in «App installate».
-- [x] (2026-11-16, 0.2.28) **Oggetto del robot dai punti (sperimentale).** In «Allinea su punti»: riferimenti
+- [x] (2026-11-17, 0.2.29) **Misura dell'oggetto** (`ui/object_measure.rs`, sezione n. 8 della finestra
+      Posizione): come il software usato in azienda, l'oggetto del robot si calcola da due file di punti con gli
+      stessi nomi: local (`…L.tid`, punti presi sulla matematica in posizione 0) e world (`…W.tid`, stessi punti
+      presi con il robot, oggetto a 0). Aprendone uno si carica anche l'altro; il file degli oggetti (`_*.tid`
+      nella cartella o in quelle accanto che iniziano con `_`) dà l'oggetto attuale da confrontare (differenza
+      calcolato − attuale). Deviazione di ogni punto (esclusi compresi), punti da escludere, riga
+      `CONST BASE …` o `… : OBJECT := (…)` nel formato dell'oggetto attuale; punti local disegnati sul 3D.
+      Solo X Y Z dei punti. Tolto il calcolo sperimentale della 0.2.28 da «Allinea su punti» (operazioni
+      diverse). Da provare: confrontare i numeri con quelli del software aziendale (con i file di prova
+      deviazioni 6–27 mm, Z diversa di 75–125 mm dall'oggetto attuale).
+- [x] (2026-11-17, 0.2.29) **Programmi senza matematica**: aprendo un programma la vista 3D inquadra la
+      traiettoria (`ProgramPanel::bounds`, `fit_to_programs`) con terna e cubo delle viste; doppio clic la
+      reinquadra. Le viste standard funzionano anche senza scena.
+- [x] (2026-11-16, 0.2.28) **Oggetto del robot dai punti (sperimentale, tolto nella 0.2.29).** In «Allinea su punti»: riferimenti
       presi in cabina con l'oggetto a 0 nel robot, punti del 3D riportati nelle coordinate della matematica
       (`PointAlign::object_fit`, inverso delle coordinate dell'oggetto: vale anche dopo «Allinea»); solo X Y Z
       dei punti. Mostra X Y Z A B C, la riga `NOME : OBJECT := (…)` (nome dal SETOBJECT del programma) da
