@@ -771,13 +771,6 @@ pub fn draw(ctx: &egui::Context, app: &mut GestoreApp, pass: super::dock::Pass) 
     };
     let pointer = super::dock::show(ctx, pass, window, |ui| {
         ui.horizontal_wrapped(|ui| {
-            // Le due viste del controllore: righe del programma o punti con le coordinate
-            ui.spacing_mut().item_spacing.x = 2.0;
-            ui.selectable_value(&mut panel.view, ProgramView::Logic, egui::RichText::new(icon::TEXT_ALIGN_LEFT).size(16.0))
-                .on_hover_text("Righe del programma");
-            ui.selectable_value(&mut panel.view, ProgramView::Points, egui::RichText::new(icon::TABLE).size(16.0))
-                .on_hover_text("Punti con le coordinate");
-            ui.separator();
             ui.spacing_mut().item_spacing.x = 8.0;
             if ui.button(icon_text(ui, icon::FOLDER_OPEN, "Apri…")).on_hover_text("Programma .TIS o .tip: i punti si leggono dal .tid con lo stesso nome e dai .tid globali della cartella (che iniziano con _). Si possono sceglierne più di uno: si aggiungono a quelli aperti").clicked() {
                 choose = true;
@@ -883,6 +876,15 @@ pub fn draw(ctx: &egui::Context, app: &mut GestoreApp, pass: super::dock::Pass) 
             }
             ui.label(egui::RichText::new(info).weak().small());
         }
+        // Le due viste del controllore, subito sopra l'elenco (come nel software del controllore): righe del
+        // programma o punti con le coordinate
+        ui.horizontal(|ui| {
+            ui.spacing_mut().item_spacing.x = 2.0;
+            ui.selectable_value(&mut panel.view, ProgramView::Logic, icon_text(ui, icon::TEXT_ALIGN_LEFT, "Logica"))
+                .on_hover_text("Righe del programma");
+            ui.selectable_value(&mut panel.view, ProgramView::Points, icon_text(ui, icon::TABLE, "Punti"))
+                .on_hover_text("Punti con le coordinate");
+        });
         match panel.view {
             ProgramView::Logic => {
                 if let Some(action) = lines_ui(ui, panel) {

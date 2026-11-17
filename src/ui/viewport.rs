@@ -513,10 +513,14 @@ pub fn draw_viewport(ui: &mut egui::Ui, app: &mut crate::app::GestoreApp) {
         ui.ctx().set_cursor_icon(egui::CursorIcon::Crosshair);
     }
     // Centro cabina: la terna nello zero della scena
+    // (anche con i soli programmi: lo zero dei punti in coordinate dell'oggetto)
     if app.settings.cabin_center {
-        if let (Some(renderer), Some(scene)) = (&app.renderer, &app.scene_graph) {
+        let size = match &app.scene_graph {
+            Some(scene) => Some(scene.compute_bounding_box().diagonal()),
+            None => program_view.then(|| app.ui_state.program.bounds().diagonal()),
+        };
+        if let (Some(renderer), Some(size)) = (&app.renderer, size) {
             let camera = &renderer.camera;
-            let size = scene.compute_bounding_box().diagonal();
             super::cabin_panel::draw_center(ui, rect, glam::Vec3::ZERO, glam::Mat4::IDENTITY, size, |v| to_screen(camera, rect, v));
         }
     }
@@ -566,9 +570,28 @@ pub fn draw_viewport(ui: &mut egui::Ui, app: &mut crate::app::GestoreApp) {
         draw_empty_state(ui, rect, app.settings.background, dragging_file);
     }
     if program_view {
-        // Solo il cubo delle viste: gli strumenti lavorano sui pezzi
+        // Solo il cubo delle viste e il centro: gli altri strumenti lavorano sui pezzi
         if let Some(renderer) = &app.renderer {
             actions.extend(super::view_cube::draw(ui, rect, &renderer.camera, app.settings.axes));
+        }
+        let mut left = ui.new_child(
+            egui::UiBuilder::default().max_rect(rect.shrink(10.0)).layout(egui::Layout::left_to_right(egui::Align::Min)),
+        );
+        let mut shown = app.settings.cabin_center;
+        theme::overlay_frame(&left).show(&mut left, |ui| {
+            theme::flat_buttons(ui);
+            if ui
+                .selectable_label(shown, icon_text(ui, icon::CROSSHAIR, "Centro"))
+                .on_hover_text("Terna World nello zero: i punti Object si disegnano così come sono, come la matematica in posizione 0")
+                .clicked()
+            {
+                shown = !shown;
+            }
+        });
+        if shown != app.settings.cabin_center {
+            let mut settings = app.settings.clone();
+            settings.cabin_center = shown;
+            app.apply_settings(settings);
         }
     }
     if app.scene_graph.is_some() {
