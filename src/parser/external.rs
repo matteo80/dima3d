@@ -107,14 +107,21 @@ fn parse_progress(line: &str) -> Option<(f32, String)> {
 /// Messaggio d'errore per l'utente dal codice di uscita e da quanto scritto su stderr.
 fn error_message(label: &str, code: Option<i32>, stderr: &[String]) -> String {
     let detail: Vec<&str> =
-        stderr.iter().map(String::as_str).filter(|l| !l.starts_with("Avviso:") && !l.trim().is_empty()).collect();
+        stderr.iter().map(String::as_str).filter(|l| !is_log_only(l) && !l.starts_with("Avviso:") && !l.trim().is_empty()).collect();
     match (code, detail.last()) {
         (_, Some(last)) => format!("Conversione {label} non riuscita: {last}"),
         // 0xC0000135: manca una DLL accanto al convertitore
         (Some(-1073741515), None) => format!("Convertitore {label} incompleto: manca una DLL nella sua cartella"),
+        // 0xC0000005 / 0xC00000FD: il convertitore si è bloccato (lettura fuori dai dati, pila esaurita)
+        (Some(-1073741819 | -1073741571), None) => format!("Il convertitore {label} si è bloccato leggendo il file"),
         (Some(c), None) => format!("Conversione {label} non riuscita (codice {c})"),
         (None, None) => format!("Il convertitore {label} si è chiuso in modo inatteso"),
     }
+}
+
+/// Righe del convertitore solo per il log: fasi e memoria ("Info:"), traccia di un errore ("Dettaglio:").
+fn is_log_only(line: &str) -> bool {
+    line.starts_with("Info:") || line.starts_with("Dettaglio:")
 }
 
 /// Converte il file in un thread e poi lo carica, inviando gli eventi come per un WRL.
@@ -152,6 +159,14 @@ fn convert(source: &Path, kind: Kind, sender: &Sender<LoadEvent>) -> Result<(Pat
         const CREATE_NO_WINDOW: u32 = 0x0800_0000;
         command.creation_flags(CREATE_NO_WINDOW);
     }
+    let (_, free) = crate::log::memory_mb().unwrap_or_default();
+    tracing::info!(
+        "Conversione {label}: {} ({:.1} MB) con {}, RAM libera {free} MB",
+        source.display(),
+        std::fs::metadata(source).map_or(0, |m| m.len()) as f64 / 1048576.0,
+        converter.display()
+    );
+    let started = std::time::Instant::now();
     let mut child = command.spawn().map_err(|e| format!("Avvio del convertitore {label} non riuscito: {e}"))?;
 
     let stderr = child.stderr.take();
@@ -167,6 +182,15 @@ fn convert(source: &Path, kind: Kind, sender: &Sender<LoadEvent>) -> Result<(Pat
     }
     let status = child.wait().map_err(|e| format!("Convertitore {label}: {e}"))?;
     let stderr = errors.join().unwrap_or_default();
+    let seconds = started.elapsed().as_secs_f32();
+    for line in &stderr {
+        tracing::info!("  {label}| {line}");
+    }
+    match status.code() {
+        Some(0) => tracing::info!("Conversione {label} finita in {seconds:.1} s"),
+        Some(c) => tracing::error!("Conversione {label} terminata con codice {c} (0x{:08X}) dopo {seconds:.1} s", c as u32),
+        None => tracing::error!("Conversione {label} interrotta dopo {seconds:.1} s"),
+    }
     if !status.success() || !out.exists() {
         let _ = std::fs::remove_file(&out);
         return Err(error_message(label, status.code(), &stderr));
@@ -189,6 +213,10 @@ mod tests {
         assert_eq!(parse_progress("DONE 3 120 0"), None);
         let lines = vec!["Avviso: pezzo X non decodificato".to_string(), "File JT salvato in formato big-endian: non supportato.".to_string()];
         assert_eq!(error_message("JT", Some(2), &lines), "Conversione JT non riuscita: File JT salvato in formato big-endian: non supportato.");
+        // Fasi e traccia vanno solo nel log: il messaggio resta l'ultima riga d'errore
+        let lines: Vec<String> = ["Info: [0.1 s] Lettura", "Conversione non riuscita: X", "Dettaglio:    at A.B()"].map(String::from).into();
+        assert_eq!(error_message("JT", Some(2), &lines), "Conversione JT non riuscita: Conversione non riuscita: X");
+        assert!(error_message("JT", Some(-1073741819), &lines[..1]).contains("bloccato"));
         assert_eq!(error_message("STEP", Some(5), &[]), "Conversione STEP non riuscita (codice 5)");
         assert!(error_message("STEP", Some(-1073741515), &[]).contains("DLL"));
         let step = crate::settings::StepMesh { deviation: 0.05, angle: 15.0, relative: true };

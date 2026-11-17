@@ -94,6 +94,13 @@ pub fn draw(ctx: &egui::Context, app: &mut GestoreApp) {
                     }
                 }
                 if ui
+                    .button(icon_text(ui, icon::FILE_TEXT, "Log"))
+                    .on_hover_text("Apre il log di Dima 3D (aperture, conversioni, errori)")
+                    .clicked()
+                {
+                    crate::log::open();
+                }
+                if ui
                     .add_enabled(!app.update.busy(), egui::Button::new(icon_text(ui, icon::ARROW_CLOCKWISE, "Verifica aggiornamenti")))
                     .on_hover_text("Chiede a GitHub se c'è una versione nuova")
                     .clicked()

@@ -3,6 +3,8 @@
 // Uso:    jt2wrl <entrata.jt> <uscita.wrl>
 // Uscita: righe "PROGRESS <0..1> <testo>" su stdout durante il lavoro, "DONE <shape> <triangoli>
 //         <saltate>" alla fine; avvisi ed errori su stderr. Codice di uscita 0 se riuscito.
+//         Su stderr anche righe "Info: ..." (fasi, tempi, memoria) e "Dettaglio: ..." (traccia di
+//         un errore): Dima 3D le scrive nel suo log e non le mostra come errore.
 //
 // Per ogni pezzo si prende il livello di dettaglio più alto; trasformazioni e materiali si
 // accumulano scendendo nell'albero e le coordinate sono scritte già in world-space (niente
@@ -138,6 +140,16 @@ namespace Jt2Wrl {
             Console.Out.Flush();
         }
 
+        static readonly System.Diagnostics.Stopwatch Clock = System.Diagnostics.Stopwatch.StartNew();
+
+        /// Riga per il log di Dima 3D: tempo dall'avvio e memoria del processo.
+        public static void Info(string text) {
+            var p = System.Diagnostics.Process.GetCurrentProcess();
+            Console.Error.WriteLine(string.Format(Inv, "Info: [{0:0.0} s, memoria {1} MB, massima {2} MB] {3}",
+                Clock.Elapsed.TotalSeconds, p.WorkingSet64 >> 20, p.PeakWorkingSet64 >> 20, text));
+            Console.Error.Flush();
+        }
+
         public void ConvertFile(string path, Affine xf, int depth, bool root) {
             var full = Path.GetFullPath(path);
             if (!openFiles.Add(full)) {
@@ -145,11 +157,15 @@ namespace Jt2Wrl {
                 return;
             }
             if (root) Progress(0.02, "Lettura di " + Path.GetFileName(path));
+            Info("Lettura di " + Path.GetFileName(path) + " (" + (new FileInfo(full).Length >> 20) + " MB)");
             var jt = new JTFile(full);
+            Info("Letto: JT " + jt.Version + ", " + jt.segments.Count + " segmenti, " + jt.elements.Count + " elementi");
             if (root) Progress(0.10, "Struttura del file (JT " + jt.Version + ")");
             var lsg = JtFix.ReadGraph(jt);
+            Info("Albero letto: " + lsg.nodes.Count + " nodi");
             if (root) totalNodes = Math.Max(1, lsg.nodes.Count);
             Visit(lsg, lsg.root, xf, null, depth, Path.GetDirectoryName(full), root);
+            Info("Convertito " + Path.GetFileName(path) + ": finora " + Shapes + " pezzi, " + Triangles + " triangoli");
             openFiles.Remove(full);
         }
 
@@ -441,6 +457,7 @@ namespace Jt2Wrl {
                     w.Flush();
                     Converter.Progress(1.0, "Conversione completata");
                     Console.Out.WriteLine("DONE " + conv.Shapes + " " + conv.Triangles + " " + conv.Skipped);
+                    Converter.Info("Fine: " + conv.Shapes + " pezzi, " + conv.Triangles + " triangoli, " + conv.Skipped + " saltati");
                     empty = conv.Shapes == 0;
                 }
                 if (empty) {
@@ -455,9 +472,15 @@ namespace Jt2Wrl {
                 return 0;
             } catch (Exception e) {
                 try { if (File.Exists(temp)) File.Delete(temp); } catch { }
-                var msg = e.Message.Contains("big endian")
+                try { Converter.Info("Errore"); } catch { }
+                // Traccia completa per il log (in Dima 3D non diventa il messaggio d'errore)
+                foreach (var line in e.ToString().Split((char)10))
+                    Console.Error.WriteLine("Dettaglio: " + line.TrimEnd((char)13));
+                var msg = e is OutOfMemoryException || e.InnerException is OutOfMemoryException
+                    ? "Memoria insufficiente per convertire questo file."
+                    : e.Message.Contains("big endian")
                     ? "File JT salvato in formato big-endian: non supportato."
-                    : "Conversione non riuscita: " + e.Message;
+                    : "Conversione non riuscita: " + e.GetType().Name + ": " + e.Message;
                 Console.Error.WriteLine(msg);
                 return 2;
             }

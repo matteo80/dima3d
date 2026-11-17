@@ -5,6 +5,7 @@ mod app;
 mod cabin;
 mod clusterer;
 mod exporter;
+mod log;
 mod parser;
 mod pdf_measure;
 mod project;
@@ -24,15 +25,15 @@ mod update;
 pub const APP_NAME: &str = "Dima 3D";
 
 fn main() -> eframe::Result<()> {
-    // Inizializza il sistema di logging/tracing
-    tracing_subscriber::fmt()
-        .with_env_filter(
-            tracing_subscriber::EnvFilter::from_default_env()
-                .add_directive(tracing::Level::INFO.into()),
-        )
-        .init();
+    // Log su file (%APPDATA%\Dima3D\dima3d.log)
+    log::init();
 
-    tracing::info!("Avvio {APP_NAME} {}", env!("CARGO_PKG_VERSION"));
+    let (ram, free) = log::memory_mb().unwrap_or_default();
+    tracing::info!(
+        "Avvio {APP_NAME} {}: {} processori, RAM {ram} MB ({free} MB libera)",
+        env!("CARGO_PKG_VERSION"),
+        std::thread::available_parallelism().map_or(0, |n| n.get())
+    );
 
     let mut viewport = egui::ViewportBuilder::default()
         .with_title(APP_NAME)

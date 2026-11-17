@@ -985,10 +985,13 @@ impl GestoreApp {
             while let Ok(mut event) = rx.try_recv() {
                 if let LoadEvent::Finished(scene) = &mut event {
                     self.project.mark_loaded_step(scene);
+                    let triangles: usize = scene.shapes_data.iter().map(|s| s.indices.len() / 3).sum();
+                    tracing::info!("Aperto: {} pezzi, {triangles} triangoli", scene.shapes_data.len());
                 }
                 match event {
                     LoadEvent::Started { path, file_size_bytes } => {
                         let mb = file_size_bytes as f64 / (1024.0 * 1024.0);
+                        tracing::info!("Apertura di {path} ({mb:.1} MB)");
                         self.ui_state.status_message = format!("Caricamento {path} ({mb:.1} MB)...");
                         self.ui_state.load_progress = 0.05;
                     }
@@ -1066,6 +1069,7 @@ impl GestoreApp {
                         break;
                     }
                     LoadEvent::Error(err) => {
+                        tracing::error!("Apertura non riuscita: {err}");
                         self.project.loading_path = None;
                         self.project.loading_adds = false;
                         self.ui_state.status_message = format!("Errore: {err}");

@@ -65,6 +65,18 @@ pub fn draw_status_bar(ui: &mut egui::Ui, app: &crate::app::GestoreApp) {
         }
 
         ui.with_layout(egui::Layout::left_to_right(egui::Align::Center), |ui| {
+            if matches!(app.load_state, crate::app::LoadState::Error(_)) {
+                ui.scope(|ui| {
+                    theme::flat_buttons(ui);
+                    if ui
+                        .button(egui::RichText::new(format!("{} Log", icon::FILE_TEXT)).small())
+                        .on_hover_text("Apre il log di Dima 3D, con i dettagli dell'errore")
+                        .clicked()
+                    {
+                        crate::log::open();
+                    }
+                });
+            }
             let text = egui::RichText::new(&app.ui_state.status_message);
             let text = match &app.load_state {
                 crate::app::LoadState::Error(_) => text.color(theme::error_color(ui)),

@@ -962,6 +962,12 @@ Fatto:
       %LOCALAPPDATA%\Programs\Dima3D senza permessi da amministratore, menu Start, desktop facoltativo,
       associazione dei .dima3d facoltativa, disinstallazione. `pacchetto.ps1` lo crea, `pubblica.ps1` lo carica nella
       Release accanto allo zip; dopo un aggiornamento dal programma si aggiorna la versione in «App installate».
+- [x] (2026-11-17, 0.2.31) **Log** (`src/log.rs`): `%APPDATA%\Dima3D\dima3d.log`, ora locale, al massimo
+      1 MB + `dima3d.old.log`; pulsante Log nella finestra Info e accanto al messaggio d'errore. Registra avvio
+      (RAM, GPU), aperture, conversioni (righe del convertitore, durata, codice di uscita) ed errori/panic.
+      jt2wrl scrive su stderr righe `Info:` (fase, tempo, memoria) e `Dettaglio:` (traccia dell'eccezione):
+      vanno solo nel log, il messaggio d'errore resta l'ultima riga normale. Serve per un JT 10.5 da 800 MB
+      del PC di lavoro che non si apre (causa da capire).
 - [x] (2026-11-17, 0.2.30) **JT 10.6 con struttura vecchia**: certi JT 10.6 (es. da NX) hanno il byte di
       versione nel nodo partizione e un secondo EOE con gli elementi proprietà nel segmento LSG, come i JT
       < 10.5; JTReader si fermava con un errore. Corretto con `tools-src/jt2wrl/JTReader.patch` (riconosce la
