@@ -962,6 +962,11 @@ Fatto:
       %LOCALAPPDATA%\Programs\Dima3D senza permessi da amministratore, menu Start, desktop facoltativo,
       associazione dei .dima3d facoltativa, disinstallazione. `pacchetto.ps1` lo crea, `pubblica.ps1` lo carica nella
       Release accanto allo zip; dopo un aggiornamento dal programma si aggiorna la versione in «App installate».
+- [x] (2026-11-17, 0.2.33) **JT con riferimenti mancanti**: lo stesso JT 10.5 (775 MB, 55.931 segmenti,
+      1,47 milioni di elementi, 3,8 GB di RAM dopo la lettura) si fermava costruendo l'albero: un nodo rimanda
+      all'id 2190, che non c'è (KeyNotFound in `LSGNode`). Ora attributi, figli, istanze e segmenti mancanti si
+      saltano (`LSG.Missing`); jt2wrl scrive nel log quanti sono, i primi 20, i segmenti per tipo e gli id del
+      grafo, e un avviso per l'utente. Causa ancora da capire dal prossimo log.
 - [x] (2026-11-17, 0.2.32) **JT con date non valide**: un JT 10.5 di 775 MB ("DM 10.2.2.8") si fermava
       su una proprietà data con giorno/mese a 0 (`DatePropertyAtomData`, ArgumentOutOfRange). Trovato con il log;
       ora la data resta vuota (patch aggiornata). Il messaggio d'errore mostra la causa vera invece di

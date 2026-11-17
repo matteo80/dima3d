@@ -25,6 +25,8 @@ lettura, 3 nessun pezzo con triangoli.
 segmento LSG), come certi JT 10.6 esportati da NX.
 Accetta anche le proprietà con date non valide (giorno o mese a 0), che fermavano la
 lettura di tutto il file.
+I riferimenti del grafo a elementi o segmenti che non sono nel file si saltano (elenco in
+`LSG.Missing`, che jt2wrl scrive nel log) invece di fermare la lettura.
 
 ## Compilazione
 

@@ -15,6 +15,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
+using System.Linq;
 using System.Text;
 
 namespace Jt2Wrl {
@@ -150,6 +151,10 @@ namespace Jt2Wrl {
             Console.Error.Flush();
         }
 
+        static IEnumerable<string> ConvertPairs(SortedDictionary<int, int> d) {
+            foreach (var kv in d) yield return kv.Key + "=" + kv.Value;
+        }
+
         public void ConvertFile(string path, Affine xf, int depth, bool root) {
             var full = Path.GetFullPath(path);
             if (!openFiles.Add(full)) {
@@ -163,6 +168,16 @@ namespace Jt2Wrl {
             if (root) Progress(0.10, "Struttura del file (JT " + jt.Version + ")");
             var lsg = JtFix.ReadGraph(jt);
             Info("Albero letto: " + lsg.nodes.Count + " nodi");
+            if (lsg.Missing.Count > 0) {
+                var types = new SortedDictionary<int, int>();
+                foreach (var sg in jt.segments.Values) { types.TryGetValue(sg.segmentType, out var n); types[sg.segmentType] = n + 1; }
+                var ids = new List<int>();
+                foreach (var e in jt.LSGSegment.elements) if (e.objectID != -1) ids.Add(e.objectID);
+                Info("Riferimenti mancanti: " + lsg.Missing.Count + "; segmenti per tipo: " + string.Join(", ", ConvertPairs(types))
+                    + "; elementi del grafo: " + ids.Count + (ids.Count > 0 ? " (id " + ids.Min() + ".." + ids.Max() + ")" : ""));
+                for (int i = 0; i < Math.Min(20, lsg.Missing.Count); i++) Info("  manca " + lsg.Missing[i]);
+                Console.Error.WriteLine("Avviso: " + lsg.Missing.Count + " riferimenti interni del file non trovati: le parti collegate potrebbero mancare");
+            }
             if (root) totalNodes = Math.Max(1, lsg.nodes.Count);
             Visit(lsg, lsg.root, xf, null, depth, Path.GetDirectoryName(full), root);
             Info("Convertito " + Path.GetFileName(path) + ": finora " + Shapes + " pezzi, " + Triangles + " triangoli");

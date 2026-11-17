@@ -32,6 +32,70 @@ index fdc694d..690db35 100644
 +        }
      }
  }
+diff --git a/JTReader/LSG.cs b/JTReader/LSG.cs
+index 208ffcc..54ae55f 100644
+--- a/JTReader/LSG.cs
++++ b/JTReader/LSG.cs
+@@ -28,20 +28,23 @@ namespace DLAT.JTReader {
+             if (elementData is BaseNodeData) {
+                 var nodeData = elementData as BaseNodeData;
+                 foreach (var attr in nodeData.attributeObjectID) {
+-                    attributes.Add(ele.segment.file.elements[attr]);
++                    if (lsg.Find(ele, attr, "attributo", out var a))
++                        attributes.Add(a);
+                 }
+             }
+             if (elementData is GroupNodeData) {
+                 read = true;
+                 var nodeData = elementData as GroupNodeData;
+                 foreach (var childID in nodeData.childNodeObjectID) {
+-                    child.Add(new LSGNode(lsg, ele.segment.file.elements[childID], this));
++                    if (lsg.Find(ele, childID, "figlio", out var c))
++                        child.Add(new LSGNode(lsg, c, this));
+                 }
+             }
+ 
+             if (elementData is InstanceNodeData) {
+                 var nodeData = elementData as InstanceNodeData;
+-                child.Add(new LSGNode(lsg, ele.segment.file.elements[nodeData.childNodeObjectID], this));
++                if (lsg.Find(ele, nodeData.childNodeObjectID, "istanza", out var c))
++                    child.Add(new LSGNode(lsg, c, this));
+             }
+             
+             
+@@ -59,8 +62,13 @@ namespace DLAT.JTReader {
+                     var key = ele.segment.file.elements[prop.Key].elementData.ToString();
+                     var value = ele.segment.file.elements[prop.Value].elementData;
+ 
+-                    if (value is LateLoadedPropertyAtomData)
+-                        value = ele.segment.file.segments[(value as LateLoadedPropertyAtomData).segmeentID];
++                    if (value is LateLoadedPropertyAtomData late) {
++                        if (!ele.segment.file.segments.TryGetValue(late.segmeentID, out var seg)) {
++                            lsg.Missing.Add("segmento " + late.segmeentID + " (proprieta' " + key + " del nodo " + id + ")");
++                            continue;
++                        }
++                        value = seg;
++                    }
+ 
+                     if (!property.ContainsKey(key))
+                         property.Add(key, value);
+@@ -96,6 +104,16 @@ namespace DLAT.JTReader {
+         public LSGNode root;
+         public Dictionary<int,LSGNode> nodes = new Dictionary<int, LSGNode>();
+         public TxKinSolver txKin = null;
++        /// Riferimenti a elementi o segmenti che non sono nel file: si saltano invece di fermare la
++        /// lettura (es. un JT 10.5 grande da Teamcenter con un nodo che punta a un id inesistente).
++        public List<string> Missing = new List<string>();
++
++        public bool Find(Element from, int id, string what, out Element found) {
++            if (from.segment.file.elements.TryGetValue(id, out found))
++                return true;
++            Missing.Add(what + " " + id + " del nodo " + from.objectID + " (" + (from.elementData?.GetType().Name ?? "?") + ")");
++            return false;
++        }
+         public LSG(JTFile jtFile) {
+             var lsgSegment = jtFile.LSGSegment;
+             root = new LSGNode(this, lsgSegment.elements.First());
 diff --git a/JTReader/NodeElements/PartitionNodeData.cs b/JTReader/NodeElements/PartitionNodeData.cs
 index bdc61c7..fbf4e0a 100644
 --- a/JTReader/NodeElements/PartitionNodeData.cs
