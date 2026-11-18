@@ -29,7 +29,7 @@ impl tracing_subscriber::fmt::time::FormatTime for LocalTime {
 }
 
 #[cfg(windows)]
-fn local_now() -> (u16, u16, u16, u16, u16, u16) {
+pub fn local_now() -> (u16, u16, u16, u16, u16, u16) {
     #[repr(C)]
     #[derive(Default)]
     struct SystemTime {
@@ -53,7 +53,7 @@ fn local_now() -> (u16, u16, u16, u16, u16, u16) {
 }
 
 #[cfg(not(windows))]
-fn local_now() -> (u16, u16, u16, u16, u16, u16) {
+pub fn local_now() -> (u16, u16, u16, u16, u16, u16) {
     let s = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_secs());
     (1970, 1, 1, (s / 3600 % 24) as u16, (s / 60 % 60) as u16, (s % 60) as u16)
 }

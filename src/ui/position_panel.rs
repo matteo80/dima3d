@@ -103,6 +103,8 @@ pub struct PositionPanel {
     last_selection: Vec<u32>,
     /// Offset da applicare
     pub offset: Pose,
+    /// «Applica offset»: coordinate usate (X Y Z A B C); quelle spente valgono 0
+    pub offset_use: [bool; 6],
     /// Campo in cui incollare il risultato degli script
     pub pasted: String,
     pub calc: CalcMode,
@@ -122,6 +124,8 @@ pub struct PositionPanel {
     pub hinge: Hinge,
     /// Guida illustrata della cerniera a 4 perni aperta
     pub guide: bool,
+    /// Guida illustrata di «Allinea su misure» aperta
+    pub measures_guide: bool,
     /// «Allinea»: su cosa (vuoto = zero della scena), lungo quali assi, come
     pub align_reference: Vec<u32>,
     pub align_axes: [bool; 3],
@@ -130,6 +134,8 @@ pub struct PositionPanel {
     pub points: super::point_align::PointAlign,
     /// «Misura dell'oggetto»: file local e world
     pub measure: super::object_measure::ObjectMeasure,
+    /// «Allinea su misure»: quote prese a mano tra un riferimento fermo e il pezzo da spostare
+    pub distances: super::distance_align::DistanceAlign,
 }
 
 impl Default for PositionPanel {
@@ -145,6 +151,7 @@ impl Default for PositionPanel {
             key: None,
             last_selection: Vec::new(),
             offset: Pose::default(),
+            offset_use: [true; 6],
             pasted: String::new(),
             calc: CalcMode::Objects,
             reference: None,
@@ -157,11 +164,13 @@ impl Default for PositionPanel {
             error: None,
             hinge: Hinge::default(),
             guide: false,
+            measures_guide: false,
             align_reference: Vec::new(),
             align_axes: [true, true, true],
             align_mode: AlignMode::Center,
             points: Default::default(),
             measure: Default::default(),
+            distances: Default::default(),
         }
     }
 }
@@ -178,6 +187,8 @@ impl PositionPanel {
             world: self.world,
             calc: self.calc,
             guide: self.guide,
+            offset_use: self.offset_use,
+            measures_guide: self.measures_guide,
             align_axes: self.align_axes,
             align_mode: self.align_mode,
             hinge: Hinge { step, mode, ..Hinge::default() },
@@ -355,6 +366,169 @@ fn draw_four_bar_guide(ctx: &egui::Context, open: &mut bool) {
                     .small()
                     .weak(),
                 );
+            });
+        });
+}
+
+/// «Allinea su misure», guida: perché un punto si fissa con 3 misure. Tre miniature con i cerchi
+/// delle distanze dai punti del riferimento: 1 misura = ovunque sul cerchio, 2 = due posizioni,
+/// 3 = una sola.
+fn draw_trilateration(ui: &mut egui::Ui) {
+    let k = ((ui.available_width() - 2.0) / 330.0).clamp(0.6, 1.0);
+    let (rect, _) = ui.allocate_exact_size(egui::vec2(330.0, 180.0) * k, egui::Sense::hover());
+    let (refc, partc, line) = (egui::Color32::from_rgb(40, 110, 220), egui::Color32::from_rgb(255, 140, 30), egui::Color32::from_rgb(235, 190, 30));
+    let (good, bad) = (egui::Color32::from_rgb(60, 190, 90), egui::Color32::from_rgb(230, 70, 60));
+    let font = egui::FontId::proportional(11.5);
+    // Punto dell'oggetto e tre punti del riferimento, in coordinate di una miniatura (110 × 145,
+    // sotto la scritta); la seconda posizione con 2 misure è lo specchio rispetto a R1-R2
+    let target = egui::vec2(55.0, 55.0);
+    let refs = [egui::vec2(25.0, 90.0), egui::vec2(85.0, 90.0), egui::vec2(98.0, 55.0)];
+    for (i, n) in [1usize, 2, 3].iter().enumerate() {
+        let o = rect.min + egui::vec2(110.0 * i as f32, 0.0) * k;
+        let p = |v: egui::Vec2| o + v * k;
+        // Ogni miniatura disegna solo nel suo riquadro (i cerchi non vanno nella vicina)
+        let painter = ui.painter_at(egui::Rect::from_min_size(o, egui::vec2(106.0, 145.0) * k));
+        for r in &refs[..*n] {
+            let radius = (target - *r).length() * k;
+            painter.circle_stroke(p(*r), radius, egui::Stroke::new(1.0_f32, line.gamma_multiply(0.6)));
+            painter.line_segment([p(*r), p(target)], egui::Stroke::new(2.0_f32, line));
+        }
+        for r in &refs[..*n] {
+            painter.circle(p(*r), 4.5 * k.max(0.8), refc, egui::Stroke::new(1.0_f32, egui::Color32::BLACK));
+        }
+        if *n == 2 {
+            // Seconda posizione possibile: lo specchio rispetto alla retta tra i due riferimenti
+            let mirror = egui::vec2(target.x, 2.0 * refs[0].y - target.y);
+            painter.circle(p(mirror), 5.0 * k.max(0.8), partc.gamma_multiply(0.5), egui::Stroke::new(1.0_f32, egui::Color32::BLACK));
+            painter.text(p(mirror) + egui::vec2(9.0, 0.0), egui::Align2::LEFT_CENTER, "?", font.clone(), bad);
+            painter.text(p(target) + egui::vec2(9.0, 0.0), egui::Align2::LEFT_CENTER, "?", font.clone(), bad);
+        }
+        painter.circle(p(target), 5.0 * k.max(0.8), partc, egui::Stroke::new(1.0_f32, egui::Color32::BLACK));
+        let (caption, color) = match n {
+            1 => ("1 misura: ovunque\nsul cerchio", bad),
+            2 => ("2 misure: due\nposizioni possibili", bad),
+            _ => ("3 misure: una sola\nposizione", good),
+        };
+        ui.painter_at(rect).text(p(egui::vec2(55.0, 148.0)), egui::Align2::CENTER_TOP, caption, font.clone(), color);
+    }
+}
+
+/// «Allinea su misure», guida: miniatura di uno schema di misure tra il riferimento (sotto, con
+/// i punti R1..R4) e l'oggetto da spostare (sopra, con i punti A B C). `lines` = (punto
+/// dell'oggetto, punto del riferimento).
+fn draw_measure_scheme(ui: &mut egui::Ui, title: &str, lines: &[(usize, usize)], color: egui::Color32) {
+    let k = ((ui.available_width() - 2.0) / 330.0).clamp(0.6, 1.0);
+    let (rect, _) = ui.allocate_exact_size(egui::vec2(160.0, 150.0) * k, egui::Sense::hover());
+    let painter = ui.painter_at(rect);
+    let p = |x: f32, y: f32| rect.min + egui::vec2(x, y) * k;
+    let font = egui::FontId::proportional(11.5);
+    let text = ui.visuals().text_color();
+    // Oggetto da spostare (es. supporto del jig) e riferimento fermo (es. paraurti)
+    let part = vec![p(45.0, 30.0), p(115.0, 30.0), p(108.0, 72.0), p(52.0, 72.0)];
+    painter.add(egui::Shape::convex_polygon(part, egui::Color32::from_rgb(90, 200, 230), egui::Stroke::new(1.0_f32, egui::Color32::BLACK)));
+    painter.rect_filled(egui::Rect::from_min_max(p(8.0, 112.0), p(152.0, 132.0)), 8.0 * k, egui::Color32::from_rgb(40, 110, 220));
+    let a = [p(64.0, 68.0), p(96.0, 68.0), p(80.0, 36.0)];
+    let r = [p(16.0, 114.0), p(60.0, 114.0), p(100.0, 114.0), p(144.0, 114.0)];
+    for &(i, j) in lines {
+        painter.line_segment([a[i], r[j]], egui::Stroke::new(1.8_f32, egui::Color32::from_rgb(235, 190, 30)));
+    }
+    let used = |i: usize| lines.iter().any(|l| l.0 == i);
+    for (i, (q, name)) in a.iter().zip(["A", "B", "C"]).enumerate() {
+        if used(i) {
+            painter.circle(*q, 4.0, egui::Color32::from_rgb(255, 140, 30), egui::Stroke::new(1.0_f32, egui::Color32::BLACK));
+            painter.text(*q + egui::vec2(0.0, -6.0), egui::Align2::CENTER_BOTTOM, name, font.clone(), egui::Color32::BLACK);
+        }
+    }
+    // Solo i punti del riferimento usati, numerati da sinistra
+    let mut number = 0;
+    for (j, q) in r.iter().enumerate() {
+        if !lines.iter().any(|l| l.1 == j) {
+            continue;
+        }
+        number += 1;
+        painter.circle(*q, 3.5, egui::Color32::WHITE, egui::Stroke::new(1.0_f32, egui::Color32::BLACK));
+        painter.text(*q + egui::vec2(0.0, 22.0) * k, egui::Align2::CENTER_CENTER, format!("R{number}"), font.clone(), text);
+    }
+    painter.text(p(80.0, 2.0), egui::Align2::CENTER_TOP, title, font.clone(), color);
+}
+
+/// Finestra con la guida illustrata di «Allinea su misure».
+fn draw_measures_guide(ctx: &egui::Context, open: &mut bool) {
+    let guide_pos = ctx
+        .memory(|m| m.area_rect(egui::Id::new("finestra_posizione")))
+        .map_or(ctx.screen_rect().right_top() + egui::vec2(-650.0, 60.0), |r| egui::pos2((r.left() - 370.0).max(0.0), r.top()));
+    let (good, ok, bad) = (egui::Color32::from_rgb(60, 190, 90), egui::Color32::from_rgb(230, 160, 40), egui::Color32::from_rgb(230, 70, 60));
+    egui::Window::new(format!("{}  Guida misure", icon::INFO))
+        .id(egui::Id::new("guida_misure"))
+        .open(open)
+        .resizable([true, false])
+        .min_width(220.0)
+        .default_width(340.0)
+        .collapsible(true)
+        .constrain(true)
+        .default_pos(guide_pos)
+        .show(ctx, |ui| {
+            egui::ScrollArea::vertical().max_height((ctx.screen_rect().height() - 120.0).max(150.0)).show(ui, |ui| {
+                ui.set_min_width(ui.available_width());
+                ui.label(egui::RichText::new("Perché «3 punti, ognuno da 3 punti del riferimento»").strong());
+                ui.label(
+                    "Con il metro misuri la distanza tra un punto del riferimento fermo (in blu, es. il paraurti) e un \
+                     punto dell'oggetto da spostare (in arancione, es. il supporto del jig). Una distanza sola non dice \
+                     dove sta il punto: può essere ovunque su un cerchio (nello spazio, su una sfera).",
+                );
+                draw_trilateration(ui);
+                ui.label(
+                    "Con 3 distanze da 3 punti diversi del riferimento il punto è fissato, come la punta di un treppiede. \
+                     Un punto solo però non basta: l'oggetto ci potrebbe girare attorno. Con 3 punti dell'oggetto \
+                     fissati così (A, B, C, lontani tra loro) l'oggetto non può più né spostarsi né ruotare.",
+                );
+                ui.add_space(8.0);
+                ui.label(egui::RichText::new("Quante misure prendere").strong());
+                ui.horizontal_wrapped(|ui| {
+                    draw_measure_scheme(
+                        ui,
+                        "Esatta: 3 punti × 3",
+                        &[(0, 0), (0, 1), (0, 3), (1, 0), (1, 1), (1, 3), (2, 0), (2, 1), (2, 3)],
+                        good,
+                    );
+                    draw_measure_scheme(ui, "Veloce: 4 misure", &[(0, 0), (0, 1), (1, 2), (1, 3)], ok);
+                    draw_measure_scheme(ui, "No: tutte da un punto", &[(0, 0), (0, 1), (0, 2), (0, 3)], bad);
+                });
+                ui.add_space(4.0);
+                for (color, t) in [
+                    (good, "Posizione esatta: almeno 3 punti sull'oggetto (A, B, C, lontani tra loro e non in fila), ognuno \
+                            misurato da almeno 3 punti fissi del riferimento. I punti del riferimento possono essere gli stessi \
+                            per tutti: 3 punti sul paraurti, 3 sull'oggetto, 9 misure. Non c'è un massimo: più punti e più \
+                            misure danno più controllo. Nella sezione la scritta verde «Schema completo» conferma che ci sei."),
+                    (ok, "Posizione veloce: con meno misure (minimo 4) Dima sposta l'oggetto il meno possibile e scrive \
+                          «Posizione approssimata». Va bene se sul 3D l'oggetto è già quasi giusto. Se è solo spostato e non \
+                          ruotato, con «Solo spostamento» bastano 3 misure."),
+                    (bad, "Tutte le misure dallo stesso punto dell'oggetto: il punto è fissato ma l'oggetto ci gira attorno."),
+                ] {
+                    ui.horizontal_wrapped(|ui| {
+                        ui.label(egui::RichText::new("●").color(color));
+                        ui.label(egui::RichText::new(t).small());
+                    });
+                }
+                ui.add_space(8.0);
+                ui.label(egui::RichText::new("Come si fa").strong());
+                for (i, step) in [
+                    "In cima alla finestra Posizione scegli come «Oggetto» il pezzo da spostare.",
+                    "In cabina misura con il metro da un punto del riferimento a un punto dell'oggetto. Scegli punti \
+                     facili da ritrovare sul 3D: spigoli, angoli, centri dei fori.",
+                    "«Nuova misura»: clicca sul 3D lo stesso punto del riferimento e poi quello dell'oggetto (il clic si \
+                     aggancia al vertice vicino). In alternativa misura con lo strumento Misura (M) e premi «Dalla Misura».",
+                    "Scrivi in «Misurato» il valore del metro. Se hai misurato solo l'altezza (livella) o solo lungo un \
+                     asse, cambia il tipo in ΔZ, ΔX o ΔY.",
+                    "Premi «Allinea». La colonna «Dopo» dice quanto resta su ogni misura: un valore grande indica una \
+                     misura letta o cliccata male, che puoi spegnere. Annulla rimette l'oggetto dov'era.",
+                ]
+                .iter()
+                .enumerate()
+                {
+                    ui.label(format!("{}. {step}", i + 1));
+                    ui.add_space(3.0);
+                }
             });
         });
 }
@@ -790,6 +964,40 @@ fn pick_measure_file(m: &mut super::object_measure::ObjectMeasure, kind: u8, las
     }
 }
 
+/// «Misura dell'oggetto»: salva il report HTML e lo apre nel browser; ritorna il messaggio.
+fn save_measure_report(m: &super::object_measure::ObjectMeasure) -> Option<String> {
+    let (rows, Ok(res)) = m.compute() else { return None };
+    let mut dialog = rfd::FileDialog::new().set_title("Salva il report della misura").add_filter("Pagina HTML", &["html", "htm"]);
+    if let Some(p) = m.report_path() {
+        if let Some(dir) = p.parent() {
+            dialog = dialog.set_directory(dir);
+        }
+        if let Some(name) = p.file_name() {
+            dialog = dialog.set_file_name(name.to_string_lossy());
+        }
+    }
+    let path = dialog.save_file()?;
+    let (y, mo, d, h, mi, s) = crate::log::local_now();
+    let html = m.report_html(&rows, &res, &format!("{d:02}/{mo:02}/{y} {h:02}:{mi:02}:{s:02}"));
+    Some(match std::fs::write(&path, html) {
+        Ok(()) => {
+            #[cfg(windows)]
+            let _ = std::process::Command::new("explorer").arg(&path).spawn();
+            format!("Report salvato: {}", path.display())
+        }
+        Err(e) => format!("Report non salvato: {e}"),
+    })
+}
+
+/// «Applica offset»: l'offset con le sole coordinate accese (le spente valgono 0).
+fn used_offset(p: &Pose, used: &[bool; 6]) -> Pose {
+    let pick = |v: f32, on: bool| if on { v } else { 0.0 };
+    Pose {
+        xyz: Vec3::new(pick(p.xyz.x, used[0]), pick(p.xyz.y, used[1]), pick(p.xyz.z, used[2])),
+        abc: Vec3::new(pick(p.abc.x, used[3]), pick(p.abc.y, used[4]), pick(p.abc.z, used[5])),
+    }
+}
+
 /// Testo dell'offset come lo scrivono gli script (si può incollare in «Applica offset»).
 fn offset_text(title: &str, p: &Pose) -> String {
     format!(
@@ -895,6 +1103,13 @@ pub fn draw(ctx: &egui::Context, app: &mut GestoreApp, pass: super::dock::Pass) 
 
     // «Allinea su punti»: i punti presi sul 3D seguono i pezzi; riferimenti dal programma attivo
     panel.points.follow(scene);
+    panel.distances.follow(scene);
+    // Due punti presi con lo strumento Misura: diventano una misura di «Allinea su misure»
+    let tool_points: Option<(crate::ui::measure::MeasurePoint, crate::ui::measure::MeasurePoint)> =
+        app.ui_state.measure.as_ref().and_then(|m| match m.points.as_slice() {
+            [a, b] => Some((*a, *b)),
+            _ => None,
+        });
     let program_points: Vec<(String, Vec3)> = app
         .ui_state
         .program
@@ -910,6 +1125,7 @@ pub fn draw(ctx: &egui::Context, app: &mut GestoreApp, pass: super::dock::Pass) 
     let mut start_picking = false;
     // «Misura dell'oggetto»: file da scegliere (0 local, 1 world, 2 oggetti), dopo la finestra
     let mut pick_measure: Option<u8> = None;
+    let mut save_report = false;
     // Dopo «Calcola l'asse»: i pezzi della prima posizione che si muovono diventano l'oggetto da ruotare
     let mut select_first: Option<Vec<u32>> = None;
     let mut save_hinge: Option<(String, Vec<u32>, Vec3, Vec3, f32)> = None;
@@ -1263,6 +1479,7 @@ pub fn draw(ctx: &egui::Context, app: &mut GestoreApp, pass: super::dock::Pass) 
                     }
                     if let Some(i) = pick {
                         pa.start_picking(i);
+                        panel.distances.stop_picking();
                         panel.hinge.picking = false;
                         start_picking = true;
                     }
@@ -1308,6 +1525,205 @@ pub fn draw(ctx: &egui::Context, app: &mut GestoreApp, pass: super::dock::Pass) 
                     }
                 });
 
+                // ── Allinea su misure (quote prese a mano) ──────────────────────
+                section(ui, "posizione_misure", "Allinea su misure", &mut sections[8], |ui| {
+                    ui.label(
+                        egui::RichText::new(format!(
+                            "L'oggetto qui sopra si sposta finché le quote sul 3D sono quelle prese a mano in cabina. \
+                             Ogni misura va da un punto su un pezzo fermo (il riferimento) a un punto dell'oggetto. \
+                             Posizione esatta: almeno {} punti sull'oggetto, lontani e non in fila, ognuno misurato da almeno {} \
+                             punti fissi del riferimento (nessun massimo). Posizione veloce: bastano {} misure ({} con «Solo \
+                             spostamento»), l'oggetto si sposta il meno possibile per rispettarle.",
+                            super::distance_align::EXACT_POINTS,
+                            super::distance_align::EXACT_PER_POINT,
+                            super::distance_align::MIN_FULL,
+                            super::distance_align::MIN_MOVE
+                        ))
+                        .weak()
+                        .small(),
+                    );
+                    if ui
+                        .add(egui::Button::new(icon_text(ui, icon::INFO, "Guida illustrata")).small().selected(panel.measures_guide))
+                        .on_hover_text("Quante misure prendere e dove, con i disegni")
+                        .clicked()
+                    {
+                        panel.measures_guide = !panel.measures_guide;
+                    }
+                    let da = &mut panel.distances;
+                    let moving = scene.meshes_of(&nodes);
+                    let mut pick: Option<Option<usize>> = None;
+                    ui.horizontal_wrapped(|ui| {
+                        if ui
+                            .add_enabled(!nodes.is_empty(), egui::Button::new(icon_text(ui, icon::PLUS, "Nuova misura")))
+                            .on_hover_text("Clicca sul 3D il punto sul riferimento fermo, poi quello sull'oggetto da spostare")
+                            .clicked()
+                        {
+                            pick = Some(None);
+                        }
+                        if ui
+                            .add_enabled(tool_points.is_some(), egui::Button::new(icon_text(ui, icon::RULER, "Dalla Misura")))
+                            .on_hover_text("Usa i due punti presi con lo strumento Misura (tasto M)")
+                            .clicked()
+                        {
+                            if let Some((a, b)) = tool_points {
+                                da.add_from(a, b);
+                            }
+                        }
+                    });
+                    let fit = da.fit(&moving);
+                    let states = da.states(&moving);
+                    let mut remove: Option<usize> = None;
+                    let mut kinds: Option<(usize, super::distance_align::Kind)> = None;
+                    if !da.rows.is_empty() {
+                        let residuals = fit.as_ref().ok().map(|f| f.residuals.clone());
+                        let picking_row = da.picking.map(|(p, _)| p);
+                        egui::Grid::new("posizione_misure_tabella").num_columns(7).spacing([6.0, 3.0]).striped(true).show(ui, |ui| {
+                            ui.label("");
+                            ui.label(egui::RichText::new("Misura").small().strong());
+                            ui.label(egui::RichText::new("Tipo").small().strong());
+                            ui.label(egui::RichText::new("Sul 3D").small().strong()).on_hover_text("Valore adesso sul 3D (mm)");
+                            ui.label(egui::RichText::new("Misurato").small().strong()).on_hover_text("Valore preso in cabina: scrivilo qui (mm)");
+                            ui.label(egui::RichText::new("Dopo").small().strong())
+                                .on_hover_text("Differenza che resta dopo «Allinea» tra il 3D e il misurato (mm)");
+                            ui.label("");
+                            ui.end_row();
+                            for (i, r) in da.rows.iter_mut().enumerate() {
+                                ui.checkbox(&mut r.on, "").on_hover_text("Usa questa misura nel calcolo");
+                                let picking = picking_row == Some(i);
+                                let hover = match states[i].problem() {
+                                    Some(p) if !picking => format!("{p}\nClic per riprendere i due punti"),
+                                    _ => "Clic per riprendere i due punti".to_string(),
+                                };
+                                let mut name = egui::RichText::new(&r.name).monospace();
+                                if !picking && !matches!(states[i], super::distance_align::RowState::Ready(_)) {
+                                    name = name.color(egui::Color32::from_rgb(230, 160, 60));
+                                }
+                                if ui.add(egui::Button::new(name).small().selected(picking)).on_hover_text(hover).clicked() {
+                                    pick = Some(Some(i));
+                                }
+                                let mut kind = r.kind;
+                                egui::ComboBox::from_id_salt(("posizione_misure_tipo", i))
+                                    .width(70.0)
+                                    .selected_text(kind.name())
+                                    .show_ui(ui, |ui| {
+                                        for (k, n, h) in super::distance_align::Kind::ALL {
+                                            ui.selectable_value(&mut kind, k, n).on_hover_text(h);
+                                        }
+                                    });
+                                if kind != r.kind {
+                                    kinds = Some((i, kind));
+                                }
+                                let on = r.on;
+                                let weak = |s: String| if on { egui::RichText::new(s).monospace() } else { egui::RichText::new(s).monospace().weak() };
+                                let current = r.current();
+                                ui.label(weak(current.map_or("—".to_string(), |v| format!("{v:.2}"))));
+                                ui.add_enabled(
+                                    current.is_some(),
+                                    egui::DragValue::new(&mut r.measured).speed(0.5).max_decimals(2).range(0.0..=f32::MAX),
+                                )
+                                .on_hover_text("Trascina, oppure fai doppio clic e scrivi il valore");
+                                ui.label(weak(residuals.as_ref().and_then(|v| v[i]).map_or("—".to_string(), |e| format!("{e:+.2}"))));
+                                if ui.small_button(icon::X).on_hover_text("Togli la misura").clicked() {
+                                    remove = Some(i);
+                                }
+                                ui.end_row();
+                            }
+                        });
+                        ui.horizontal_wrapped(|ui| {
+                            ui.checkbox(&mut da.only_move, "Solo spostamento")
+                                .on_hover_text("Il pezzo si sposta senza ruotare: bastano 3 misure (es. una per asse)");
+                            if ui.button("Svuota").on_hover_text("Toglie tutte le misure").clicked() {
+                                da.rows.clear();
+                                da.picking = None;
+                            }
+                        });
+                    }
+                    if let Some((i, k)) = kinds {
+                        da.set_kind(i, k);
+                    }
+                    if let Some(i) = remove {
+                        da.remove(i);
+                    }
+                    if let Some(i) = pick {
+                        match i {
+                            Some(i) => da.repick(i),
+                            None => da.add_and_pick(),
+                        }
+                        panel.points.picking = None;
+                        panel.hinge.picking = false;
+                        start_picking = true;
+                    }
+                    let da = &panel.distances;
+                    if !da.rows.is_empty() {
+                        let ready = states.iter().filter(|s| matches!(s, super::distance_align::RowState::Ready(_))).count();
+                        ui.label(egui::RichText::new(format!("Misure pronte: {ready}, ne servono almeno {}", da.minimum())).small());
+                        // Regola della posizione esatta: almeno 3 punti dell'oggetto con almeno 3 misure ciascuno
+                        let coverage = da.coverage(&moving);
+                        let complete = coverage.iter().filter(|c| c.1 >= super::distance_align::EXACT_PER_POINT).count();
+                        let per_point = coverage.iter().map(|c| c.1.to_string()).collect::<Vec<_>>().join(" · ");
+                        let (text, color) = if da.only_move {
+                            (String::new(), egui::Color32::TRANSPARENT)
+                        } else if complete >= super::distance_align::EXACT_POINTS {
+                            (format!("Schema completo: {complete} punti sull'oggetto con almeno 3 misure, posizione esatta"), egui::Color32::from_rgb(60, 190, 90))
+                        } else {
+                            (
+                                format!(
+                                    "Punti sull'oggetto: {} (misure per punto: {}). Per la posizione esatta: almeno {} punti, ognuno da almeno {} punti del riferimento",
+                                    coverage.len(),
+                                    if per_point.is_empty() { "—".to_string() } else { per_point },
+                                    super::distance_align::EXACT_POINTS,
+                                    super::distance_align::EXACT_PER_POINT
+                                ),
+                                egui::Color32::from_rgb(230, 160, 40),
+                            )
+                        };
+                        if !text.is_empty() {
+                            ui.label(egui::RichText::new(text).small().color(color));
+                        }
+                    }
+                    match &fit {
+                        Ok(f) => {
+                            ui.horizontal_wrapped(|ui| {
+                                ui.label("Scarto");
+                                ui.monospace(format!("medio {:.2}  max {:.2}", f.rms, f.max));
+                                ui.label("mm");
+                            });
+                            let pose = Pose::from_matrix(f.matrix);
+                            ui.horizontal_wrapped(|ui| {
+                                ui.label(egui::RichText::new("Spostamento (coordinate World)").strong());
+                                if ui.small_button(icon::COPY).on_hover_text("Copia X Y Z A B C").clicked() {
+                                    copy = Some(offset_text("Offset World", &pose));
+                                }
+                            });
+                            pose_grid(ui, "posizione_misure_spostamento", &pose);
+                            if f.free {
+                                ui.label(
+                                    egui::RichText::new(
+                                        "Posizione approssimata: le misure non fissano tutte le direzioni e l'oggetto si sposta il meno \
+                                         possibile. Se l'oggetto è anche ruotato, meglio almeno 6 misure da altri punti o lungo altri assi.",
+                                    )
+                                    .small()
+                                    .color(egui::Color32::from_rgb(230, 160, 60)),
+                                );
+                            }
+                            let ready = !nodes.is_empty() && !f.matrix.abs_diff_eq(Mat4::IDENTITY, 1e-6);
+                            if ui
+                                .add_enabled(ready, egui::Button::new(icon_text(ui, icon::ALIGN_CENTER_HORIZONTAL, "Allinea")))
+                                .on_hover_text("Sposta l'oggetto qui sopra perché le quote sul 3D siano quelle misurate (Annulla lo rimette)")
+                                .clicked()
+                            {
+                                actions.push(Action::Move { nodes: nodes.clone(), matrix: f.matrix });
+                                status = Some(format!("Allineato sulle misure: scarto medio {:.2} mm, massimo {:.2} mm", f.rms, f.max));
+                            }
+                        }
+                        Err(e) => {
+                            if !da.rows.is_empty() {
+                                ui.label(egui::RichText::new(e).small().weak());
+                            }
+                        }
+                    }
+                });
+
                 // ── Misura dell'oggetto (file local e world) ─────────────────────
                 section(ui, "posizione_misura_oggetto", "Misura dell'oggetto", &mut sections[7], |ui| {
                     let m = &mut panel.measure;
@@ -1339,30 +1755,66 @@ pub fn draw(ctx: &egui::Context, app: &mut GestoreApp, pass: super::dock::Pass) 
                     let (rows, result) = m.compute();
                     let mut toggle: Option<(String, bool)> = None;
                     if !rows.is_empty() {
-                        let worst = rows.iter().filter(|r| r.on).filter_map(|r| r.deviation).fold(0.0f64, f64::max);
-                        egui::Grid::new("posizione_misura_tabella").num_columns(3).spacing([8.0, 3.0]).striped(true).show(ui, |ui| {
-                            ui.label("");
+                        ui.horizontal_wrapped(|ui| {
+                            ui.label("Punti sul 3D");
+                            ui.selectable_value(&mut m.show_world, false, "Local")
+                                .on_hover_text("Punti presi sulla matematica in posizione 0 (pallini)");
+                            ui.selectable_value(&mut m.show_world, true, "World").on_hover_text(
+                                "Punti presi con il robot, riportati sulla matematica con l'oggetto calcolato (anelli):                                  passando da Local a World si vede di quanto si sposta ogni punto",
+                            );
+                        });
+                        let worst = result.as_ref().ok().and_then(|r| r.worst.clone());
+                        let red = egui::Color32::from_rgb(230, 80, 70);
+                        egui::Grid::new("posizione_misura_tabella").num_columns(6).spacing([10.0, 3.0]).striped(true).show(ui, |ui| {
                             ui.label(egui::RichText::new("Punto").small().strong());
-                            ui.label(egui::RichText::new("Deviazione").small().strong())
-                                .on_hover_text("Distanza tra il punto world e il punto local portato dall'oggetto calcolato (mm)");
+                            for (t, axis) in [("dx", "X"), ("dy", "Y"), ("dz", "Z")] {
+                                ui.label(egui::RichText::new(t).small().strong())
+                                    .on_hover_text(format!("Scostamento in {axis}: punto world − oggetto calcolato · punto local (mm)"));
+                            }
+                            ui.label(egui::RichText::new("Dist.").small().strong()).on_hover_text("Distanza tra i due punti (mm)");
+                            ui.label(egui::RichText::new("Valido").small().strong()).on_hover_text("Usa questo punto nel calcolo e nella statistica");
                             ui.end_row();
                             for r in &rows {
-                                let mut on = r.on;
-                                if ui.checkbox(&mut on, "").on_hover_text("Usa questo punto nel calcolo").changed() {
-                                    toggle = Some((r.name.clone(), on));
-                                }
-                                ui.label(egui::RichText::new(&r.name).monospace()).on_hover_text(format!(
-                                    "Local  X {:.3}  Y {:.3}  Z {:.3}\nWorld  X {:.3}  Y {:.3}  Z {:.3}",
+                                let is_worst = r.on && worst.as_ref() == Some(&r.name);
+                                let style = |t: String| {
+                                    let rich = egui::RichText::new(t).monospace();
+                                    if !r.on {
+                                        rich.weak()
+                                    } else if is_worst {
+                                        rich.color(red)
+                                    } else {
+                                        rich
+                                    }
+                                };
+                                ui.label(style(format!("{0}/{0}", r.name))).on_hover_text(format!(
+                                    "Local  X {:.3}  Y {:.3}  Z {:.3}
+World  X {:.3}  Y {:.3}  Z {:.3}",
                                     r.local.x, r.local.y, r.local.z, r.world.x, r.world.y, r.world.z
                                 ));
-                                let text = r.deviation.map_or("—".to_string(), |d| format!("{d:.2}"));
-                                let mut rich = egui::RichText::new(text).monospace();
-                                if !r.on {
-                                    rich = rich.weak();
-                                } else if r.deviation.is_some_and(|d| d == worst && d > 0.5) {
-                                    rich = rich.color(egui::Color32::from_rgb(230, 160, 60));
+                                match r.delta {
+                                    Some(d) => {
+                                        for c in d.to_array() {
+                                            ui.label(style(format!("{c:.2}")));
+                                        }
+                                    }
+                                    None => {
+                                        for _ in 0..3 {
+                                            ui.label(style("—".to_string()));
+                                        }
+                                    }
                                 }
-                                ui.label(rich);
+                                ui.label(style(r.deviation.map_or("—".to_string(), |d| format!("{d:.2}"))));
+                                let mut on = r.on;
+                                egui::ComboBox::from_id_salt(("posizione_misura_valido", &r.name))
+                                    .width(48.0)
+                                    .selected_text(if on { "sì" } else { "no" })
+                                    .show_ui(ui, |ui| {
+                                        ui.selectable_value(&mut on, true, "sì");
+                                        ui.selectable_value(&mut on, false, "no");
+                                    });
+                                if on != r.on {
+                                    toggle = Some((r.name.clone(), on));
+                                }
                                 ui.end_row();
                             }
                         });
@@ -1376,11 +1828,39 @@ pub fn draw(ctx: &egui::Context, app: &mut GestoreApp, pass: super::dock::Pass) 
                     }
                     match &result {
                         Ok(res) => {
-                            ui.horizontal_wrapped(|ui| {
-                                ui.label("Deviazione");
-                                ui.monospace(format!("media {:.2}  max {:.2}", res.rms, res.max));
-                                ui.label("mm");
+                            // Statistica, come nel software di calibrazione, con la spiegazione al passaggio del mouse
+                            ui.label(egui::RichText::new("Statistica").strong());
+                            let values = [
+                                format!("{:.2} mm", res.expected),
+                                format!("{:.2} mm", res.mean),
+                                format!("{:.2} mm²", res.variance),
+                                format!("{:.2} mm", res.max),
+                            ];
+                            egui::Grid::new("posizione_misura_statistica").num_columns(2).spacing([10.0, 2.0]).show(ui, |ui| {
+                                for ((name, help), v) in super::object_measure::STATS_HELP.iter().zip(values) {
+                                    ui.label(*name).on_hover_text(*help);
+                                    ui.label(egui::RichText::new(v).monospace()).on_hover_text(*help);
+                                    ui.end_row();
+                                }
                             });
+                            ui.horizontal_wrapped(|ui| {
+                                let (r, g, b) = res.verdict.rgb();
+                                let text = egui::RichText::new(format!(" {} ", res.verdict.text())).strong().color(egui::Color32::WHITE)
+                                    .background_color(egui::Color32::from_rgb(r, g, b));
+                                ui.label(text).on_hover_text(format!(
+                                    "OK fino a {} mm di errore massimo, accettabile fino a {} mm",
+                                    super::object_measure::TOL_OK,
+                                    super::object_measure::TOL_ACCEPTABLE
+                                ));
+                                let mut hint = res.verdict.hint();
+                                if let (Some(w), super::object_measure::Verdict::Acceptable | super::object_measure::Verdict::NotOk) = (&res.worst, res.verdict) {
+                                    hint = format!("{hint} ({w})");
+                                }
+                                ui.label(egui::RichText::new(hint).small());
+                            });
+                            if ui.button(icon_text(ui, icon::FLOPPY_DISK, "Salva il report HTML")).on_hover_text("Report con file, oggetto, statistica e scostamenti dei punti").clicked() {
+                                save_report = true;
+                            }
                             ui.horizontal_wrapped(|ui| {
                                 ui.label(egui::RichText::new("Oggetto calcolato").strong());
                                 if ui.small_button(icon::COPY).on_hover_text("Copia X Y Z A B C").clicked() {
@@ -1896,19 +2376,24 @@ pub fn draw(ctx: &egui::Context, app: &mut GestoreApp, pass: super::dock::Pass) 
 
                 // ── Applica offset ─────────────────────────────────────────────
                 section(ui, "posizione_offset", "Applica offset", &mut sections[3], |ui| {
-                        // Righe che vanno a capo: la finestra si può stringere
-                        ui.horizontal_wrapped(|ui| {
-                            for k in 0..3 {
-                                ui.label(egui::RichText::new(AXES[k].0).color(AXES[k].1).strong());
-                                ui.add(egui::DragValue::new(&mut panel.offset.xyz[k]).speed(0.1).max_decimals(3).suffix(" mm"));
+                        // Righe che vanno a capo: la finestra si può stringere. La casella accanto a
+                        // ogni coordinata dice se usarla: spenta vale 0 quando si applica
+                        egui::Grid::new("posizione_offset_valori").num_columns(4).spacing([6.0, 3.0]).show(ui, |ui| {
+                            // Righe X|A, Y|B, Z|C: due colonne stanno nella finestra stretta
+                            for row in 0..3 {
+                                for k in [row, row + 3] {
+                                    ui.spacing_mut().icon_spacing = 2.0;
+                                    ui.checkbox(&mut panel.offset_use[k], egui::RichText::new(AXES[k].0).color(AXES[k].1).strong())
+                                        .on_hover_text(format!("Usa {} quando si applica l'offset (spenta vale 0)", AXES[k].0));
+                                    let (value, suffix) =
+                                        if k < 3 { (&mut panel.offset.xyz[k], " mm") } else { (&mut panel.offset.abc[k - 3], " °") };
+                                    ui.add_enabled(panel.offset_use[k], egui::DragValue::new(value).speed(0.1).max_decimals(3).suffix(suffix));
+                                }
+                                ui.end_row();
                             }
                         });
-                        ui.horizontal_wrapped(|ui| {
-                            for k in 0..3 {
-                                ui.label(egui::RichText::new(AXES[k + 3].0).color(AXES[k + 3].1).strong());
-                                ui.add(egui::DragValue::new(&mut panel.offset.abc[k]).speed(0.1).max_decimals(3).suffix(" °"));
-                            }
-                        });
+                        // Offset con le sole coordinate accese
+                        let offset = used_offset(&panel.offset, &panel.offset_use);
                         ui.label(
                             egui::RichText::new(if panel.world {
                                 "In coordinate della cabina (World acceso)"
@@ -1939,7 +2424,7 @@ pub fn draw(ctx: &egui::Context, app: &mut GestoreApp, pass: super::dock::Pass) 
                         }
                         ui.horizontal_wrapped(|ui| {
                             if ui.button("Applica").on_hover_text("Sposta l'oggetto di questo offset").clicked() && !nodes.is_empty() {
-                                actions.push(Action::Move { nodes: nodes.clone(), matrix: in_frame(panel.offset.matrix(), frame, panel.world) });
+                                actions.push(Action::Move { nodes: nodes.clone(), matrix: in_frame(offset.matrix(), frame, panel.world) });
                             }
                             if ui.small_button("Azzera").clicked() {
                                 panel.offset = Pose::default();
@@ -1965,9 +2450,9 @@ pub fn draw(ctx: &egui::Context, app: &mut GestoreApp, pass: super::dock::Pass) 
                                     // sopra: si riporta nelle sue coordinate, che sono quelle del BASE
                                     let offset = if panel.world {
                                         let f = frame_pose.matrix();
-                                        Pose::from_matrix(f.inverse() * panel.offset.matrix() * f)
+                                        Pose::from_matrix(f.inverse() * offset.matrix() * f)
                                     } else {
-                                        panel.offset
+                                        offset
                                     };
                                     let line = base.moved(&offset, false).to_line();
                                     ui.add(egui::Label::new(egui::RichText::new(&line).monospace().strong()).wrap());
@@ -2142,6 +2627,9 @@ pub fn draw(ctx: &egui::Context, app: &mut GestoreApp, pass: super::dock::Pass) 
             });
             });
         });
+    if panel.measures_guide {
+        draw_measures_guide(ctx, &mut panel.measures_guide);
+    }
     if panel.guide {
         draw_four_bar_guide(ctx, &mut panel.guide);
     }
@@ -2160,10 +2648,12 @@ pub fn draw(ctx: &egui::Context, app: &mut GestoreApp, pass: super::dock::Pass) 
     if panel.hinge.picking {
         // La scelta dell'asse della cerniera ha la precedenza
         panel.points.picking = None;
+        panel.distances.stop_picking();
     }
     if !open {
         panel.hinge.picking = false;
         panel.points.picking = None;
+        panel.distances.stop_picking();
     }
     if let Some(first) = select_first {
         let file = match first.as_slice() {
@@ -2177,6 +2667,11 @@ pub fn draw(ctx: &egui::Context, app: &mut GestoreApp, pass: super::dock::Pass) 
     }
     if let Some(kind) = pick_measure {
         pick_measure_file(&mut panel.measure, kind, app.settings.last_program.as_deref());
+    }
+    if save_report {
+        if let Some(s) = save_measure_report(&panel.measure) {
+            status = Some(s);
+        }
     }
     app.ui_state.position = panel;
     if start_picking {
@@ -2435,6 +2930,80 @@ DEF Destinazione Group { children [
         }
         app.undo();
         assert!(first_vertex(&app, file).distance(before) < 1e-3);
+    }
+
+    /// «Applica offset»: le coordinate con la casella spenta valgono 0.
+    #[test]
+    fn offset_uses_only_the_checked_coordinates() {
+        let p = Pose { xyz: Vec3::new(1.0, 2.0, 3.0), abc: Vec3::new(4.0, 5.0, 6.0) };
+        let used = used_offset(&p, &[true, true, false, true, true, false]);
+        assert_eq!(used, Pose { xyz: Vec3::new(1.0, 2.0, 0.0), abc: Vec3::new(4.0, 5.0, 0.0) });
+        assert_eq!(used_offset(&p, &[true; 6]), p);
+    }
+
+    /// «Allinea su misure»: nove quote prese «in cabina» tra il primo file (fermo) e il secondo
+    /// (spostato e ruotato sul 3D): «Allinea» porta il secondo dove le quote tornano, Annulla lo
+    /// rimette dov'era.
+    #[test]
+    fn align_on_hand_measures_moves_the_part() {
+        use crate::ui::measure::{Measure, MeasurePoint};
+        let mut app = app();
+        let ui = Ui { ctx: egui::Context::default() };
+        app.settings.position_sections = [false; crate::settings::POSITION_SECTIONS];
+        app.settings.position_sections[8] = true;
+        let (fixed, part) = {
+            let mut files = app.scene_graph.as_ref().unwrap().open_files();
+            (files.next().unwrap().node, files.next().unwrap().node)
+        };
+        app.ui_state.position.target = Some(Target::File(part));
+        let truth = crate::scene_graph::placement::rigid(Vec3::new(6.0, -4.0, 3.0), Vec3::new(0.5, -0.4, 1.5), Vec3::ZERO);
+        {
+            let s = app.scene_graph.as_ref().unwrap();
+            let vertices = |node: u32| -> Vec<(u32, Vec3)> {
+                s.meshes_of(&[node])
+                    .iter()
+                    .flat_map(|&m| s.shapes_data[m as usize].world_vertices.iter().map(move |v| (m, Vec3::from(*v))))
+                    .collect()
+            };
+            // Angoli del riquadro, legati al pezzo (non serve che siano vertici)
+            let corners = |node: u32| -> Vec<(u32, Vec3)> {
+                let mesh = vertices(node)[0].0;
+                let b = s.subtree_bounding_box(node);
+                [b.min, Vec3::new(b.max.x, b.min.y, b.min.z), Vec3::new(b.min.x, b.max.y, b.min.z), Vec3::new(b.min.x, b.min.y, b.max.z)]
+                    .iter()
+                    .map(|c| (mesh, *c))
+                    .collect()
+            };
+            let (f, p) = (corners(fixed), corners(part));
+            let da = &mut app.ui_state.position.distances;
+            // Tre punti del pezzo, ognuno misurato da tre punti del riferimento
+            for (i, j) in [(0, 0), (1, 0), (2, 0), (1, 1), (2, 1), (3, 1), (0, 2), (2, 2), (3, 2)] {
+                let a = Measure::anchored(s, f[i].0, MeasurePoint::free(f[i].1, true));
+                let b = Measure::anchored(s, p[j].0, MeasurePoint::free(p[j].1, true));
+                da.add_from(a, b);
+                da.rows.last_mut().unwrap().measured = truth.transform_point3(p[j].1).distance(f[i].1);
+            }
+        }
+        let before = first_vertex(&app, part);
+        ui.run(&mut app, vec![]);
+        let texts = ui.run(&mut app, vec![]);
+        assert!(texts.iter().any(|(t, _)| t.starts_with("Misure pronte: 9")), "{texts:?}");
+        assert!(texts.iter().any(|(t, _)| t.starts_with("Schema completo: 3 punti")), "{texts:?}");
+        // Il primo «Allinea» è il titolo della sezione chiusa
+        ui.click(&mut app, "Allinea", 1);
+        assert!(app.ui_state.status_message.starts_with("Allineato sulle misure"), "{}", app.ui_state.status_message);
+        let after = first_vertex(&app, part);
+        assert!(after.distance(truth.transform_point3(before)) < 0.1, "{after:?} {:?}", truth.transform_point3(before));
+        for r in &app.ui_state.position.distances.rows {
+            assert!((r.current().unwrap() - r.measured).abs() < 0.05, "{} {:?} {}", r.name, r.current(), r.measured);
+        }
+        app.undo();
+        assert!(first_vertex(&app, part).distance(before) < 1e-3);
+        // Guida illustrata: si apre e si disegna
+        ui.click(&mut app, "Guida illustrata", 0);
+        assert!(app.ui_state.position.measures_guide);
+        let texts = ui.run(&mut app, vec![]);
+        assert!(texts.iter().any(|(t, _)| t == "Quante misure prendere"), "guida disegnata");
     }
 
     /// «Misura dell'oggetto»: con i file local e world e l'oggetto attuale la sezione mostra le
@@ -2909,7 +3478,7 @@ DEF Piastra Group { children [ Shape { geometry IndexedFaceSet { coord Coordinat
         assert!(texts.iter().any(|(t, _)| t.contains("Su ogni perno 3 punti sul bordo, a triangolo")), "promemoria visibile");
         // La finestra resta stretta e alta quanto il contenuto, non quanto lo schermo
         let window = ui.ctx.memory(|m| m.area_rect(egui::Id::new("finestra_posizione"))).expect("finestra");
-        assert!(window.width() < 300.0 && window.height() < 900.0, "{window:?}");
+        assert!(window.width() < 300.0 && window.height() < 950.0, "{window:?}");
         ui.click(&mut app, "Guida illustrata", 0);
         let texts = ui.run(&mut app, vec![]);
         for wanted in ["1  F1", "4  M2", "cerniera fissa

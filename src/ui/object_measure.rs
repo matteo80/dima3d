@@ -119,15 +119,100 @@ pub struct Row {
     pub on: bool,
     /// Distanza tra il punto local portato dall'oggetto e il punto world (mm)
     pub deviation: Option<f64>,
+    /// Scostamento dx dy dz = world − oggetto · local (mm)
+    pub delta: Option<DVec3>,
+    /// Punto world riportato sulla matematica in posizione 0 (oggetto⁻¹ · world)
+    pub world_on_part: Option<DVec3>,
+}
+
+impl Row {
+    /// Esito del singolo punto, dalla sua componente più grande (stesse soglie del calcolo)
+    pub fn verdict(&self) -> Option<Verdict> {
+        self.delta.map(|d| Verdict::from_max(d.abs().max_element()))
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct ObjectResult {
     pub matrix: DMat4,
     pub pose: Pose,
-    pub rms: f64,
+    /// Statistica sulle componenti dx dy dz dei punti usati (3 valori per punto), in mm:
+    /// valore atteso = media con il segno (con i minimi quadrati viene sempre circa 0),
+    /// media = media dei valori assoluti, dispersione = media dei quadrati (mm²),
+    /// max = componente più grande in valore assoluto.
+    pub expected: f64,
+    pub mean: f64,
+    pub variance: f64,
     pub max: f64,
+    /// Punto con la componente più grande
+    pub worst: Option<String>,
+    pub verdict: Verdict,
 }
+
+/// Errore massimo per dire che il calcolo è buono o ancora accettabile (mm).
+pub const TOL_OK: f64 = 3.0;
+pub const TOL_ACCEPTABLE: f64 = 6.0;
+
+/// Esito del calcolo, dall'errore massimo.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Verdict {
+    Ok,
+    Acceptable,
+    NotOk,
+}
+
+impl Verdict {
+    pub fn from_max(max: f64) -> Self {
+        if max <= TOL_OK {
+            Verdict::Ok
+        } else if max <= TOL_ACCEPTABLE {
+            Verdict::Acceptable
+        } else {
+            Verdict::NotOk
+        }
+    }
+
+    pub fn text(self) -> &'static str {
+        match self {
+            Verdict::Ok => "OK",
+            Verdict::Acceptable => "Accettabile",
+            Verdict::NotOk => "Non OK",
+        }
+    }
+
+    pub fn hint(self) -> String {
+        match self {
+            Verdict::Ok => format!("Tutti gli scostamenti entro {TOL_OK} mm"),
+            Verdict::Acceptable => format!("Scostamento massimo tra {TOL_OK} e {TOL_ACCEPTABLE} mm: si può usare, meglio ricontrollare il punto peggiore"),
+            Verdict::NotOk => format!(
+                "Scostamento oltre {TOL_ACCEPTABLE} mm: riprendere il punto peggiore o escluderlo (servono almeno {MIN_POINTS} punti)"
+            ),
+        }
+    }
+
+    /// Colore (r, g, b) per la finestra e per il report
+    pub fn rgb(self) -> (u8, u8, u8) {
+        match self {
+            Verdict::Ok => (60, 170, 80),
+            Verdict::Acceptable => (220, 160, 40),
+            Verdict::NotOk => (220, 70, 60),
+        }
+    }
+}
+
+/// Spiegazione dei valori della statistica (finestra e report).
+pub const STATS_HELP: [(&str, &str); 4] = [
+    (
+        "Valore atteso",
+        "Media degli scostamenti dx dy dz con il loro segno. Con il calcolo ai minimi quadrati viene sempre circa 0:          è solo un controllo che il calcolo sia centrato.",
+    ),
+    ("Media degli errori", "Media dei valori assoluti di dx dy dz di tutti i punti usati: di quanto sbaglia in media ogni coordinata."),
+    (
+        "Dispersione degli errori",
+        "Media dei quadrati di dx dy dz (varianza, in mm²). Pesa di più gli scostamenti grandi; la sua radice è lo scarto tipico in mm.",
+    ),
+    ("Errore massimo", "Il dx, dy o dz più grande in valore assoluto: indica il punto peggiore (in rosso)."),
+];
 
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct ObjectMeasure {
@@ -142,6 +227,8 @@ pub struct ObjectMeasure {
     pub base: Option<String>,
     /// Ultimo errore di lettura
     pub error: Option<String>,
+    /// Sul 3D i punti world (riportati sulla matematica) invece dei local
+    pub show_world: bool,
 }
 
 impl ObjectMeasure {
@@ -203,7 +290,7 @@ impl ObjectMeasure {
         let (Some(l), Some(w)) = (&self.local, &self.world) else { return Vec::new() };
         l.points
             .iter()
-            .filter_map(|(n, p)| Some(Row { name: n.clone(), local: *p, world: w.get(n)?, on: self.is_on(n), deviation: None }))
+            .filter_map(|(n, p)| Some(Row { name: n.clone(), local: *p, world: w.get(n)?, on: self.is_on(n), deviation: None, delta: None, world_on_part: None }))
             .collect()
     }
 
@@ -229,17 +316,31 @@ impl ObjectMeasure {
         if in_a_row(&a) {
             return (rows, Err("I punti sono tutti in fila: l'oggetto non si può calcolare".to_string()));
         }
-        let Some((matrix, rms)) = fit_rigid(&a, &b) else { return (rows, Err("Calcolo non riuscito".to_string())) };
-        let mut max = 0.0f64;
+        let Some((matrix, _)) = fit_rigid(&a, &b) else { return (rows, Err("Calcolo non riuscito".to_string())) };
+        let back = matrix.inverse();
+        let (mut sum, mut abs, mut sq, mut max, mut worst, mut n) = (0.0f64, 0.0f64, 0.0f64, 0.0f64, None, 0usize);
         for r in &mut rows {
-            let d = matrix.transform_point3(r.local).distance(r.world);
-            r.deviation = Some(d);
+            let d = r.world - matrix.transform_point3(r.local);
+            r.delta = Some(d);
+            r.world_on_part = Some(back.transform_point3(r.world));
+            r.deviation = Some(d.length());
             if r.on {
-                max = max.max(d);
+                for c in d.to_array() {
+                    sum += c;
+                    abs += c.abs();
+                    sq += c * c;
+                    n += 1;
+                    if c.abs() > max {
+                        max = c.abs();
+                        worst = Some(r.name.clone());
+                    }
+                }
             }
         }
+        let n = n as f64;
         let pose = pose_of(matrix);
-        (rows, Ok(ObjectResult { matrix, pose, rms, max }))
+        let verdict = Verdict::from_max(max);
+        (rows, Ok(ObjectResult { matrix, pose, expected: sum / n, mean: abs / n, variance: sq / n, max, worst, verdict }))
     }
 
     /// Riga da incollare nel file del robot: nome e formato dell'oggetto attuale, se scelto.
@@ -249,6 +350,90 @@ impl ObjectMeasure {
             None => ("OGGETTO".to_string(), BaseFormat::ConstBase),
         };
         RobotBase { name, pose, format }.to_line()
+    }
+
+    /// Nome proposto per il report: quello del file local senza la `L` finale, accanto ai punti.
+    pub fn report_path(&self) -> Option<PathBuf> {
+        let f = self.local.as_ref().or(self.world.as_ref())?;
+        let stem = f.path.file_stem()?.to_string_lossy().into_owned();
+        let base = match stem.chars().last() {
+            Some('L' | 'l' | 'W' | 'w') if stem.len() > 1 => stem[..stem.len() - 1].to_string(),
+            _ => stem,
+        };
+        Some(f.path.with_file_name(format!("{base}_misura.html")))
+    }
+
+    /// Report HTML del calcolo: file usati, oggetto calcolato, statistica con l'esito e scostamenti
+    /// dei punti. `date` è già scritta (es. «18/11/2026 07:39:50»).
+    pub fn report_html(&self, rows: &[Row], res: &ObjectResult, date: &str) -> String {
+        let esc = |s: &str| s.replace('&', "&amp;").replace('<', "&lt;").replace('>', "&gt;").replace('"', "&quot;");
+        let path = |f: &Option<PointFile>| f.as_ref().map_or("—".to_string(), |f| esc(&f.path.display().to_string()));
+        let title = self.report_path().and_then(|p| p.file_stem().map(|s| s.to_string_lossy().into_owned())).unwrap_or_default();
+        let (r, g, b) = res.verdict.rgb();
+        let p = &res.pose;
+        let mut h = String::new();
+        h += "<!DOCTYPE html>\n<html lang=\"it\">\n<head>\n<meta charset=\"utf-8\">\n";
+        h += &format!("<title>Misura dell'oggetto {}</title>\n", esc(&title));
+        h += "<style>\nbody{font-family:Segoe UI,Arial,sans-serif;margin:24px;color:#222}\n\
+              h1{font-size:22px}h2{font-size:18px;margin-top:28px}\n\
+              table{border-collapse:collapse;margin:8px 0}td,th{border:1px solid #999;padding:4px 10px}\n\
+              th{background:#eee}td.n{text-align:right;font-family:Consolas,monospace}\n\
+              tr.worst td{color:#c62828;font-weight:bold}tr.off td{color:#999}\n\
+              .esito{display:inline-block;padding:6px 14px;border-radius:4px;color:#fff;font-weight:bold}\n\
+              .nota{color:#555;font-size:13px}\n</style>\n</head>\n<body>\n";
+        h += "<h1>Misura dell'oggetto</h1>\n<h2>Dati</h2>\n<table>\n";
+        h += &format!("<tr><th>Data</th><td>{}</td></tr>\n", esc(date));
+        h += &format!("<tr><th>File coordinate world</th><td>{}</td></tr>\n", path(&self.world));
+        h += &format!("<tr><th>File coordinate locali</th><td>{}</td></tr>\n", path(&self.local));
+        let used = rows.iter().filter(|r| r.on).count();
+        h += &format!("<tr><th>Punti usati</th><td>{used} di {}</td></tr>\n</table>\n", rows.len());
+        h += "<h2>Oggetto calcolato</h2>\n<p class=\"nota\">world = oggetto · local; rotazione secondo Eulero Z-Y-X (A attorno a X, B attorno a Y, C attorno a Z)</p>\n<table>\n";
+        for (k, (t, a)) in ["X", "Y", "Z"].iter().zip(["A", "B", "C"]).enumerate() {
+            h += &format!(
+                "<tr><th>Traslazione {t} [mm]</th><td class=\"n\">{:.3}</td><th>Rotazione {a} ({t}) [°]</th><td class=\"n\">{:.3}</td></tr>\n",
+                p.xyz[k], p.abc[k]
+            );
+        }
+        h += "</table>\n";
+        h += &format!("<p><code>{}</code></p>\n", esc(&self.robot_line(*p)));
+        if let Some(base) = self.current_base() {
+            let d = difference(p, &base.pose);
+            h += &format!("<p>Differenza dall'oggetto attuale {}: X {:+.3}  Y {:+.3}  Z {:+.3} mm, A {:+.3}  B {:+.3}  C {:+.3}°</p>\n",
+                esc(&base.name), d.xyz.x, d.xyz.y, d.xyz.z, d.abc.x, d.abc.y, d.abc.z);
+        }
+        h += "<h2>Qualità della trasformazione</h2>\n<table>\n";
+        let values = [format!("{:.2}", res.expected), format!("{:.2}", res.mean), format!("{:.2}", res.variance), format!("{:.2}", res.max)];
+        let units = ["mm", "mm", "mm²", "mm"];
+        for (((name, help), v), u) in STATS_HELP.iter().zip(&values).zip(units) {
+            h += &format!("<tr><th>{name} [{u}]</th><td class=\"n\">{v}</td><td class=\"nota\">{}</td></tr>\n", esc(help));
+        }
+        h += "</table>\n";
+        h += &format!(
+            "<p><span class=\"esito\" style=\"background:rgb({r},{g},{b})\">{}</span> <span class=\"nota\">{}</span></p>\n",
+            res.verdict.text(),
+            esc(&res.verdict.hint())
+        );
+        h += "<h2>Scostamenti dei punti</h2>\n<p class=\"nota\">dx dy dz = punto world − oggetto · punto local [mm]</p>\n";
+        h += "<table>\n<tr><th>Punto</th><th>dx</th><th>dy</th><th>dz</th><th>Distanza</th><th>Valido</th></tr>\n";
+        for row in rows {
+            let class = if !row.on { " class=\"off\"" } else if res.worst.as_ref() == Some(&row.name) { " class=\"worst\"" } else { "" };
+            let d = row.delta.unwrap_or(DVec3::ZERO);
+            h += &format!(
+                "<tr{class}><td>{n}/{n}</td><td class=\"n\">{:.3}</td><td class=\"n\">{:.3}</td><td class=\"n\">{:.3}</td><td class=\"n\">{:.3}</td><td>{}</td></tr>\n",
+                d.x,
+                d.y,
+                d.z,
+                row.deviation.unwrap_or(0.0),
+                if row.on { "sì" } else { "no" },
+                n = esc(&row.name)
+            );
+        }
+        h += "</table>\n";
+        h += &format!(
+            "<p class=\"nota\">Esito: OK fino a {TOL_OK} mm di errore massimo, accettabile fino a {TOL_ACCEPTABLE} mm. I punti non validi non entrano nel calcolo né nella statistica.</p>\n"
+        );
+        h += &format!("<p class=\"nota\">{} {}</p>\n</body>\n</html>\n", crate::APP_NAME, env!("CARGO_PKG_VERSION"));
+        h
     }
 }
 
@@ -266,15 +451,28 @@ pub fn difference(computed: &Pose, current: &Pose) -> Pose {
     Pose { xyz: computed.xyz - current.xyz, abc: Vec3::new(wrap(d.x), wrap(d.y), wrap(d.z)) }
 }
 
-/// Punti local sopra la vista (coordinate della matematica in posizione 0), con nome e deviazione.
-pub fn draw_overlay(ui: &egui::Ui, rect: egui::Rect, rows: &[Row], to_screen: impl Fn(Vec3) -> Option<egui::Pos2>) {
+/// Punti sopra la vista, sulla matematica in posizione 0: i local o i world riportati con
+/// l'oggetto calcolato (`world`), con nome, distanza e il colore dell'esito del punto.
+pub fn draw_overlay(ui: &egui::Ui, rect: egui::Rect, rows: &[Row], world: bool, to_screen: impl Fn(Vec3) -> Option<egui::Pos2>) {
     let painter = ui.painter_at(rect);
-    let color = egui::Color32::from_rgb(120, 230, 120);
     let font = egui::FontId::proportional(13.0);
     for r in rows {
-        let Some(s) = to_screen(r.local.as_vec3()) else { continue };
-        let c = if r.on { color } else { color.gamma_multiply(0.35) };
-        painter.circle(s, 5.0, c, egui::Stroke::new(1.5_f32, egui::Color32::BLACK));
+        let pos = if world { r.world_on_part.unwrap_or(r.local) } else { r.local };
+        let Some(s) = to_screen(pos.as_vec3()) else { continue };
+        let color = match r.verdict() {
+            Some(v) => {
+                let (red, g, b) = v.rgb();
+                egui::Color32::from_rgb(red, g, b)
+            }
+            None => egui::Color32::from_rgb(120, 230, 120),
+        };
+        let c = if r.on { color } else { egui::Color32::from_gray(150).gamma_multiply(0.6) };
+        if world {
+            // World: anello, per riconoscerli a colpo d'occhio dai local
+            painter.circle(s, 5.5, egui::Color32::from_black_alpha(120), egui::Stroke::new(3.0_f32, c));
+        } else {
+            painter.circle(s, 5.0, c, egui::Stroke::new(1.5_f32, egui::Color32::BLACK));
+        }
         let text = match r.deviation {
             Some(d) => format!("{}  {d:.2}", r.name),
             None => r.name.clone(),
@@ -314,7 +512,7 @@ mod tests {
             ("P5", Vec3::new(4600.0, 860.0, -25.0)),
         ];
         let mut world: Vec<(&str, Vec3)> = local.iter().map(|(n, p)| (*n, object.transform_point3(*p))).collect();
-        world[4].1 += Vec3::new(0.0, 0.0, 6.0); // P5 preso male
+        world[4].1 += Vec3::new(0.0, 0.0, 12.0); // P5 preso male
         world.reverse(); // l'ordine non conta: vanno per nome
         let mut m = ObjectMeasure {
             local: Some(parse_point_file("RIFL.tid".into(), &file("L", &local, Some("P9"))).unwrap()),
@@ -326,11 +524,26 @@ mod tests {
         let res = res.unwrap();
         let worst = rows.iter().max_by(|a, b| a.deviation.unwrap().total_cmp(&b.deviation.unwrap())).unwrap();
         assert_eq!(worst.name, "P5");
-        assert!(res.rms > 0.5);
+        assert_eq!(res.worst.as_deref(), Some("P5"));
+        // Statistica come nel software di calibrazione: sulle 15 componenti dx dy dz
+        let comps: Vec<f64> = rows.iter().flat_map(|r| r.delta.unwrap().to_array()).collect();
+        assert!(res.expected.abs() < 1e-6, "minimi quadrati: valore atteso 0, {}", res.expected);
+        assert!((res.mean - comps.iter().map(|c| c.abs()).sum::<f64>() / 15.0).abs() < 1e-9);
+        assert!((res.variance - comps.iter().map(|c| c * c).sum::<f64>() / 15.0).abs() < 1e-9);
+        assert!((res.max - comps.iter().fold(0.0f64, |m, c| m.max(c.abs()))).abs() < 1e-12);
+        let p5 = rows.iter().find(|r| r.name == "P5").unwrap();
+        assert!(p5.delta.unwrap().z > 3.0 && p5.delta.unwrap().z < 12.0, "dx dy dz = world − oggetto·local: P5 sta più in alto, {:?}", p5.delta);
+        assert_eq!(res.verdict, Verdict::Acceptable, "{}", res.max);
+        let html = m.report_html(&rows, &res, "18/11/2026 08:00:00");
+        assert!(html.contains("<tr class=\"worst\"><td>P5/P5</td>") && html.contains("Accettabile") && html.contains("RIF_misura"), "{html}");
         m.set_on("p5", false);
         let (rows, res) = m.compute();
         let res = res.unwrap();
         assert!(res.max < 1e-2, "senza P5 torna esatto: {}", res.max);
+        assert_eq!(res.verdict, Verdict::Ok);
+        assert!(rows[0].world_on_part.unwrap().distance(rows[0].local) < 1e-2, "world riportato sulla matematica");
+        assert_eq!(rows[0].verdict(), Some(Verdict::Ok));
+        assert_eq!(rows[4].verdict(), Some(Verdict::NotOk), "il punto escluso ha ancora il suo esito");
         assert!(rows[4].deviation.unwrap() > 5.0, "la deviazione del punto escluso si vede ancora");
         assert!(res.pose.xyz.distance(Vec3::new(-1200.0, -4100.0, 120.0)) < 1e-2, "{:?}", res.pose);
         assert!(res.pose.abc.distance(Vec3::new(1.5, -0.3, 91.0)) < 1e-3, "{:?}", res.pose);

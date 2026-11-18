@@ -296,7 +296,20 @@ pub fn draw_viewport(ui: &mut egui::Ui, app: &mut crate::app::GestoreApp) {
                 }
             }
         }
-        let hinge_picking = hinge_picking || align_picking;
+        // «Allinea su misure»: il clic prende un punto della misura in scelta
+        let distance_picking = app.ui_state.position.open && app.ui_state.position.distances.picking.is_some() && !hinge_picking && !align_picking;
+        if distance_picking && response.clicked() {
+            if let (Some(scene), Some(pos)) = (&app.scene_graph, response.interact_pointer_pos()) {
+                renderer.sync_with_scene(scene, &app.ui_state.selected_nodes());
+                let (origin, dir) = pointer_ray(&renderer.camera, rect, pos);
+                if let Some((mesh, t, triangle)) = pick(scene, &renderer.visibility, section, (origin, dir)) {
+                    let camera = &renderer.camera;
+                    let point = super::measure::snap(triangle, origin + dir * t, |v| to_screen(camera, rect, v), pos);
+                    app.ui_state.position.distances.add_point(super::measure::Measure::anchored(scene, mesh, point));
+                }
+            }
+        }
+        let hinge_picking = hinge_picking || align_picking || distance_picking;
         let measuring = app.ui_state.measure.is_some() || hinge_picking;
         if app.ui_state.measure.is_some() && !hinge_picking && response.clicked() {
             if let (Some(scene), Some(pos)) = (&app.scene_graph, response.interact_pointer_pos()) {
@@ -416,7 +429,8 @@ pub fn draw_viewport(ui: &mut egui::Ui, app: &mut crate::app::GestoreApp) {
     let menu_open = !(app.ui_state.measure.is_some()
         || app.ui_state.eyedropper
         || app.ui_state.position.hinge.picking
-        || app.ui_state.position.points.picking.is_some());
+        || app.ui_state.position.points.picking.is_some()
+        || app.ui_state.position.distances.picking.is_some());
     if menu_open && app.scene_graph.is_some() {
         let mut chosen = Vec::new();
         response.context_menu(|ui| context_menu(ui, app, &mut chosen));
@@ -542,13 +556,19 @@ pub fn draw_viewport(ui: &mut egui::Ui, app: &mut crate::app::GestoreApp) {
             let size = scene.compute_bounding_box().diagonal();
             super::position_panel::draw_overlay(ui, rect, &app.ui_state.position.hinge, |v| to_screen(camera, rect, v), size);
             super::point_align::draw_overlay(ui, rect, &app.ui_state.position.points, |v| to_screen(camera, rect, v));
-            // «Misura dell'oggetto» aperta: i punti local sulla matematica in posizione 0
+            super::distance_align::draw_overlay(ui, rect, &app.ui_state.position.distances, |v| to_screen(camera, rect, v));
+            // «Misura dell'oggetto» aperta: i punti local o world sulla matematica in posizione 0
             if app.settings.position_sections[7] {
-                let (rows, _) = app.ui_state.position.measure.compute();
-                super::object_measure::draw_overlay(ui, rect, &rows, |v| to_screen(camera, rect, v));
+                let m = &app.ui_state.position.measure;
+                let (rows, _) = m.compute();
+                super::object_measure::draw_overlay(ui, rect, &rows, m.show_world, |v| to_screen(camera, rect, v));
             }
         }
-        if (app.ui_state.position.hinge.picking || app.ui_state.position.points.picking.is_some()) && response.hovered() {
+        if (app.ui_state.position.hinge.picking
+            || app.ui_state.position.points.picking.is_some()
+            || app.ui_state.position.distances.picking.is_some())
+            && response.hovered()
+        {
             ui.ctx().set_cursor_icon(egui::CursorIcon::Crosshair);
         }
     }

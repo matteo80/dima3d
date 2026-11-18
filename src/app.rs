@@ -690,6 +690,12 @@ impl GestoreApp {
             self.ui_state.eyedropper = false;
             self.ui_state.position.hinge.picking = false;
             self.ui_state.position.points.picking = None;
+            self.ui_state.position.distances.stop_picking();
+        }
+        if esc_key && self.ui_state.position.distances.picking.is_some() {
+            self.ui_state.position.distances.stop_picking();
+            self.ui_state.status_message = "Presa dei punti della misura finita".to_string();
+            return;
         }
         if esc_key && self.ui_state.position.points.picking.is_some() {
             self.ui_state.position.points.picking = None;

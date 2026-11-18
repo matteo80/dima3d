@@ -146,7 +146,7 @@ pub struct Settings {
 }
 
 /// Sezioni richiudibili della finestra Posizione
-pub const POSITION_SECTIONS: usize = 8;
+pub const POSITION_SECTIONS: usize = 9;
 
 impl Default for Settings {
     fn default() -> Self {
@@ -168,7 +168,7 @@ impl Default for Settings {
             invert_zoom: false,
             saved_colors: Vec::new(),
             step: StepMesh::default(),
-            position_sections: [true, true, true, true, false, false, false, false],
+            position_sections: [true, true, true, true, false, false, false, false, false],
             check_updates: true,
             skipped_version: String::new(),
             cabin: crate::cabin::CabinParams::default(),
@@ -460,7 +460,7 @@ mod tests {
             invert_zoom: true,
             saved_colors: vec![[0.1, 0.2, 0.3], [1.0, 0.5, 0.0]],
             step: StepMesh { deviation: 0.025, angle: 12.5, relative: true },
-            position_sections: [false, true, false, true, true, false, true, true],
+            position_sections: [false, true, false, true, true, false, true, true, false],
             check_updates: false,
             skipped_version: "0.3.1".to_string(),
             cabin: crate::cabin::CabinParams {

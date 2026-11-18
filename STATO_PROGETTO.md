@@ -962,6 +962,19 @@ Fatto:
       %LOCALAPPDATA%\Programs\Dima3D senza permessi da amministratore, menu Start, desktop facoltativo,
       associazione dei .dima3d facoltativa, disinstallazione. `pacchetto.ps1` lo crea, `pubblica.ps1` lo carica nella
       Release accanto allo zip; dopo un aggiornamento dal programma si aggiorna la versione in «App installate».
+- [x] (2026-11-18, 0.2.38) **Misura dell'oggetto come il software di calibrazione, Allinea su misure, caselle
+      in Applica offset**: (1) Misura dell'oggetto: numeri verificati uguali al software di calibrazione
+      (world = oggetto · local, Eulero Z-Y-X, dx dy dz = world − oggetto · local); tabella dx dy dz, distanza e
+      Valido sì/no, punto peggiore in rosso; statistica sulle componenti (valore atteso = media con segno,
+      media = media dei valori assoluti, dispersione = media dei quadrati in mm², errore massimo) con le
+      spiegazioni; esito OK ≤ 3 mm, Accettabile ≤ 6 mm, Non OK oltre (soglie scelte, lasciate dall'utente);
+      report HTML; sul 3D selettore Local/World (world riportati sulla matematica con l'oggetto calcolato) e
+      punti con il colore dell'esito. (2) Nuova sezione «Allinea su misure» (`src/ui/distance_align.rs`): quote
+      prese a mano con il metro tra un riferimento fermo e il pezzo da spostare (Distanza, ΔX, ΔY, ΔZ), punti
+      presi sul 3D o dallo strumento Misura; minimo 4 misure (posizione veloce: il pezzo si sposta il meno
+      possibile, «Posizione approssimata»), 3 con «Solo spostamento»; posizione esatta con almeno 3 punti
+      sull'oggetto, ognuno da almeno 3 punti del riferimento («Schema completo»); guida illustrata con disegni.
+      (3) Applica offset: casella accanto a ogni coordinata X Y Z A B C, le spente valgono 0.
 - [x] (2026-11-17, 0.2.37) **Programma: terna World e pulsanti Logica/Punti**: con i soli programmi aperti
       (senza matematica) in alto a sinistra c'è «Centro», la terna World nello zero (stessa impostazione di
       quando c'è la matematica). Niente terna Object separata: la matematica si mette a 0 World e i punti Object
