@@ -1068,6 +1068,8 @@ impl GestoreApp {
                         // Finestra Posizione: valori, offset, calcoli e cerniera ripartono da zero
                         // (restano solo finestra aperta, unità e World)
                         self.ui_state.position.reset_values();
+                        // Le misure salvate erano legate ai pezzi della scena di prima
+                        self.ui_state.scene_measures.clear();
                         self.load_state = LoadState::Ready;
                         self.project.on_loaded(scene.revision);
                         if let Some(p) = self.project.current_path.clone() {

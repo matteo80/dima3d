@@ -518,12 +518,29 @@ pub fn draw_viewport(ui: &mut egui::Ui, app: &mut crate::app::GestoreApp) {
         }
     }
 
+    // Misure salvate nella scena: seguono i pezzi, si disegnano quelle visibili
+    if let (Some(renderer), Some(scene)) = (&app.renderer, &app.scene_graph) {
+        let list = &mut app.ui_state.scene_measures;
+        if !list.items.is_empty() {
+            list.follow(scene);
+            let camera = &renderer.camera;
+            super::measure::draw_saved(ui, rect, list, |v| to_screen(camera, rect, v), scene.compute_bounding_box().diagonal());
+        }
+    }
     // Misura in corso: punti, segmento e quota
     if let (Some(renderer), Some(m), Some(scene)) = (&app.renderer, &mut app.ui_state.measure, &app.scene_graph) {
         let camera = &renderer.camera;
         let size = scene.compute_bounding_box().diagonal();
         m.follow(scene);
-        super::measure::draw(ui, rect, m, |v| to_screen(camera, rect, v), size);
+        if super::measure::draw(ui, rect, m, |v| to_screen(camera, rect, v), size) {
+            if let [a, b] = m.points.as_slice() {
+                let i = app.ui_state.scene_measures.add(*a, *b);
+                let name = app.ui_state.scene_measures.items[i].name.clone();
+                app.ui_state.status_message = format!("{name} salvata nel gruppo «Misure» (sotto l'albero)");
+                // Si riparte da capo per la prossima misura
+                m.points.clear();
+            }
+        }
         ui.ctx().set_cursor_icon(egui::CursorIcon::Crosshair);
     }
     // Centro cabina: la terna nello zero della scena
@@ -1124,5 +1141,37 @@ mod tests {
         app.apply(crate::app::Action::Move { nodes: vec![red], matrix: glam::Mat4::from_translation(shift) });
         frame(&ctx, &mut app, vec![]);
         assert!((pos(&app, 0) - (start + shift)).length() < 1e-3, "{:?}", pos(&app, 0));
+    }
+
+    /// «Salva»: la misura va nel gruppo «Misure», lo strumento riparte da capo, la misura salvata
+    /// segue il pezzo spostato e il progetto risulta modificato.
+    #[test]
+    fn saved_measure_goes_in_the_scene_and_follows_the_piece() {
+        let _gpu = crate::renderer::gpu_lock();
+        let Some(mut app) = app_with_renderer() else { return };
+        let ctx = egui::Context::default();
+        let texts = frame(&ctx, &mut app, vec![]);
+        let center = viewport_center(&texts);
+        app.ui_state.measure = Some(Default::default());
+        click(&ctx, &mut app, center);
+        let red = node(app.scene_graph.as_ref().unwrap(), "R1");
+        let fixed = glam::Vec3::new(-50.0, 0.0, 0.0);
+        app.ui_state.measure.as_mut().unwrap().points.push(super::super::measure::MeasurePoint::free(fixed, false));
+        let start = app.ui_state.measure.as_ref().unwrap().points[0].pos;
+        assert!(!app.is_dirty());
+        let texts = frame(&ctx, &mut app, vec![]);
+        let (_, at) = texts.iter().find(|(t, _)| t.ends_with("Salva")).expect("pulsante Salva");
+        click(&ctx, &mut app, *at + egui::vec2(12.0, 8.0));
+        let list = &app.ui_state.scene_measures;
+        assert_eq!(list.items.len(), 1, "{}", app.ui_state.status_message);
+        assert_eq!(list.items[0].name, "Misura 1");
+        assert!(app.ui_state.measure.as_ref().unwrap().points.is_empty(), "si riparte da capo");
+        assert!(app.is_dirty(), "la misura salvata è una modifica del progetto");
+        let shift = glam::Vec3::new(100.0, 0.0, 0.0);
+        app.apply(crate::app::Action::Move { nodes: vec![red], matrix: glam::Mat4::from_translation(shift) });
+        frame(&ctx, &mut app, vec![]);
+        let m = &app.ui_state.scene_measures.items[0];
+        assert!((m.points[0].pos - (start + shift)).length() < 1e-3, "{:?}", m.points[0].pos);
+        assert_eq!(m.points[1].pos, fixed);
     }
 }

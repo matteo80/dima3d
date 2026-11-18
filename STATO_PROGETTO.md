@@ -962,6 +962,18 @@ Fatto:
       %LOCALAPPDATA%\Programs\Dima3D senza permessi da amministratore, menu Start, desktop facoltativo,
       associazione dei .dima3d facoltativa, disinstallazione. `pacchetto.ps1` lo crea, `pubblica.ps1` lo carica nella
       Release accanto allo zip; dopo un aggiornamento dal programma si aggiorna la versione in «App installate».
+- [x] (2026-11-18, 0.2.39) **Finestre strette, misure salvate nella scena, Allinea su misure Veloce/Precisa**:
+      (1) Regola per tutte le finestre (anche agganciate, guide e albero): si stringono fino a 120 punti e sotto
+      la larghezza del contenuto compare la barra di scorrimento orizzontale (`dock::NARROW_WIDTH`,
+      `dock::narrow`). (2) Strumento Misura: «Salva» mette la misura nel gruppo «Misure» sotto l'albero (occhio,
+      clic = evidenzia, doppio clic = nome, X = togli; ΔX ΔY ΔZ al passaggio del mouse); i punti seguono i pezzi
+      su cui sono presi, le misure si disegnano anche a strumento spento e vanno nel progetto
+      (`[misure salvate]`). (3) Allinea su misure: interruttore Veloce (4 misure) / Precisa (3×3); in Precisa un
+      clic sul punto fisso e 3 clic sul mobile, legati a quel fisso, almeno 3 fissi, solo distanze, Allinea solo
+      a schema completo; punti chiamati F1… (fissi) e M1… (mobili); avvertenza nella guida: fissi nel piano dei
+      punti M = sopra/sotto indistinti (~10 mm di errore nei test). (4) Le misure di Allinea su misure vanno nel
+      progetto (`[allinea su misure]`, formato 6: le versioni precedenti non lo aprono) e cambiarle segna il
+      progetto come modificato.
 - [x] (2026-11-18, 0.2.38) **Misura dell'oggetto come il software di calibrazione, Allinea su misure, caselle
       in Applica offset**: (1) Misura dell'oggetto: numeri verificati uguali al software di calibrazione
       (world = oggetto · local, Eulero Z-Y-X, dx dy dz = world − oggetto · local); tabella dx dy dz, distanza e

@@ -153,6 +153,10 @@ pub struct ProjectState {
     pub restore: Option<Restore>,
     /// Raggruppamento con cui sono stati aperti i modelli (va nel progetto)
     pub loaded_cluster: Option<crate::clusterer::ClusterConfig>,
+    /// Misure di «Allinea su misure» all'ultimo salvataggio o apertura del progetto
+    pub saved_measures: Vec<crate::ui::distance_align::HandMeasure>,
+    /// Misure salvate nella scena all'ultimo salvataggio o apertura del progetto
+    pub saved_scene_measures: Vec<crate::ui::measure::SceneMeasure>,
 }
 
 impl ProjectState {
@@ -164,6 +168,8 @@ impl ProjectState {
         }
         self.loading_adds = false;
         self.saved_revision = revision;
+        self.saved_measures.clear();
+        self.saved_scene_measures.clear();
         self.undo.clear();
         self.redo.clear();
         self.last_coalesce = None;
@@ -194,7 +200,10 @@ impl ProjectState {
 impl GestoreApp {
     /// Ci sono modifiche (visibilità, eliminazioni, colori, nomi) non ancora esportate.
     pub fn is_dirty(&self) -> bool {
+        // Anche le misure di «Allinea su misure» vanno nel progetto
         self.scene_graph.as_ref().is_some_and(|s| s.revision != self.project.saved_revision)
+            || (self.scene_graph.is_some() && self.ui_state.position.distances.rows != self.project.saved_measures)
+            || (self.scene_graph.is_some() && self.ui_state.scene_measures.items != self.project.saved_scene_measures)
     }
 
     /// Nome del file aperto (per titolo e messaggi); con più file, il primo non chiuso.
@@ -760,7 +769,7 @@ impl GestoreApp {
                 renderer.append_meshes(&scene.shapes_data, &rs.device);
             }
         }
-        for (entry, source) in restore.file.files.iter().zip(sources) {
+        for (entry, &source) in restore.file.files.iter().zip(&sources) {
             let Some(scene) = &self.scene_graph else { break };
             let Some(source) = source else {
                 if entry.copy.is_none() {
@@ -780,6 +789,23 @@ impl GestoreApp {
             warnings.push(format!("{skipped} modifiche del progetto non trovano più il loro pezzo (modello cambiato?)"));
         }
         self.sync_moved_geometry();
+        // «Allinea su misure»: le quote salvate, con i punti di nuovo sui loro pezzi
+        if let Some(scene) = &self.scene_graph {
+            let (rows, lost) = restore.file.restore_measures(scene, &sources);
+            if lost > 0 {
+                warnings.push(format!("Allinea su misure: {lost} punti non trovano più il loro pezzo (restano fermi)"));
+            }
+            self.ui_state.position.distances =
+                crate::ui::distance_align::DistanceAlign::restored(rows, restore.file.only_move, restore.file.mode);
+            self.project.saved_measures = self.ui_state.position.distances.rows.clone();
+            // Misure salvate con lo strumento Misura
+            let (list, lost) = restore.file.restore_scene_measures(scene, &sources);
+            if lost > 0 {
+                warnings.push(format!("Misure: {lost} punti non trovano più il loro pezzo (restano fermi)"));
+            }
+            self.ui_state.scene_measures = list;
+            self.project.saved_scene_measures = self.ui_state.scene_measures.items.clone();
+        }
         if let (Some(view), Some(r)) = (restore.file.camera, &mut self.renderer) {
             r.camera.target = view.target;
             r.camera.distance = view.distance;
@@ -845,7 +871,9 @@ impl GestoreApp {
             orientation: r.camera.orientation,
         });
         let cluster = self.project.loaded_cluster.unwrap_or(self.settings.cluster);
-        let file = crate::project_file::ProjectFile::capture(scene, cluster, camera);
+        let mut file = crate::project_file::ProjectFile::capture(scene, cluster, camera);
+        file.capture_measures(scene, &self.ui_state.position.distances);
+        file.capture_scene_measures(scene, &self.ui_state.scene_measures);
         let unsaved = scene.open_files().filter(|f| f.path.is_none() && f.copy_of.is_none() && !f.generated()).count();
         let revision = scene.revision;
         if let Err(e) = std::fs::write(path, file.to_text(path)) {
@@ -854,6 +882,8 @@ impl GestoreApp {
         }
         self.project.project_path = Some(path.to_path_buf());
         self.project.saved_revision = revision;
+        self.project.saved_measures = self.ui_state.position.distances.rows.clone();
+        self.project.saved_scene_measures = self.ui_state.scene_measures.items.clone();
         let mut s = self.settings.clone();
         s.add_recent(path);
         self.apply_settings(s);

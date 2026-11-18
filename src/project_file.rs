@@ -39,6 +39,20 @@
 //! [robot]                               (centro cabina e robot generati)
 //! centro = x y z simbolo misura
 //! robot = x y z a b c pannello px py | nome   (uno per robot)
+//!
+//! [allinea su misure]                   (quote prese a mano, finestra Posizione)
+//! modo = precisa                        (veloce | precisa)
+//! solo_spostamento = 0
+//! misura = distanza 1234.5 1 | x y z 1 @ 0 12 lx ly lz | x y z 0
+//!                                       (tipo, valore misurato, accesa | punto fisso | punto
+//!                                        mobile: posizione, vertice e, se legato a un pezzo,
+//!                                        @ elemento del progetto, mesh dall'inizio del file,
+//!                                        punto nel pezzo; «-» se manca. I nomi F1, M1… si
+//!                                        ricavano dai punti)
+//!
+//! [misure salvate]                      (gruppo «Misure» dello strumento Misura)
+//! misura = 1 | x y z 1 @ 0 12 lx ly lz | x y z 0 | Passaggio porta
+//!                                       (visibile | i due punti come sopra | nome)
 //! ```
 
 use std::path::{Component, Path, PathBuf};
@@ -52,8 +66,9 @@ use crate::settings::{StepLoad, StepMesh};
 
 pub const EXTENSION: &str = "dima3d";
 /// 2: copie incollate, gruppi creati e pezzi spostati nell'albero. 3: cabina generata.
-/// 4: centro cabina e robot. 5: cerniere salvate.
-const VERSION: u32 = 5;
+/// 4: centro cabina e robot. 5: cerniere salvate. 6: misure di «Allinea su misure» e misure
+/// salvate nella scena.
+const VERSION: u32 = 6;
 
 /// Vista salvata: centro, distanza e orientamento della camera.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -96,11 +111,46 @@ pub struct FileEntry {
     pub hinges: Vec<crate::scene_graph::hinge::SavedHinge>,
 }
 
+/// Punto di una misura salvata.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct SavedPoint {
+    pub pos: Vec3,
+    pub vertex: bool,
+    /// Pezzo su cui è preso: elemento del progetto, mesh dall'inizio del suo file, punto nel pezzo
+    /// prima del piazzamento
+    pub anchor: Option<(usize, u32, Vec3)>,
+}
+
+/// Quota di «Allinea su misure» salvata nel progetto.
+#[derive(Debug, Clone, PartialEq)]
+pub struct SavedMeasure {
+    pub kind: crate::ui::distance_align::Kind,
+    pub measured: f32,
+    pub on: bool,
+    pub points: [Option<SavedPoint>; 2],
+}
+
+/// Misura salvata nella scena (gruppo «Misure»).
+#[derive(Debug, Clone, PartialEq)]
+pub struct SavedSceneMeasure {
+    pub name: String,
+    pub visible: bool,
+    pub points: [SavedPoint; 2],
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct ProjectFile {
     pub cluster: ClusterConfig,
     pub camera: Option<CameraView>,
     pub files: Vec<FileEntry>,
+    /// «Allinea su misure»: le quote e «Solo spostamento»
+    pub measures: Vec<SavedMeasure>,
+    pub only_move: bool,
+    pub mode: crate::ui::distance_align::Mode,
+    /// Misure salvate con lo strumento Misura
+    pub scene_measures: Vec<SavedSceneMeasure>,
+    /// Solo al salvataggio: elemento del progetto di ogni modello della scena
+    pub entry_of: Vec<Option<usize>>,
 }
 
 /// Dimensione e data di modifica di un file (0 se non si leggono).
@@ -176,6 +226,63 @@ fn parse_ranges(text: &str) -> Option<Vec<u32>> {
 fn floats<const N: usize>(text: &str) -> Option<[f32; N]> {
     let values: Vec<f32> = text.split_whitespace().map(str::parse).collect::<Result<_, _>>().ok()?;
     values.try_into().ok()
+}
+
+/// Punto di una misura nel progetto: `x y z vertice [@ elemento mesh lx ly lz]`, «-» se manca.
+fn point_text(p: &Option<SavedPoint>) -> String {
+    match p {
+        None => "-".to_string(),
+        Some(p) => {
+            let mut t = format!("{} {} {} {}", p.pos.x, p.pos.y, p.pos.z, u8::from(p.vertex));
+            if let Some((entry, mesh, l)) = p.anchor {
+                t.push_str(&format!(" @ {entry} {mesh} {} {} {}", l.x, l.y, l.z));
+            }
+            t
+        }
+    }
+}
+
+fn parse_point(text: &str) -> Option<Option<SavedPoint>> {
+    if text == "-" {
+        return Some(None);
+    }
+    let (pos, anchor) = match text.split_once('@') {
+        Some((p, a)) => (p, Some(a)),
+        None => (text, None),
+    };
+    let [x, y, z, v] = floats::<4>(pos)?;
+    let anchor = match anchor {
+        Some(a) => {
+            let mut it = a.split_whitespace();
+            let entry: usize = it.next()?.parse().ok()?;
+            let mesh: u32 = it.next()?.parse().ok()?;
+            let [lx, ly, lz] = floats::<3>(&it.collect::<Vec<_>>().join(" "))?;
+            Some((entry, mesh, Vec3::new(lx, ly, lz)))
+        }
+        None => None,
+    };
+    Some(Some(SavedPoint { pos: Vec3::new(x, y, z), vertex: v != 0.0, anchor }))
+}
+
+/// Riga `misura = …` di «Allinea su misure».
+fn parse_measure(value: &str) -> Option<SavedMeasure> {
+    let parts: Vec<&str> = value.split('|').map(str::trim).collect();
+    let [head, a, b] = parts.as_slice() else { return None };
+    let mut it = head.split_whitespace();
+    let kind = crate::ui::distance_align::Kind::from_key(it.next()?)?;
+    let measured: f32 = it.next()?.parse().ok()?;
+    let on = it.next()? != "0";
+    Some(SavedMeasure { kind, measured, on, points: [parse_point(a)?, parse_point(b)?] })
+}
+
+/// Riga `misura = …` delle misure salvate (il nome per ultimo: può contenere «|»).
+fn parse_scene_measure(value: &str) -> Option<SavedSceneMeasure> {
+    let mut parts = value.splitn(4, '|').map(str::trim);
+    let visible = parts.next()? != "0";
+    let a = parse_point(parts.next()?)??;
+    let b = parse_point(parts.next()?)??;
+    let name = parts.next().unwrap_or("").to_string();
+    Some(SavedSceneMeasure { name, visible, points: [a, b] })
 }
 
 impl ProjectFile {
@@ -294,7 +401,119 @@ impl ProjectFile {
             }
             files.push(entry);
         }
-        ProjectFile { cluster, camera, files }
+        ProjectFile {
+            cluster,
+            camera,
+            files,
+            measures: Vec::new(),
+            only_move: false,
+            mode: Default::default(),
+            scene_measures: Vec::new(),
+            entry_of,
+        }
+    }
+
+    /// Punto da salvare: se legato a un pezzo, elemento del progetto e mesh con i numeri del
+    /// file, come le posizioni.
+    fn save_point(&self, scene: &SceneGraph, p: &crate::ui::measure::MeasurePoint) -> SavedPoint {
+        let anchor = p.anchor.and_then(|a| {
+            let source = scene.sources.iter().position(|s| s.meshes.contains(&a.mesh))?;
+            let entry = self.entry_of.get(source).copied().flatten()?;
+            Some((entry, a.mesh - scene.sources[source].meshes.start, a.local))
+        });
+        SavedPoint { pos: p.pos, vertex: p.vertex, anchor }
+    }
+
+    /// Punto riaperto sui pezzi della scena; `sources` = modello della scena di ogni elemento del
+    /// progetto. Se il pezzo non c'è più resta dov'era, staccato, e `lost` aumenta.
+    fn load_point(scene: &SceneGraph, sources: &[Option<usize>], p: &SavedPoint, lost: &mut usize) -> crate::ui::measure::MeasurePoint {
+        use crate::ui::measure::{Anchor, MeasurePoint};
+        let mut out = MeasurePoint::free(p.pos, p.vertex);
+        if let Some((entry, rel, local)) = p.anchor {
+            let mesh = sources
+                .get(entry)
+                .copied()
+                .flatten()
+                .and_then(|s| scene.sources.get(s))
+                .and_then(|s| s.meshes.start.checked_add(rel).filter(|m| s.meshes.contains(m)));
+            match mesh.and_then(|m| scene.shapes_data.get(m as usize).map(|shape| (m, shape))) {
+                Some((mesh, shape)) => {
+                    out.pos = scene.placement(mesh).transform_point3(local);
+                    out.anchor = Some(Anchor { mesh, key: (shape.source_start, shape.source_end), local });
+                }
+                None => *lost += 1,
+            }
+        }
+        out
+    }
+
+    /// Aggiunge le misure salvate nella scena (dopo `capture`).
+    pub fn capture_scene_measures(&mut self, scene: &SceneGraph, list: &crate::ui::measure::SceneMeasures) {
+        let measures = list
+            .items
+            .iter()
+            .map(|m| SavedSceneMeasure {
+                name: m.name.clone(),
+                visible: m.visible,
+                points: [self.save_point(scene, &m.points[0]), self.save_point(scene, &m.points[1])],
+            })
+            .collect();
+        self.scene_measures = measures;
+    }
+
+    /// Misure salvate nella scena riaperta, e quanti punti si sono staccati.
+    pub fn restore_scene_measures(&self, scene: &SceneGraph, sources: &[Option<usize>]) -> (crate::ui::measure::SceneMeasures, usize) {
+        let mut lost = 0;
+        let items = self
+            .scene_measures
+            .iter()
+            .map(|m| crate::ui::measure::SceneMeasure {
+                name: m.name.clone(),
+                visible: m.visible,
+                points: [
+                    Self::load_point(scene, sources, &m.points[0], &mut lost),
+                    Self::load_point(scene, sources, &m.points[1], &mut lost),
+                ],
+            })
+            .collect();
+        (crate::ui::measure::SceneMeasures { items, ..Default::default() }, lost)
+    }
+
+    /// Aggiunge le misure di «Allinea su misure» (dopo `capture`).
+    pub fn capture_measures(&mut self, scene: &SceneGraph, align: &crate::ui::distance_align::DistanceAlign) {
+        let point = |p: &crate::ui::measure::MeasurePoint| self.save_point(scene, p);
+        let measures = align
+            .rows
+            .iter()
+            .map(|r| SavedMeasure {
+                kind: r.kind,
+                measured: r.measured,
+                on: r.on,
+                points: [r.points[0].as_ref().map(point), r.points[1].as_ref().map(point)],
+            })
+            .collect();
+        self.measures = measures;
+        self.only_move = align.only_move;
+        self.mode = align.mode;
+    }
+
+    /// Misure del progetto con i pezzi della scena riaperta; `sources` = modello della scena di
+    /// ogni elemento del progetto. Un punto il cui pezzo non c'è più resta dov'era, staccato.
+    /// Ritorna le misure e quanti punti si sono staccati.
+    pub fn restore_measures(&self, scene: &SceneGraph, sources: &[Option<usize>]) -> (Vec<crate::ui::distance_align::HandMeasure>, usize) {
+        let mut lost = 0;
+        let mut point = |p: &SavedPoint| Self::load_point(scene, sources, p, &mut lost);
+        let rows = self
+            .measures
+            .iter()
+            .map(|m| crate::ui::distance_align::HandMeasure {
+                kind: m.kind,
+                points: [m.points[0].as_ref().map(&mut point), m.points[1].as_ref().map(&mut point)],
+                measured: m.measured,
+                on: m.on,
+            })
+            .collect();
+        (rows, lost)
     }
 
     /// Testo del progetto salvato in `project` (per i percorsi relativi).
@@ -371,6 +590,33 @@ impl ProjectFile {
                 out.push_str(&format!("{} = {}\n", h.text_key(), h.to_text(&h.nodes, h.ref_mesh)));
             }
         }
+        if !self.measures.is_empty() {
+            out.push_str("\n[allinea su misure]\n");
+            let mode = if self.mode == crate::ui::distance_align::Mode::Precise { "precisa" } else { "veloce" };
+            out.push_str(&format!("modo = {mode}\nsolo_spostamento = {}\n", u8::from(self.only_move)));
+            for m in &self.measures {
+                out.push_str(&format!(
+                    "misura = {} {} {} | {} | {}\n",
+                    m.kind.key(),
+                    m.measured,
+                    u8::from(m.on),
+                    point_text(&m.points[0]),
+                    point_text(&m.points[1])
+                ));
+            }
+        }
+        if !self.scene_measures.is_empty() {
+            out.push_str("\n[misure salvate]\n");
+            for m in &self.scene_measures {
+                out.push_str(&format!(
+                    "misura = {} | {} | {} | {}\n",
+                    u8::from(m.visible),
+                    point_text(&Some(m.points[0])),
+                    point_text(&Some(m.points[1])),
+                    m.name.replace(['\r', '\n'], " ")
+                ));
+            }
+        }
         out
     }
 
@@ -378,13 +624,32 @@ impl ProjectFile {
     /// se il file esiste lì, altrimenti resta l'assoluto.
     pub fn from_text(text: &str, project: &Path) -> Result<ProjectFile, String> {
         let base = project.parent().unwrap_or(Path::new(""));
-        let mut out = ProjectFile { cluster: ClusterConfig::default(), camera: None, files: Vec::new() };
+        let mut out = ProjectFile {
+            cluster: ClusterConfig::default(),
+            camera: None,
+            files: Vec::new(),
+            measures: Vec::new(),
+            only_move: false,
+            mode: Default::default(),
+            scene_measures: Vec::new(),
+            entry_of: Vec::new(),
+        };
         let mut seen_header = false;
+        // Dentro la sezione [allinea su misure] o [misure salvate]
+        let mut in_measures = false;
+        let mut in_saved = false;
         let bad = |line: usize| format!("Riga {} del progetto non valida", line + 1);
         for (i, raw) in text.lines().enumerate() {
             let line = raw.trim();
             if line.is_empty() || line.starts_with('#') {
                 continue;
+            }
+            if line.starts_with('[') {
+                in_measures = line == "[allinea su misure]";
+                in_saved = line == "[misure salvate]";
+                if in_measures || in_saved {
+                    continue;
+                }
             }
             if line == "[file]" {
                 out.files.push(FileEntry { scale: 1.0, ..Default::default() });
@@ -410,6 +675,27 @@ impl ProjectFile {
                     return Err(format!("Progetto salvato da una versione più nuova di Dima 3D (formato {v})"));
                 }
                 seen_header = true;
+                continue;
+            }
+            if in_saved {
+                if key == "misura" {
+                    out.scene_measures.push(parse_scene_measure(value).ok_or_else(|| bad(i))?);
+                }
+                continue;
+            }
+            if in_measures {
+                match key {
+                    "solo_spostamento" => out.only_move = value != "0",
+                    "modo" => {
+                        out.mode = if value == "precisa" {
+                            crate::ui::distance_align::Mode::Precise
+                        } else {
+                            crate::ui::distance_align::Mode::Quick
+                        }
+                    }
+                    "misura" => out.measures.push(parse_measure(value).ok_or_else(|| bad(i))?),
+                    _ => {}
+                }
                 continue;
             }
             match (out.files.last_mut(), key) {
@@ -690,8 +976,37 @@ mod tests {
             cluster: ClusterConfig { tolerance: 0.75, min_matching_vertices: 20 },
             camera: Some(CameraView { target: Vec3::new(1.0, 2.0, 3.0), distance: 4500.0, orientation: Quat::from_rotation_y(0.4) }),
             files: vec![file.clone(), FileEntry { path: PathBuf::from(r"E:\b.stl"), scale: 1.0, ..Default::default() }, copy.clone(), cabin.clone()],
+            measures: vec![
+                SavedMeasure {
+                    kind: crate::ui::distance_align::Kind::Distance,
+                    measured: 1234.5,
+                    on: true,
+                    points: [
+                        Some(SavedPoint { pos: Vec3::new(1.5, -2.0, 3.25), vertex: true, anchor: Some((0, 12, Vec3::new(1.0, 2.0, 3.0))) }),
+                        Some(SavedPoint { pos: Vec3::new(4.0, 5.0, 6.0), vertex: false, anchor: None }),
+                    ],
+                },
+                SavedMeasure { kind: crate::ui::distance_align::Kind::Z, measured: 0.0, on: false, points: [None, None] },
+            ],
+            only_move: true,
+            mode: crate::ui::distance_align::Mode::Precise,
+            scene_measures: vec![SavedSceneMeasure {
+                name: "Passaggio | porta".into(),
+                visible: false,
+                points: [
+                    SavedPoint { pos: Vec3::new(1.0, 2.0, 3.0), vertex: true, anchor: Some((3, 0, Vec3::new(-1.0, 0.5, 2.0))) },
+                    SavedPoint { pos: Vec3::new(10.0, 2.0, 3.0), vertex: false, anchor: None },
+                ],
+            }],
+            entry_of: Vec::new(),
         };
         let text = p.to_text(project);
+        assert!(text.contains("modo = precisa\nsolo_spostamento = 1\nmisura = distanza 1234.5 1 | 1.5 -2 3.25 1 @ 0 12 1 2 3 | 4 5 6 0\n"), "{text}");
+        let back = ProjectFile::from_text(&text, project).unwrap();
+        assert_eq!((&back.measures, back.only_move, back.mode), (&p.measures, true, p.mode), "misure di Allinea su misure");
+        assert_eq!(back.scene_measures, p.scene_measures, "misure salvate nella scena");
+        assert!(text.contains("[misure salvate]\nmisura = 0 | 1 2 3 1 @ 3 0 -1 0.5 2 | 10 2 3 0 | Passaggio | porta\n"), "{text}");
+        assert_eq!(back.files.len(), 4, "la sezione delle misure non è un modello");
         assert!(text.contains(r"percorso = modelli\pezzo uno.wrl"), "{text}");
         let back = ProjectFile::from_text(&text, project).unwrap();
         assert_eq!(back.cluster, p.cluster);

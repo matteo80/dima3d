@@ -62,6 +62,8 @@ pub struct UiState {
     pub unit_suggestions: Vec<UnitSuggestion>,
     /// Strumento di misura attivo (il clic nella vista prende punti invece di selezionare)
     pub measure: Option<measure::Measure>,
+    /// Misure salvate nella scena (gruppo «Misure» sotto l'albero, vanno nel progetto)
+    pub scene_measures: measure::SceneMeasures,
     /// Pipetta attiva: il clic nella vista legge il colore di un pezzo invece di selezionare
     pub eyedropper: bool,
     /// Finestra Info aperta
@@ -125,6 +127,7 @@ impl Default for UiState {
             load_warnings: Vec::new(),
             unit_suggestions: Vec::new(),
             measure: None,
+            scene_measures: Default::default(),
             eyedropper: false,
             about: false,
             section: None,
@@ -529,17 +532,24 @@ pub fn draw_main_layout(ctx: &egui::Context, app: &mut crate::app::GestoreApp) {
     // ── SidePanel: scene tree ──────────────────────────────────────────────────
     egui::SidePanel::left("scene_tree_panel")
         .resizable(true)
-        .min_width(200.0)
+        .min_width(dock::NARROW_WIDTH)
         .default_width(280.0)
         // Rete di sicurezza: il pannello non può mai togliere più di metà finestra alla vista 3D
         .max_width((ctx.screen_rect().width() * 0.5).max(220.0))
         .show(ctx, |ui| {
+            // Gruppo «Misure» (misure salvate) sotto l'albero, sopra le proprietà
+            if !app.ui_state.scene_measures.items.is_empty() && app.scene_graph.is_some() {
+                egui::TopBottomPanel::bottom("misure_salvate")
+                    .resizable(false)
+                    .frame(egui::Frame::new().inner_margin(egui::Margin::symmetric(0, 4)))
+                    .show_inside(ui, |ui| dock::narrow(ui, 200.0, |ui| draw_scene_measures(ui, app)));
+            }
             // Proprietà della selezione in fondo; l'albero occupa il resto
             if app.ui_state.selected_node.is_some() && app.scene_graph.is_some() {
                 egui::TopBottomPanel::bottom("properties_panel")
                     .resizable(false)
                     .frame(egui::Frame::new().inner_margin(egui::Margin::symmetric(0, 6)))
-                    .show_inside(ui, |ui| properties::draw(ui, app));
+                    .show_inside(ui, |ui| dock::narrow(ui, 200.0, |ui| properties::draw(ui, app)));
             }
             // L'albero gestisce da sé lo ScrollArea (virtualizzato con show_rows)
             scene_tree::draw_scene_tree(ui, app);
@@ -590,5 +600,80 @@ pub(crate) mod tests {
         for events in [vec![egui::Event::PointerMoved(at)], vec![button(true)], vec![button(false)], vec![]] {
             frame(ctx, app, events);
         }
+    }
+}
+
+/// Gruppo «Misure» sotto l'albero: occhio per mostrarle, clic per evidenziarla nella vista,
+/// doppio clic per cambiare il nome, X per toglierla. Al passaggio del mouse ΔX ΔY ΔZ.
+fn draw_scene_measures(ui: &mut egui::Ui, app: &mut crate::app::GestoreApp) {
+    use theme::{icon, icon_text};
+    let size = app.scene_graph.as_ref().map_or(1000.0, |s| s.compute_bounding_box().diagonal());
+    let fmt = |v: f32| measure::format_length(v, size);
+    let list = &mut app.ui_state.scene_measures;
+    let all_visible = list.items.iter().all(|m| m.visible);
+    let mut remove = None;
+    let mut clear = false;
+    let header = egui::CollapsingHeader::new(egui::RichText::new(format!("{}  Misure ({})", icon::RULER, list.items.len())).strong())
+        .id_salt("gruppo_misure")
+        .default_open(true)
+        .show(ui, |ui| {
+            egui::ScrollArea::vertical().id_salt("misure_elenco").max_height(180.0).show(ui, |ui| {
+                for i in 0..list.items.len() {
+                    ui.horizontal(|ui| {
+                        let m = &mut list.items[i];
+                        let eye = if m.visible { icon::EYE } else { icon::EYE_SLASH };
+                        if ui.small_button(eye).on_hover_text(if m.visible { "Nascondi nella vista" } else { "Mostra nella vista" }).clicked() {
+                            m.visible = !m.visible;
+                        }
+                        let (d, delta) = m.result();
+                        if list.renaming == Some(i) {
+                            let edit = ui.add(egui::TextEdit::singleline(&mut m.name).desired_width(120.0));
+                            edit.request_focus();
+                            if edit.lost_focus() || ui.input(|k| k.key_pressed(egui::Key::Enter)) {
+                                if m.name.trim().is_empty() {
+                                    m.name = format!("Misura {}", i + 1);
+                                }
+                                list.renaming = None;
+                            }
+                        } else {
+                            let selected = list.selected == Some(i);
+                            let text = format!("{}  {} {}", m.name, fmt(d), measure::UNIT);
+                            let row = ui.selectable_label(selected, text).on_hover_text(format!(
+                                "ΔX {}   ΔY {}   ΔZ {}  ({})\nClic: evidenzia nella vista · doppio clic: cambia il nome",
+                                fmt(delta.x),
+                                fmt(delta.y),
+                                fmt(delta.z),
+                                measure::UNIT
+                            ));
+                            if row.double_clicked() {
+                                list.renaming = Some(i);
+                            } else if row.clicked() {
+                                list.selected = if selected { None } else { Some(i) };
+                            }
+                        }
+                        if ui.small_button(icon::X).on_hover_text("Togli la misura").clicked() {
+                            remove = Some(i);
+                        }
+                    });
+                }
+            });
+            ui.horizontal(|ui| {
+                let label = if all_visible { "Nascondi tutte" } else { "Mostra tutte" };
+                if ui.small_button(label).clicked() {
+                    for m in &mut list.items {
+                        m.visible = !all_visible;
+                    }
+                }
+                if ui.small_button(icon_text(ui, icon::TRASH, "Togli tutte")).clicked() {
+                    clear = true;
+                }
+            });
+        });
+    header.header_response.on_hover_text("Misure salvate con lo strumento Misura (tasto M, poi «Salva»): vanno nel progetto");
+    if let Some(i) = remove {
+        list.remove(i);
+    }
+    if clear {
+        list.clear();
     }
 }

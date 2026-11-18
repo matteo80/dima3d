@@ -6,12 +6,17 @@
 //! pezzo si sposta finché le quote sul 3D sono quelle misurate (minimi quadrati, Levenberg-
 //! Marquardt). Una misura può essere la distanza o la sola componente lungo X, Y o Z della cabina.
 //!
-//! Posizione esatta: almeno [`EXACT_POINTS`] punti sull'oggetto, non in fila, ognuno misurato da
-//! almeno [`EXACT_PER_POINT`] punti del riferimento (o assi diversi): ogni punto è fissato come la
-//! punta di un treppiede e con tre punti l'oggetto non può più girare. Nessun massimo.
-//! Posizione veloce: bastano [`MIN_FULL`] misure ([`MIN_MOVE`] per spostare soltanto); se le
-//! misure lasciano una direzione libera il pezzo si sposta il meno possibile e il risultato lo
-//! segnala come approssimato.
+//! I punti si chiamano F1, F2… sul pezzo fisso e M1, M2… sul pezzo mobile; lo stesso punto preso
+//! in più misure ha lo stesso nome.
+//!
+//! Due modi:
+//! - Veloce: bastano [`MIN_FULL`] misure ([`MIN_MOVE`] per spostare soltanto), ognuna con i suoi
+//!   due clic; se le misure lasciano una direzione libera il pezzo si sposta il meno possibile e
+//!   il risultato lo segnala come approssimato.
+//! - Precisa: un clic su un punto fisso e [`EXACT_PER_FIXED`] clic sul mobile, che restano legati
+//!   a quel fisso; almeno [`EXACT_FIXED`] fissi, solo distanze. Con gli stessi tre punti mobili
+//!   per tutti i fissi ogni punto mobile è fissato come la punta di un treppiede e con tre punti
+//!   l'oggetto non può più girare. Nessun massimo.
 
 use glam::{DMat4, DQuat, DVec3, Mat4, Vec3};
 
@@ -20,10 +25,25 @@ use crate::scene_graph::SceneGraph;
 
 /// Misure minime per spostare e ruotare (posizione veloce, approssimata).
 pub const MIN_FULL: usize = 4;
-/// Posizione esatta: almeno tanti punti diversi sull'oggetto, ognuno misurato da almeno tanti
-/// punti fissi del riferimento (nessun massimo).
-pub const EXACT_POINTS: usize = 3;
-pub const EXACT_PER_POINT: usize = 3;
+/// Modo Precisa: almeno tanti punti fissi, ognuno misurato verso almeno tanti punti diversi
+/// dell'oggetto (nessun massimo).
+pub const EXACT_FIXED: usize = 3;
+pub const EXACT_PER_FIXED: usize = 3;
+/// Due clic entro questa distanza (mm), sullo stesso pezzo, sono lo stesso punto.
+const SAME_POINT: f32 = 0.5;
+
+/// Veloce (poche misure, posizione approssimata) o Precisa (fissi × mobili, posizione esatta).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Mode {
+    #[default]
+    Quick,
+    Precise,
+}
+
+/// Lo stesso punto: vicino e sullo stesso pezzo.
+fn same(a: &MeasurePoint, b: &MeasurePoint) -> bool {
+    a.pos.distance(b.pos) < SAME_POINT && a.anchor.map(|x| x.mesh) == b.anchor.map(|x| x.mesh)
+}
 /// Misure che servono per spostarlo soltanto.
 pub const MIN_MOVE: usize = 3;
 
@@ -49,6 +69,20 @@ impl Kind {
         Self::ALL.iter().find(|(k, ..)| *k == self).map_or("", |(_, n, _)| n)
     }
 
+    /// Parola usata nel progetto salvato.
+    pub fn key(self) -> &'static str {
+        match self {
+            Kind::Distance => "distanza",
+            Kind::X => "x",
+            Kind::Y => "y",
+            Kind::Z => "z",
+        }
+    }
+
+    pub fn from_key(text: &str) -> Option<Kind> {
+        [Kind::Distance, Kind::X, Kind::Y, Kind::Z].into_iter().find(|k| k.key() == text)
+    }
+
     /// Valore della misura tra due punti (sempre positivo).
     pub fn value(self, d: DVec3) -> f64 {
         match self {
@@ -63,9 +97,9 @@ impl Kind {
 /// Una quota presa a mano.
 #[derive(Debug, Clone, PartialEq)]
 pub struct HandMeasure {
-    pub name: String,
     pub kind: Kind,
-    /// I due punti sul 3D: di solito prima il riferimento, poi il pezzo da spostare (l'ordine non conta)
+    /// I due punti sul 3D: prima quello fisso (F), poi quello sul pezzo da spostare (M). Per il
+    /// calcolo l'ordine non conta: decide su quale pezzo sono
     pub points: [Option<MeasurePoint>; 2],
     /// Valore preso in cabina (mm); appena presi i punti vale come sul 3D
     pub measured: f32,
@@ -124,30 +158,83 @@ pub struct DistanceAlign {
     pub rows: Vec<HandMeasure>,
     /// Misura e punto (0 o 1) che si sta prendendo sul 3D
     pub picking: Option<(usize, usize)>,
-    /// Il pezzo si sposta soltanto, senza ruotare
+    /// Il pezzo si sposta soltanto, senza ruotare (solo in Veloce)
     pub only_move: bool,
-    /// Numero per il nome della prossima misura
-    counter: usize,
+    pub mode: Mode,
+    /// Precisa: dopo il punto fisso si prendono di seguito i punti mobili
+    chain: bool,
 }
 
 impl DistanceAlign {
+    /// Misure riaperte da un progetto.
+    pub fn restored(rows: Vec<HandMeasure>, only_move: bool, mode: Mode) -> Self {
+        Self { rows, picking: None, only_move, mode, chain: false }
+    }
+
+    /// «Solo spostamento» vale solo in Veloce.
+    fn moves_only(&self) -> bool {
+        self.only_move && self.mode == Mode::Quick
+    }
+
     /// Misure che servono con la scelta attuale.
     pub fn minimum(&self) -> usize {
-        if self.only_move { MIN_MOVE } else { MIN_FULL }
+        match self.mode {
+            Mode::Precise => EXACT_FIXED * EXACT_PER_FIXED,
+            Mode::Quick if self.only_move => MIN_MOVE,
+            Mode::Quick => MIN_FULL,
+        }
+    }
+
+    /// Nomi dei due punti di ogni misura: F1, F2… i fissi e M1, M2… i mobili, nell'ordine in cui
+    /// compaiono; lo stesso punto in più misure ha lo stesso nome. «—» se manca.
+    pub fn labels(&self) -> Vec<[String; 2]> {
+        let mut seen: [Vec<MeasurePoint>; 2] = [Vec::new(), Vec::new()];
+        self.rows
+            .iter()
+            .map(|r| {
+                [0, 1].map(|k| match &r.points[k] {
+                    None => "—".to_string(),
+                    Some(p) => {
+                        let list = &mut seen[k];
+                        let n = match list.iter().position(|q| same(q, p)) {
+                            Some(n) => n,
+                            None => {
+                                list.push(*p);
+                                list.len() - 1
+                            }
+                        };
+                        format!("{}{}", if k == 0 { 'F' } else { 'M' }, n + 1)
+                    }
+                })
+            })
+            .collect()
+    }
+
+    /// Nome della misura: «F1–M2».
+    #[cfg(test)]
+    pub fn label(&self, i: usize) -> String {
+        self.labels().get(i).map_or(String::new(), |[f, m]| format!("{f}–{m}"))
+    }
+
+    /// Misure complete che partono dallo stesso punto fisso della misura `i`.
+    fn group_size(&self, i: usize) -> usize {
+        let Some(f) = self.rows.get(i).and_then(|r| r.points[0]) else { return 0 };
+        self.rows.iter().filter(|r| r.points[1].is_some() && r.points[0].is_some_and(|q| same(&q, &f))).count()
     }
 
     fn push(&mut self, points: [Option<MeasurePoint>; 2]) -> usize {
-        self.counter += 1;
-        let mut row = HandMeasure { name: format!("M{}", self.counter), kind: Kind::Distance, points, measured: 0.0, on: true };
+        let mut row = HandMeasure { kind: Kind::Distance, points, measured: 0.0, on: true };
         row.measured = row.current().unwrap_or(0.0);
         self.rows.push(row);
         self.rows.len() - 1
     }
 
-    /// Nuova misura da prendere sul 3D: si comincia dal punto sul riferimento.
+    /// Nuova misura da prendere sul 3D: si comincia dal punto fisso. In Precisa poi si prendono
+    /// di seguito [`EXACT_PER_FIXED`] punti mobili, tutti misurati da quel fisso.
     pub fn add_and_pick(&mut self) {
         let i = self.push([None, None]);
         self.picking = Some((i, 0));
+        self.chain = self.mode == Mode::Precise;
     }
 
     /// Nuova misura con i due punti già presi con lo strumento Misura.
@@ -155,10 +242,13 @@ impl DistanceAlign {
         self.push([Some(a), Some(b)]);
     }
 
-    /// Riprende i due punti di una misura.
+    /// Riprende i punti di una misura: in Veloce tutti e due, in Precisa solo quello mobile (il
+    /// fisso è di tutto il gruppo).
     pub fn repick(&mut self, i: usize) {
         if i < self.rows.len() {
-            self.picking = Some((i, 0));
+            let precise = self.mode == Mode::Precise && self.rows[i].points[0].is_some();
+            self.picking = Some((i, usize::from(precise)));
+            self.chain = false;
         }
     }
 
@@ -193,23 +283,40 @@ impl DistanceAlign {
         } else {
             row.measured = row.current().unwrap_or(row.measured);
             self.picking = None;
+            // Precisa: un altro punto mobile dallo stesso fisso, finché non sono tre
+            if self.chain && self.group_size(i) < EXACT_PER_FIXED {
+                let fixed = self.rows[i].points[0];
+                let next = self.push([fixed, None]);
+                self.picking = Some((next, 1));
+            } else {
+                self.chain = false;
+            }
         }
     }
 
     /// Testo per chi sta cliccando.
     pub fn prompt(&self) -> Option<String> {
         let (i, k) = self.picking?;
-        let r = self.rows.get(i)?;
+        self.rows.get(i)?;
+        let labels = self.labels();
+        let fixed_count = labels.iter().filter_map(|l| l[0].strip_prefix('F')?.parse::<usize>().ok()).max().unwrap_or(0);
         Some(match k {
-            0 => format!("{}: clicca il punto sul riferimento fermo", r.name),
-            _ => format!("{}: clicca il punto sul pezzo da spostare", r.name),
+            0 => format!("F{}: clicca il punto fisso sul riferimento fermo", fixed_count + 1),
+            _ if self.chain => format!(
+                "{}: clicca il punto {} di {EXACT_PER_FIXED} sul pezzo da spostare (M)",
+                labels[i][0],
+                self.group_size(i) + 1
+            ),
+            _ => format!("{}: clicca il punto sul pezzo da spostare (M)", labels[i][0]),
         })
     }
 
-    /// Annulla la presa in corso; una misura appena aggiunta e ancora senza punti si toglie.
+    /// Annulla la presa in corso; una misura appena aggiunta e ancora senza punti si toglie, in
+    /// Precisa anche quella che aspettava il punto mobile.
     pub fn stop_picking(&mut self) {
         if let Some((i, _)) = self.picking.take() {
-            if self.rows.get(i).is_some_and(|r| r.points.iter().all(Option::is_none)) {
+            let chain = std::mem::take(&mut self.chain);
+            if self.rows.get(i).is_some_and(|r| r.points[1].is_none() && (chain || r.points[0].is_none())) {
                 self.rows.remove(i);
             }
         }
@@ -245,31 +352,35 @@ impl DistanceAlign {
             .collect()
     }
 
-    /// Schema delle misure accese e pronte: per ogni punto diverso dell'oggetto, quante misure
-    /// diverse ha (punti del riferimento o assi diversi). Punti entro mezzo millimetro = lo stesso.
+    /// Schema delle misure accese e pronte: per ogni punto fisso diverso, verso quanti punti
+    /// diversi dell'oggetto è misurato.
     pub fn coverage(&self, moving: &[u32]) -> Vec<(Vec3, usize)> {
-        let same = |a: Vec3, b: Vec3| a.distance(b) < 0.5;
-        // (punto dell'oggetto, misure: punto fermo e tipo)
-        let mut points: Vec<(Vec3, Vec<(Vec3, Kind)>)> = Vec::new();
+        // (punto fisso, punti dell'oggetto misurati da lì)
+        let mut points: Vec<(MeasurePoint, Vec<MeasurePoint>)> = Vec::new();
         for (r, s) in self.rows.iter().zip(self.states(moving)) {
             let RowState::Ready(k) = s else { continue };
             let (Some(m), Some(f)) = (r.points[k], r.points[1 - k]) else { continue };
             if !r.on {
                 continue;
             }
-            let slot = match points.iter().position(|(p, _)| same(*p, m.pos)) {
+            let slot = match points.iter().position(|(p, _)| same(p, &f)) {
                 Some(i) => i,
                 None => {
-                    points.push((m.pos, Vec::new()));
+                    points.push((f, Vec::new()));
                     points.len() - 1
                 }
             };
             let list = &mut points[slot].1;
-            if !list.iter().any(|(q, kind)| same(*q, f.pos) && *kind == r.kind) {
-                list.push((f.pos, r.kind));
+            if !list.iter().any(|q| same(q, &m)) {
+                list.push(m);
             }
         }
-        points.into_iter().map(|(p, l)| (p, l.len())).collect()
+        points.into_iter().map(|(p, l)| (p.pos, l.len())).collect()
+    }
+
+    /// Precisa: punti fissi con abbastanza misure.
+    pub fn complete_fixed(&self, moving: &[u32]) -> usize {
+        self.coverage(moving).iter().filter(|c| c.1 >= EXACT_PER_FIXED).count()
     }
 
     /// Spostamento del pezzo che rende le quote sul 3D uguali a quelle misurate.
@@ -292,7 +403,16 @@ impl DistanceAlign {
         if used.len() < min {
             return Err(format!("Servono almeno {min} misure pronte e accese (ora {})", used.len()));
         }
-        let (matrix, free) = solve(&used, self.only_move);
+        if self.mode == Mode::Precise {
+            let complete = self.complete_fixed(moving);
+            if complete < EXACT_FIXED {
+                return Err(format!(
+                    "Precisa: servono almeno {EXACT_FIXED} punti fissi, ognuno misurato verso {EXACT_PER_FIXED} punti \
+                     dell'oggetto (ora {complete} completi)"
+                ));
+            }
+        }
+        let (matrix, free) = solve(&used, self.moves_only());
         let residuals: Vec<Option<f32>> = self
             .rows
             .iter()
@@ -445,7 +565,9 @@ pub fn draw_overlay(ui: &egui::Ui, rect: egui::Rect, align: &DistanceAlign, to_s
     let painter = ui.painter_at(rect);
     let color = egui::Color32::from_rgb(255, 200, 40);
     let font = egui::FontId::proportional(13.0);
+    let labels = align.labels();
     for (i, r) in align.rows.iter().enumerate() {
+        let name = format!("{}–{}", labels[i][0], labels[i][1]);
         let c = if r.on { color } else { color.gamma_multiply(0.35) };
         let s: Vec<Option<egui::Pos2>> = r.points.iter().map(|p| p.as_ref().and_then(|p| to_screen(p.pos))).collect();
         if let [Some(a), Some(b)] = s.as_slice() {
@@ -453,9 +575,9 @@ pub fn draw_overlay(ui: &egui::Ui, rect: egui::Rect, align: &DistanceAlign, to_s
             painter.line_segment([*a, *b], egui::Stroke::new(1.5_f32, c));
             let now = r.current().unwrap_or(0.0);
             let text = if (now - r.measured).abs() < 0.005 {
-                format!("{}  {} {now:.1}", r.name, r.kind.name())
+                format!("{name}  {} {now:.1}", r.kind.name())
             } else {
-                format!("{}  {} {now:.1} → {:.1}", r.name, r.kind.name(), r.measured)
+                format!("{name}  {} {now:.1} → {:.1}", r.kind.name(), r.measured)
             };
             let mid = a.lerp(*b, 0.5);
             let galley = painter.layout_no_wrap(text, font.clone(), egui::Color32::BLACK);
@@ -473,6 +595,11 @@ pub fn draw_overlay(ui: &egui::Ui, rect: egui::Rect, align: &DistanceAlign, to_s
                 egui::Stroke::new(if active { 2.5_f32 } else { 1.2 }, egui::Color32::BLACK),
                 egui::StrokeKind::Middle,
             );
+            // Nome del punto (F blu chiaro i fissi, M arancione i mobili)
+            let tint = if k == 0 { egui::Color32::from_rgb(120, 190, 255) } else { egui::Color32::from_rgb(255, 160, 60) };
+            let text = egui::Align2::LEFT_BOTTOM;
+            painter.text(*p + egui::vec2(7.0, -5.0), text, &labels[i][k], egui::FontId::proportional(13.0), egui::Color32::BLACK);
+            painter.text(*p + egui::vec2(6.0, -6.0), text, &labels[i][k], egui::FontId::proportional(13.0), tint);
         }
     }
     if let Some(text) = align.prompt() {
@@ -512,7 +639,8 @@ mod tests {
             let real = truth.transform_point3(support[s]);
             align.rows.last_mut().unwrap().measured = real.distance(rif[b]);
         }
-        assert_eq!(align.coverage(&[1]).iter().map(|c| c.1).collect::<Vec<_>>(), [3, 3, 2]);
+        // Per ogni punto fisso, verso quanti punti del supporto
+        assert_eq!(align.coverage(&[1]).iter().map(|c| c.1).collect::<Vec<_>>(), [2, 3, 1, 2]);
         // La terza misura di support[2] lungo Z, con i punti presi nell'ordine opposto
         align.add_from(on(1, support[2]), on(0, rif[2]));
         align.set_kind(8, Kind::Z);
@@ -588,6 +716,52 @@ mod tests {
         align.add_and_pick();
         align.stop_picking();
         assert_eq!(align.rows.len(), 1);
-        assert_eq!(align.rows[0].name, "M1");
+        assert_eq!(align.label(0), "F1–M1");
+    }
+
+    /// Precisa: un clic sul fisso e tre sul mobile, legati a quel fisso; con gli stessi punti
+    /// mobili i nomi si ripetono. Esc a metà toglie la misura che aspettava il punto.
+    #[test]
+    fn precise_one_fixed_three_moving() {
+        let mut align = DistanceAlign { mode: Mode::Precise, ..Default::default() };
+        let rif = [Vec3::new(-300.0, 0.0, 400.0), Vec3::new(300.0, 0.0, 420.0), Vec3::new(0.0, 500.0, 300.0)];
+        let support = [Vec3::new(-100.0, -50.0, 900.0), Vec3::new(120.0, -40.0, 950.0), Vec3::new(0.0, 80.0, 1100.0)];
+        let truth = crate::scene_graph::placement::rigid(Vec3::new(15.0, -8.0, 10.0), Vec3::new(1.5, -1.0, 3.0), Vec3::new(0.0, 0.0, 1000.0));
+        for (f, r) in rif.iter().enumerate() {
+            align.add_and_pick();
+            assert!(align.prompt().unwrap().starts_with(&format!("F{}: clicca il punto fisso", f + 1)), "{:?}", align.prompt());
+            align.add_point(on(0, *r));
+            for (m, s) in support.iter().enumerate() {
+                assert!(align.prompt().unwrap().contains(&format!("punto {} di 3", m + 1)), "{:?}", align.prompt());
+                // Lo stesso vertice cliccato di nuovo, poco più in là
+                align.add_point(on(1, *s + Vec3::splat(0.1 * f as f32)));
+            }
+            assert_eq!(align.picking, None, "dopo il terzo punto mobile si smette");
+            if f < 2 {
+                assert!(align.fit(&[1]).is_err(), "Precisa: {} fissi non bastano", f + 1);
+            }
+        }
+        assert_eq!(align.rows.len(), 9);
+        assert_eq!(align.label(0), "F1–M1");
+        assert_eq!(align.label(5), "F2–M3");
+        assert_eq!(align.label(8), "F3–M3");
+        for r in &mut align.rows {
+            let (f, m) = (r.points[0].unwrap().pos, r.points[1].unwrap().pos);
+            r.measured = truth.transform_point3(m).distance(f);
+        }
+        let fit = align.fit(&[1]).unwrap();
+        assert!(!fit.free && fit.max < 0.05, "{fit:?}");
+        // Esc dopo il fisso e un punto mobile: resta la misura fatta, sparisce quella in attesa
+        align.add_and_pick();
+        align.add_point(on(0, Vec3::new(0.0, -400.0, 350.0)));
+        align.add_point(on(1, support[0]));
+        align.stop_picking();
+        assert_eq!(align.rows.len(), 10);
+        assert_eq!(align.label(9), "F4–M1");
+        // Riprendere una misura in Precisa riprende solo il punto mobile, senza catena
+        align.repick(9);
+        assert_eq!(align.picking, Some((9, 1)));
+        align.add_point(on(1, support[1]));
+        assert_eq!((align.picking, align.rows.len()), (None, 10));
     }
 }

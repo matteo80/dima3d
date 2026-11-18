@@ -11,6 +11,22 @@
 
 use super::theme::{icon, icon_text};
 
+/// Larghezza minima di ogni finestra (regola per tutto il programma): si stringe fin quasi al
+/// titolo e, sotto la larghezza che serve al contenuto, compare la barra di scorrimento
+/// orizzontale in fondo.
+pub const NARROW_WIDTH: f32 = 120.0;
+
+/// Contenuto largo almeno `min`: se la finestra è più stretta scorre in orizzontale.
+pub fn narrow<R>(ui: &mut egui::Ui, min: f32, add: impl FnOnce(&mut egui::Ui) -> R) -> R {
+    egui::ScrollArea::horizontal()
+        .id_salt("larghezza_contenuto")
+        .show(ui, |ui| {
+            ui.set_width(ui.available_width().max(min));
+            add(ui)
+        })
+        .inner
+}
+
 /// Dove sta la finestra.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum Side {
@@ -88,6 +104,7 @@ pub struct Dockable<'a> {
     pub state: &'a mut DockState,
     pub open: &'a mut bool,
     pub default_width: f32,
+    /// Larghezza sotto cui il contenuto non si stringe più (la finestra sì: vedi [`NARROW_WIDTH`])
     pub min_width: f32,
     /// Altezza iniziale da mobile (il contenuto più alto scorre)
     pub default_height: f32,
@@ -214,9 +231,15 @@ fn docked<R>(ctx: &egui::Context, side: Side, w: Dockable, add: impl FnOnce(&mut
         }
         ui.separator();
         if w.scroll {
-            egui::ScrollArea::vertical().auto_shrink([false, false]).show(ui, add).inner
+            egui::ScrollArea::both()
+                .auto_shrink([false, false])
+                .show(ui, |ui| {
+                    ui.set_width(ui.available_width().max(w.min_width));
+                    add(ui)
+                })
+                .inner
         } else {
-            add(ui)
+            narrow(ui, w.min_width, add)
         }
     };
     let (state, open) = (w.state, w.open);
@@ -242,8 +265,8 @@ fn docked<R>(ctx: &egui::Context, side: Side, w: Dockable, add: impl FnOnce(&mut
         let r = panel
             .resizable(true)
             .default_width(state.width)
-            .min_width(w.min_width)
-            .max_width((ctx.screen_rect().width() * 0.5).max(w.min_width + 20.0))
+            .min_width(NARROW_WIDTH)
+            .max_width((ctx.screen_rect().width() * 0.5).max(NARROW_WIDTH + 20.0))
             .frame(frame)
             .show(ctx, |ui| body(ui, state, open));
         state.width = r.response.rect.width();
@@ -260,14 +283,15 @@ fn floating<R>(ctx: &egui::Context, w: Dockable, add: impl FnOnce(&mut egui::Ui)
         .resizable(true)
         .collapsible(true)
         .constrain(true)
-        .min_width(w.min_width)
+        .min_width(NARROW_WIDTH)
         .default_width(w.state.width)
         .default_height(w.default_height)
         .default_pos(w.default_pos);
     if let Some(pos) = ctx.data_mut(|d| d.remove_temp::<egui::Pos2>(release_key)) {
         window = window.current_pos(pos);
     }
-    let response = window.show(ctx, add)?;
+    let min = w.min_width;
+    let response = window.show(ctx, |ui| narrow(ui, min, add))?;
 
     // Calamita: la finestra si muove con il tasto premuto → si sta trascinando
     let track_key = id.with("trascinamento");

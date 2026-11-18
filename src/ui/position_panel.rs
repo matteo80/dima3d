@@ -341,15 +341,15 @@ fn draw_four_bar_guide(ctx: &egui::Context, open: &mut bool) {
         .id(egui::Id::new("guida_quattro_perni"))
         .open(open)
         .resizable([true, false])
-        .min_width(220.0)
+        .min_width(super::dock::NARROW_WIDTH)
         .default_width(320.0)
         .collapsible(true)
         .constrain(true)
         .default_height((ctx.screen_rect().height() - 120.0).max(150.0))
         .default_pos(guide_pos)
         .show(ctx, |ui| {
-            egui::ScrollArea::vertical().max_height((ctx.screen_rect().height() - 120.0).max(150.0)).show(ui, |ui| {
-                ui.set_min_width(ui.available_width());
+            egui::ScrollArea::both().max_height((ctx.screen_rect().height() - 120.0).max(150.0)).show(ui, |ui| {
+                ui.set_width(ui.available_width().max(220.0));
                 draw_mechanism(ui);
                 ui.add_space(6.0);
                 draw_three_points(ui);
@@ -414,7 +414,7 @@ fn draw_trilateration(ui: &mut egui::Ui) {
 }
 
 /// «Allinea su misure», guida: miniatura di uno schema di misure tra il riferimento (sotto, con
-/// i punti R1..R4) e l'oggetto da spostare (sopra, con i punti A B C). `lines` = (punto
+/// i punti fissi F1..F4) e l'oggetto da spostare (sopra, con i punti M1 M2 M3). `lines` = (punto
 /// dell'oggetto, punto del riferimento).
 fn draw_measure_scheme(ui: &mut egui::Ui, title: &str, lines: &[(usize, usize)], color: egui::Color32) {
     let k = ((ui.available_width() - 2.0) / 330.0).clamp(0.6, 1.0);
@@ -433,7 +433,7 @@ fn draw_measure_scheme(ui: &mut egui::Ui, title: &str, lines: &[(usize, usize)],
         painter.line_segment([a[i], r[j]], egui::Stroke::new(1.8_f32, egui::Color32::from_rgb(235, 190, 30)));
     }
     let used = |i: usize| lines.iter().any(|l| l.0 == i);
-    for (i, (q, name)) in a.iter().zip(["A", "B", "C"]).enumerate() {
+    for (i, (q, name)) in a.iter().zip(["M1", "M2", "M3"]).enumerate() {
         if used(i) {
             painter.circle(*q, 4.0, egui::Color32::from_rgb(255, 140, 30), egui::Stroke::new(1.0_f32, egui::Color32::BLACK));
             painter.text(*q + egui::vec2(0.0, -6.0), egui::Align2::CENTER_BOTTOM, name, font.clone(), egui::Color32::BLACK);
@@ -447,7 +447,7 @@ fn draw_measure_scheme(ui: &mut egui::Ui, title: &str, lines: &[(usize, usize)],
         }
         number += 1;
         painter.circle(*q, 3.5, egui::Color32::WHITE, egui::Stroke::new(1.0_f32, egui::Color32::BLACK));
-        painter.text(*q + egui::vec2(0.0, 22.0) * k, egui::Align2::CENTER_CENTER, format!("R{number}"), font.clone(), text);
+        painter.text(*q + egui::vec2(0.0, 22.0) * k, egui::Align2::CENTER_CENTER, format!("F{number}"), font.clone(), text);
     }
     painter.text(p(80.0, 2.0), egui::Align2::CENTER_TOP, title, font.clone(), color);
 }
@@ -462,32 +462,33 @@ fn draw_measures_guide(ctx: &egui::Context, open: &mut bool) {
         .id(egui::Id::new("guida_misure"))
         .open(open)
         .resizable([true, false])
-        .min_width(220.0)
+        .min_width(super::dock::NARROW_WIDTH)
         .default_width(340.0)
         .collapsible(true)
         .constrain(true)
         .default_pos(guide_pos)
         .show(ctx, |ui| {
-            egui::ScrollArea::vertical().max_height((ctx.screen_rect().height() - 120.0).max(150.0)).show(ui, |ui| {
-                ui.set_min_width(ui.available_width());
-                ui.label(egui::RichText::new("Perché «3 punti, ognuno da 3 punti del riferimento»").strong());
+            egui::ScrollArea::both().max_height((ctx.screen_rect().height() - 120.0).max(150.0)).show(ui, |ui| {
+                ui.set_width(ui.available_width().max(220.0));
+                ui.label(egui::RichText::new("Perché «Precisa: 3 punti fissi × 3 punti M»").strong());
                 ui.label(
-                    "Con il metro misuri la distanza tra un punto del riferimento fermo (in blu, es. il paraurti) e un \
-                     punto dell'oggetto da spostare (in arancione, es. il supporto del jig). Una distanza sola non dice \
-                     dove sta il punto: può essere ovunque su un cerchio (nello spazio, su una sfera).",
+                    "Con il metro misuri la distanza tra un punto fisso F del riferimento fermo (in blu, es. il paraurti) \
+                     e un punto M dell'oggetto da spostare (in arancione, es. il supporto del jig). Una distanza sola non \
+                     dice dove sta il punto M: può essere ovunque su un cerchio (nello spazio, su una sfera).",
                 );
                 draw_trilateration(ui);
                 ui.label(
-                    "Con 3 distanze da 3 punti diversi del riferimento il punto è fissato, come la punta di un treppiede. \
-                     Un punto solo però non basta: l'oggetto ci potrebbe girare attorno. Con 3 punti dell'oggetto \
-                     fissati così (A, B, C, lontani tra loro) l'oggetto non può più né spostarsi né ruotare.",
+                    "Con 3 distanze da 3 punti fissi diversi il punto M è fissato, come la punta di un treppiede. \
+                     Un punto solo però non basta: l'oggetto ci potrebbe girare attorno. Con 3 punti M fissati così \
+                     (M1, M2, M3, lontani tra loro) l'oggetto non può più né spostarsi né ruotare. Per questo in \
+                     «Precisa» da ogni punto fisso si misurano gli stessi 3 punti M.",
                 );
                 ui.add_space(8.0);
                 ui.label(egui::RichText::new("Quante misure prendere").strong());
                 ui.horizontal_wrapped(|ui| {
                     draw_measure_scheme(
                         ui,
-                        "Esatta: 3 punti × 3",
+                        "Precisa: 3 F × 3 M",
                         &[(0, 0), (0, 1), (0, 3), (1, 0), (1, 1), (1, 3), (2, 0), (2, 1), (2, 3)],
                         good,
                     );
@@ -496,14 +497,15 @@ fn draw_measures_guide(ctx: &egui::Context, open: &mut bool) {
                 });
                 ui.add_space(4.0);
                 for (color, t) in [
-                    (good, "Posizione esatta: almeno 3 punti sull'oggetto (A, B, C, lontani tra loro e non in fila), ognuno \
-                            misurato da almeno 3 punti fissi del riferimento. I punti del riferimento possono essere gli stessi \
-                            per tutti: 3 punti sul paraurti, 3 sull'oggetto, 9 misure. Non c'è un massimo: più punti e più \
-                            misure danno più controllo. Nella sezione la scritta verde «Schema completo» conferma che ci sei."),
-                    (ok, "Posizione veloce: con meno misure (minimo 4) Dima sposta l'oggetto il meno possibile e scrive \
+                    (good, "Precisa: almeno 3 punti fissi F (lontani tra loro), da ognuno le distanze verso 3 punti M \
+                            dell'oggetto (lontani tra loro e non in fila), meglio gli stessi M per tutti: 9 misure. Il punto \
+                            fisso si clicca una volta sola, poi i 3 punti M. Non c'è un massimo: più punti danno più \
+                            controllo. La scritta verde «Schema completo» conferma che ci sei."),
+                    (ok, "Veloce: con meno misure (minimo 4) Dima sposta l'oggetto il meno possibile e scrive \
                           «Posizione approssimata». Va bene se sul 3D l'oggetto è già quasi giusto. Se è solo spostato e non \
-                          ruotato, con «Solo spostamento» bastano 3 misure."),
-                    (bad, "Tutte le misure dallo stesso punto dell'oggetto: il punto è fissato ma l'oggetto ci gira attorno."),
+                          ruotato, con «Solo spostamento» bastano 3 misure, anche ΔX, ΔY o ΔZ."),
+                    (bad, "Tutte le misure verso lo stesso punto M: il punto è fissato ma l'oggetto ci gira attorno."),
+                    (bad, "Punti F e M quasi in un piano (es. tutti alla stessa altezza): la misura non dice da che parte                            del piano sta l'oggetto. Prendi almeno un punto fisso più in alto o più in basso degli altri."),
                 ] {
                     ui.horizontal_wrapped(|ui| {
                         ui.label(egui::RichText::new("●").color(color));
@@ -516,10 +518,12 @@ fn draw_measures_guide(ctx: &egui::Context, open: &mut bool) {
                     "In cima alla finestra Posizione scegli come «Oggetto» il pezzo da spostare.",
                     "In cabina misura con il metro da un punto del riferimento a un punto dell'oggetto. Scegli punti \
                      facili da ritrovare sul 3D: spigoli, angoli, centri dei fori.",
-                    "«Nuova misura»: clicca sul 3D lo stesso punto del riferimento e poi quello dell'oggetto (il clic si \
-                     aggancia al vertice vicino). In alternativa misura con lo strumento Misura (M) e premi «Dalla Misura».",
-                    "Scrivi in «Misurato» il valore del metro. Se hai misurato solo l'altezza (livella) o solo lungo un \
-                     asse, cambia il tipo in ΔZ, ΔX o ΔY.",
+                    "Scegli «Veloce» o «Precisa». Precisa: «Nuovo punto fisso», clicca sul 3D il punto F e poi i 3 punti \
+                     M dell'oggetto (il clic si aggancia al vertice vicino); ripeti per gli altri fissi. Veloce: «Nuova \
+                     misura», un punto F e un punto M per volta. In alternativa misura con lo strumento Misura (M) e \
+                     premi «Dalla Misura».",
+                    "Scrivi in «Misurato» il valore del metro. In Veloce, se hai misurato solo l'altezza (livella) o solo \
+                     lungo un asse, cambia il tipo in ΔZ, ΔX o ΔY.",
                     "Premi «Allinea». La colonna «Dopo» dice quanto resta su ogni misura: un valore grande indica una \
                      misura letta o cliccata male, che puoi spegnere. Annulla rimette l'oggetto dov'era.",
                 ]
@@ -998,6 +1002,9 @@ fn used_offset(p: &Pose, used: &[bool; 6]) -> Pose {
     }
 }
 
+/// Larghezza sotto cui il contenuto non si stringe più: compare la barra orizzontale.
+pub const CONTENT_MIN_WIDTH: f32 = 260.0;
+
 /// Testo dell'offset come lo scrivono gli script (si può incollare in «Applica offset»).
 fn offset_text(title: &str, p: &Pose) -> String {
     format!(
@@ -1164,7 +1171,9 @@ pub fn draw(ctx: &egui::Context, app: &mut GestoreApp, pass: super::dock::Pass) 
         state: &mut dock,
         open: &mut open,
         default_width: 270.0,
-        min_width: 220.0,
+        // La finestra si stringe fin quasi al titolo (dock::NARROW_WIDTH); sotto questa larghezza
+        // il contenuto scorre in orizzontale
+        min_width: CONTENT_MIN_WIDTH,
         // Lo spazio per lo scorrimento è alto quanto lo schermo (altrimenti egui lo ferma a 420)
         default_height: max_height,
         default_pos: ctx.screen_rect().right_top() + egui::vec2(-300.0, 60.0),
@@ -1527,37 +1536,58 @@ pub fn draw(ctx: &egui::Context, app: &mut GestoreApp, pass: super::dock::Pass) 
 
                 // ── Allinea su misure (quote prese a mano) ──────────────────────
                 section(ui, "posizione_misure", "Allinea su misure", &mut sections[8], |ui| {
+                    use super::distance_align::{Mode, RowState, EXACT_FIXED, EXACT_PER_FIXED, MIN_FULL, MIN_MOVE};
                     ui.label(
-                        egui::RichText::new(format!(
-                            "L'oggetto qui sopra si sposta finché le quote sul 3D sono quelle prese a mano in cabina. \
-                             Ogni misura va da un punto su un pezzo fermo (il riferimento) a un punto dell'oggetto. \
-                             Posizione esatta: almeno {} punti sull'oggetto, lontani e non in fila, ognuno misurato da almeno {} \
-                             punti fissi del riferimento (nessun massimo). Posizione veloce: bastano {} misure ({} con «Solo \
-                             spostamento»), l'oggetto si sposta il meno possibile per rispettarle.",
-                            super::distance_align::EXACT_POINTS,
-                            super::distance_align::EXACT_PER_POINT,
-                            super::distance_align::MIN_FULL,
-                            super::distance_align::MIN_MOVE
-                        ))
+                        egui::RichText::new(
+                            "L'oggetto qui sopra si sposta finché le quote sul 3D sono quelle prese a mano in cabina, \
+                             dai punti fissi F (riferimento fermo) ai punti M dell'oggetto.",
+                        )
                         .weak()
                         .small(),
                     );
-                    if ui
-                        .add(egui::Button::new(icon_text(ui, icon::INFO, "Guida illustrata")).small().selected(panel.measures_guide))
-                        .on_hover_text("Quante misure prendere e dove, con i disegni")
-                        .clicked()
-                    {
-                        panel.measures_guide = !panel.measures_guide;
-                    }
                     let da = &mut panel.distances;
+                    // Veloce o Precisa: due pulsanti, quello scelto acceso
+                    ui.horizontal_wrapped(|ui| {
+                        ui.selectable_value(&mut da.mode, Mode::Quick, format!("Veloce ({MIN_FULL} misure)")).on_hover_text(format!(
+                            "Posizione veloce, approssimata: bastano {MIN_FULL} misure ({MIN_MOVE} con «Solo spostamento»), \
+                             ognuna da un punto fisso a un punto dell'oggetto. L'oggetto si sposta il meno possibile."
+                        ));
+                        ui.selectable_value(&mut da.mode, Mode::Precise, format!("Precisa ({EXACT_FIXED}×{EXACT_PER_FIXED})"))
+                            .on_hover_text(format!(
+                                "Posizione esatta: per ogni punto fisso un clic e poi {EXACT_PER_FIXED} clic sull'oggetto; almeno \
+                                 {EXACT_FIXED} punti fissi, solo distanze. Meglio usare gli stessi punti M per tutti i fissi."
+                            ));
+                        if ui
+                            .add(egui::Button::new(icon_text(ui, icon::INFO, "Guida")).small().selected(panel.measures_guide))
+                            .on_hover_text("Quante misure prendere e dove, con i disegni")
+                            .clicked()
+                        {
+                            panel.measures_guide = !panel.measures_guide;
+                        }
+                    });
+                    let precise = da.mode == Mode::Precise;
+                    ui.label(
+                        egui::RichText::new(if precise {
+                            format!(
+                                "«Nuovo punto fisso»: clicca il punto F sul riferimento, poi {EXACT_PER_FIXED} punti M sull'oggetto. \
+                                 Ripeti per almeno {EXACT_FIXED} punti fissi e scrivi le distanze."
+                            )
+                        } else {
+                            "«Nuova misura»: clicca il punto F sul riferimento e il punto M sull'oggetto, poi scrivi la quota."
+                                .to_string()
+                        })
+                        .weak()
+                        .small(),
+                    );
                     let moving = scene.meshes_of(&nodes);
                     let mut pick: Option<Option<usize>> = None;
                     ui.horizontal_wrapped(|ui| {
-                        if ui
-                            .add_enabled(!nodes.is_empty(), egui::Button::new(icon_text(ui, icon::PLUS, "Nuova misura")))
-                            .on_hover_text("Clicca sul 3D il punto sul riferimento fermo, poi quello sull'oggetto da spostare")
-                            .clicked()
-                        {
+                        let (text, hover) = if precise {
+                            ("Nuovo punto fisso", format!("Clicca sul 3D il punto sul riferimento fermo, poi {EXACT_PER_FIXED} punti sull'oggetto da spostare"))
+                        } else {
+                            ("Nuova misura", "Clicca sul 3D il punto sul riferimento fermo, poi quello sull'oggetto da spostare".to_string())
+                        };
+                        if ui.add_enabled(!nodes.is_empty(), egui::Button::new(icon_text(ui, icon::PLUS, text))).on_hover_text(hover).clicked() {
                             pick = Some(None);
                         }
                         if ui
@@ -1566,21 +1596,28 @@ pub fn draw(ctx: &egui::Context, app: &mut GestoreApp, pass: super::dock::Pass) 
                             .clicked()
                         {
                             if let Some((a, b)) = tool_points {
-                                da.add_from(a, b);
+                                // Il punto sull'oggetto da spostare va per secondo (M)
+                                let on_moving = |p: &crate::ui::measure::MeasurePoint| p.anchor.is_some_and(|x| moving.binary_search(&x.mesh).is_ok());
+                                if on_moving(&a) && !on_moving(&b) { da.add_from(b, a) } else { da.add_from(a, b) }
                             }
                         }
                     });
                     let fit = da.fit(&moving);
                     let states = da.states(&moving);
+                    let labels = da.labels();
                     let mut remove: Option<usize> = None;
                     let mut kinds: Option<(usize, super::distance_align::Kind)> = None;
                     if !da.rows.is_empty() {
                         let residuals = fit.as_ref().ok().map(|f| f.residuals.clone());
                         let picking_row = da.picking.map(|(p, _)| p);
-                        egui::Grid::new("posizione_misure_tabella").num_columns(7).spacing([6.0, 3.0]).striped(true).show(ui, |ui| {
+                        let columns = if precise { 6 } else { 7 };
+                        egui::Grid::new("posizione_misure_tabella").num_columns(columns).spacing([6.0, 3.0]).striped(true).show(ui, |ui| {
                             ui.label("");
-                            ui.label(egui::RichText::new("Misura").small().strong());
-                            ui.label(egui::RichText::new("Tipo").small().strong());
+                            ui.label(egui::RichText::new("Misura").small().strong())
+                                .on_hover_text("F = punto fisso sul riferimento, M = punto sull'oggetto da spostare");
+                            if !precise {
+                                ui.label(egui::RichText::new("Tipo").small().strong());
+                            }
                             ui.label(egui::RichText::new("Sul 3D").small().strong()).on_hover_text("Valore adesso sul 3D (mm)");
                             ui.label(egui::RichText::new("Misurato").small().strong()).on_hover_text("Valore preso in cabina: scrivilo qui (mm)");
                             ui.label(egui::RichText::new("Dopo").small().strong())
@@ -1590,33 +1627,42 @@ pub fn draw(ctx: &egui::Context, app: &mut GestoreApp, pass: super::dock::Pass) 
                             for (i, r) in da.rows.iter_mut().enumerate() {
                                 ui.checkbox(&mut r.on, "").on_hover_text("Usa questa misura nel calcolo");
                                 let picking = picking_row == Some(i);
+                                let again = if precise { "Clic per riprendere il punto M" } else { "Clic per riprendere i due punti" };
                                 let hover = match states[i].problem() {
-                                    Some(p) if !picking => format!("{p}\nClic per riprendere i due punti"),
-                                    _ => "Clic per riprendere i due punti".to_string(),
+                                    Some(p) if !picking => format!("{p}\n{again}"),
+                                    _ => again.to_string(),
                                 };
-                                let mut name = egui::RichText::new(&r.name).monospace();
-                                if !picking && !matches!(states[i], super::distance_align::RowState::Ready(_)) {
+                                // In Precisa il fisso si scrive solo sulla prima misura del gruppo
+                                let first = i == 0 || labels[i - 1][0] != labels[i][0];
+                                let fixed = if precise && !first { "    ".to_string() } else { labels[i][0].clone() };
+                                let mut name = egui::RichText::new(format!("{fixed}–{}", labels[i][1])).monospace();
+                                if !picking && !matches!(states[i], RowState::Ready(_)) {
                                     name = name.color(egui::Color32::from_rgb(230, 160, 60));
                                 }
                                 if ui.add(egui::Button::new(name).small().selected(picking)).on_hover_text(hover).clicked() {
                                     pick = Some(Some(i));
                                 }
-                                let mut kind = r.kind;
-                                egui::ComboBox::from_id_salt(("posizione_misure_tipo", i))
-                                    .width(70.0)
-                                    .selected_text(kind.name())
-                                    .show_ui(ui, |ui| {
-                                        for (k, n, h) in super::distance_align::Kind::ALL {
-                                            ui.selectable_value(&mut kind, k, n).on_hover_text(h);
-                                        }
-                                    });
-                                if kind != r.kind {
-                                    kinds = Some((i, kind));
+                                if !precise {
+                                    let mut kind = r.kind;
+                                    egui::ComboBox::from_id_salt(("posizione_misure_tipo", i))
+                                        .width(70.0)
+                                        .selected_text(kind.name())
+                                        .show_ui(ui, |ui| {
+                                            for (k, n, h) in super::distance_align::Kind::ALL {
+                                                ui.selectable_value(&mut kind, k, n).on_hover_text(h);
+                                            }
+                                        });
+                                    if kind != r.kind {
+                                        kinds = Some((i, kind));
+                                    }
                                 }
                                 let on = r.on;
                                 let weak = |s: String| if on { egui::RichText::new(s).monospace() } else { egui::RichText::new(s).monospace().weak() };
                                 let current = r.current();
-                                ui.label(weak(current.map_or("—".to_string(), |v| format!("{v:.2}"))));
+                                let shown = current.map_or("—".to_string(), |v| format!("{v:.2}"));
+                                // In Precisa le quote sono distanze: un ΔX/ΔY/ΔZ da Veloce lo dice
+                                let shown = if precise && r.kind != super::distance_align::Kind::Distance { format!("{} {shown}", r.kind.name()) } else { shown };
+                                ui.label(weak(shown));
                                 ui.add_enabled(
                                     current.is_some(),
                                     egui::DragValue::new(&mut r.measured).speed(0.5).max_decimals(2).range(0.0..=f32::MAX),
@@ -1630,11 +1676,13 @@ pub fn draw(ctx: &egui::Context, app: &mut GestoreApp, pass: super::dock::Pass) 
                             }
                         });
                         ui.horizontal_wrapped(|ui| {
-                            ui.checkbox(&mut da.only_move, "Solo spostamento")
-                                .on_hover_text("Il pezzo si sposta senza ruotare: bastano 3 misure (es. una per asse)");
+                            if !precise {
+                                ui.checkbox(&mut da.only_move, "Solo spostamento")
+                                    .on_hover_text("Il pezzo si sposta senza ruotare: bastano 3 misure (es. una per asse)");
+                            }
                             if ui.button("Svuota").on_hover_text("Toglie tutte le misure").clicked() {
                                 da.rows.clear();
-                                da.picking = None;
+                                da.stop_picking();
                             }
                         });
                     }
@@ -1655,30 +1703,27 @@ pub fn draw(ctx: &egui::Context, app: &mut GestoreApp, pass: super::dock::Pass) 
                     }
                     let da = &panel.distances;
                     if !da.rows.is_empty() {
-                        let ready = states.iter().filter(|s| matches!(s, super::distance_align::RowState::Ready(_))).count();
-                        ui.label(egui::RichText::new(format!("Misure pronte: {ready}, ne servono almeno {}", da.minimum())).small());
-                        // Regola della posizione esatta: almeno 3 punti dell'oggetto con almeno 3 misure ciascuno
-                        let coverage = da.coverage(&moving);
-                        let complete = coverage.iter().filter(|c| c.1 >= super::distance_align::EXACT_PER_POINT).count();
-                        let per_point = coverage.iter().map(|c| c.1.to_string()).collect::<Vec<_>>().join(" · ");
-                        let (text, color) = if da.only_move {
-                            (String::new(), egui::Color32::TRANSPARENT)
-                        } else if complete >= super::distance_align::EXACT_POINTS {
-                            (format!("Schema completo: {complete} punti sull'oggetto con almeno 3 misure, posizione esatta"), egui::Color32::from_rgb(60, 190, 90))
-                        } else {
-                            (
-                                format!(
-                                    "Punti sull'oggetto: {} (misure per punto: {}). Per la posizione esatta: almeno {} punti, ognuno da almeno {} punti del riferimento",
-                                    coverage.len(),
-                                    if per_point.is_empty() { "—".to_string() } else { per_point },
-                                    super::distance_align::EXACT_POINTS,
-                                    super::distance_align::EXACT_PER_POINT
-                                ),
-                                egui::Color32::from_rgb(230, 160, 40),
-                            )
-                        };
-                        if !text.is_empty() {
+                        let ready = states.iter().filter(|s| matches!(s, RowState::Ready(_))).count();
+                        if precise {
+                            // Schema: almeno 3 punti fissi con 3 punti dell'oggetto ciascuno
+                            let coverage = da.coverage(&moving);
+                            let complete = da.complete_fixed(&moving);
+                            let per_fixed = coverage.iter().map(|c| c.1.to_string()).collect::<Vec<_>>().join(" · ");
+                            let (text, color) = if complete >= EXACT_FIXED {
+                                (format!("Schema completo: {complete} punti fissi con {EXACT_PER_FIXED} misure, posizione esatta"), egui::Color32::from_rgb(60, 190, 90))
+                            } else {
+                                (
+                                    format!(
+                                        "Punti fissi: {} (misure per fisso: {}). Servono almeno {EXACT_FIXED} fissi con {EXACT_PER_FIXED} misure ciascuno",
+                                        coverage.len(),
+                                        if per_fixed.is_empty() { "—".to_string() } else { per_fixed }
+                                    ),
+                                    egui::Color32::from_rgb(230, 160, 40),
+                                )
+                            };
                             ui.label(egui::RichText::new(text).small().color(color));
+                        } else {
+                            ui.label(egui::RichText::new(format!("Misure pronte: {ready}, ne servono almeno {}", da.minimum())).small());
                         }
                     }
                     match &fit {
@@ -1700,7 +1745,7 @@ pub fn draw(ctx: &egui::Context, app: &mut GestoreApp, pass: super::dock::Pass) 
                                 ui.label(
                                     egui::RichText::new(
                                         "Posizione approssimata: le misure non fissano tutte le direzioni e l'oggetto si sposta il meno \
-                                         possibile. Se l'oggetto è anche ruotato, meglio almeno 6 misure da altri punti o lungo altri assi.",
+                                         possibile. Se l'oggetto è anche ruotato usa «Precisa», con i punti lontani e non in fila.",
                                     )
                                     .small()
                                     .color(egui::Color32::from_rgb(230, 160, 60)),
@@ -2976,8 +3021,10 @@ DEF Destinazione Group { children [
             };
             let (f, p) = (corners(fixed), corners(part));
             let da = &mut app.ui_state.position.distances;
-            // Tre punti del pezzo, ognuno misurato da tre punti del riferimento
-            for (i, j) in [(0, 0), (1, 0), (2, 0), (1, 1), (2, 1), (3, 1), (0, 2), (2, 2), (3, 2)] {
+            da.mode = crate::ui::distance_align::Mode::Precise;
+            // Precisa: tre punti fissi (non nel piano dei punti del pezzo: tutti in basso il calcolo
+            // non distingue sopra da sotto), ognuno misurato verso gli stessi tre punti del pezzo
+            for (i, j) in [(0, 0), (0, 1), (0, 2), (1, 0), (1, 1), (1, 2), (3, 0), (3, 1), (3, 2)] {
                 let a = Measure::anchored(s, f[i].0, MeasurePoint::free(f[i].1, true));
                 let b = Measure::anchored(s, p[j].0, MeasurePoint::free(p[j].1, true));
                 da.add_from(a, b);
@@ -2987,23 +3034,108 @@ DEF Destinazione Group { children [
         let before = first_vertex(&app, part);
         ui.run(&mut app, vec![]);
         let texts = ui.run(&mut app, vec![]);
-        assert!(texts.iter().any(|(t, _)| t.starts_with("Misure pronte: 9")), "{texts:?}");
-        assert!(texts.iter().any(|(t, _)| t.starts_with("Schema completo: 3 punti")), "{texts:?}");
+        assert!(texts.iter().any(|(t, _)| t.starts_with("Schema completo: 3 punti fissi")), "{texts:?}");
+        assert!(texts.iter().any(|(t, _)| t == "F1–M1") && texts.iter().any(|(t, _)| t == "    –M3"), "nomi F/M");
         // Il primo «Allinea» è il titolo della sezione chiusa
         ui.click(&mut app, "Allinea", 1);
         assert!(app.ui_state.status_message.starts_with("Allineato sulle misure"), "{}", app.ui_state.status_message);
         let after = first_vertex(&app, part);
         assert!(after.distance(truth.transform_point3(before)) < 0.1, "{after:?} {:?}", truth.transform_point3(before));
         for r in &app.ui_state.position.distances.rows {
-            assert!((r.current().unwrap() - r.measured).abs() < 0.05, "{} {:?} {}", r.name, r.current(), r.measured);
+            assert!((r.current().unwrap() - r.measured).abs() < 0.05, "{:?} {}", r.current(), r.measured);
         }
         app.undo();
         assert!(first_vertex(&app, part).distance(before) < 1e-3);
         // Guida illustrata: si apre e si disegna
-        ui.click(&mut app, "Guida illustrata", 0);
+        ui.click(&mut app, "Guida", 0);
         assert!(app.ui_state.position.measures_guide);
         let texts = ui.run(&mut app, vec![]);
         assert!(texts.iter().any(|(t, _)| t == "Quante misure prendere"), "guida disegnata");
+    }
+
+    /// La finestra si stringe sotto la larghezza del contenuto (che scorre in orizzontale) e
+    /// non si riallarga da sola a ogni disegno.
+    #[test]
+    fn position_window_narrower_than_its_content() {
+        let mut app = app();
+        let ui = Ui { ctx: egui::Context::default() };
+        app.settings.dock_position.width = 130.0;
+        app.settings.position_sections = [true; crate::settings::POSITION_SECTIONS];
+        for _ in 0..4 {
+            ui.run(&mut app, vec![]);
+        }
+        let window = ui.ctx.memory(|m| m.area_rect(egui::Id::new("finestra_posizione"))).expect("finestra");
+        assert!(window.width() < 200.0 && window.width() < CONTENT_MIN_WIDTH, "{window:?}");
+    }
+
+    /// «Allinea su misure» nel progetto: quote, tipi, valori, caselle e punti legati ai pezzi
+    /// tornano uguali riaprendolo; un pezzo spostato porta con sé il suo punto.
+    #[test]
+    fn hand_measures_go_in_the_project() {
+        use crate::ui::distance_align::Kind;
+        use crate::ui::measure::{Measure, MeasurePoint};
+        let mut app = app();
+        let (fixed, part) = {
+            let mut files = app.scene_graph.as_ref().unwrap().open_files();
+            (files.next().unwrap().node, files.next().unwrap().node)
+        };
+        app.apply(Action::Move { nodes: vec![part], matrix: Mat4::from_translation(Vec3::new(5.0, 0.0, 0.0)) });
+        {
+            let s = app.scene_graph.as_ref().unwrap();
+            let (mf, mp) = (s.meshes_of(&[fixed])[0], s.meshes_of(&[part])[0]);
+            let vertex = |m: u32| Vec3::from(s.shapes_data[m as usize].world_vertices[0]);
+            let da = &mut app.ui_state.position.distances;
+            da.add_from(Measure::anchored(s, mf, MeasurePoint::free(vertex(mf), true)), Measure::anchored(s, mp, MeasurePoint::free(vertex(mp), true)));
+            da.add_from(MeasurePoint::free(Vec3::new(1.0, 2.0, 3.0), false), Measure::anchored(s, mp, MeasurePoint::free(vertex(mp) + Vec3::X, false)));
+            da.add_and_pick();
+            da.stop_picking();
+            da.add_and_pick();
+            da.add_point(MeasurePoint::free(Vec3::ONE, true));
+            da.stop_picking();
+            da.rows[0].measured = 1234.5;
+            da.set_kind(1, Kind::Z);
+            da.rows[1].on = false;
+            da.only_move = true;
+            da.mode = crate::ui::distance_align::Mode::Precise;
+        }
+        assert_eq!(app.ui_state.position.distances.rows.len(), 3, "l'ultima con un punto solo");
+        assert!(app.is_dirty());
+        for (k, f) in app.scene_graph.as_mut().unwrap().sources.iter_mut().enumerate() {
+            f.path = Some(std::path::PathBuf::from(format!(r"D:\prova\skid{k}.wrl")));
+        }
+        let scene = app.scene_graph.as_ref().unwrap();
+        let mut file = crate::project_file::ProjectFile::capture(scene, Default::default(), None);
+        file.capture_measures(scene, &app.ui_state.position.distances);
+        let path = std::path::Path::new(r"D:\prova\misure.dima3d");
+        let text = file.to_text(path);
+        assert!(text.contains("[allinea su misure]\nmodo = precisa\nsolo_spostamento = 1\nmisura = distanza 1234.5 1 | "), "{text}");
+        let back = crate::project_file::ProjectFile::from_text(&text, path).unwrap();
+        let mut other = super::tests::app();
+        let scene = other.scene_graph.as_mut().unwrap();
+        let sources: Vec<Option<usize>> = (0..back.files.len()).map(Some).collect();
+        for (i, entry) in back.files.iter().enumerate() {
+            crate::project_file::ProjectFile::apply_entry(entry, scene, i);
+        }
+        let (rows, lost) = back.restore_measures(scene, &sources);
+        assert_eq!(lost, 0);
+        let expected = app.ui_state.position.distances.rows.clone();
+        assert_eq!(rows.len(), 3);
+        for (r, e) in rows.iter().zip(&expected) {
+            assert_eq!((r.kind, r.measured, r.on), (e.kind, e.measured, e.on));
+            for (p, q) in r.points.iter().zip(&e.points) {
+                match (p, q) {
+                    (Some(p), Some(q)) => {
+                        assert!(p.pos.distance(q.pos) < 1e-4, "{p:?} {q:?}");
+                        assert_eq!((p.vertex, p.anchor.map(|a| (a.mesh, a.key))), (q.vertex, q.anchor.map(|a| (a.mesh, a.key))));
+                    }
+                    (None, None) => {}
+                    _ => panic!("punto perso: {p:?} {q:?}"),
+                }
+            }
+        }
+        let restored = crate::ui::distance_align::DistanceAlign::restored(rows, back.only_move, back.mode);
+        assert!(restored.only_move && restored.mode == crate::ui::distance_align::Mode::Precise);
+        assert_eq!(restored.labels(), app.ui_state.position.distances.labels(), "stessi nomi F/M");
     }
 
     /// «Misura dell'oggetto»: con i file local e world e l'oggetto attuale la sezione mostra le
