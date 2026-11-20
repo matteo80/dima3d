@@ -15,6 +15,7 @@
 use glam::{Mat4, Vec3};
 
 use super::theme::{icon, icon_text};
+use crate::i18n::tr;
 use crate::app::{Action, GestoreApp};
 use crate::scene_graph::bbox::Aabb;
 use crate::scene_graph::linkage::FourBar;
@@ -48,10 +49,10 @@ pub enum AlignMode {
 
 impl AlignMode {
     const ALL: [(AlignMode, &'static str, &'static str); 4] = [
-        (AlignMode::Center, "Centro", "Centro del riquadro dei pezzi"),
-        (AlignMode::Min, "Min", "Lato basso del riquadro (X, Y o Z più piccola)"),
-        (AlignMode::Max, "Max", "Lato alto del riquadro (X, Y o Z più grande)"),
-        (AlignMode::SamePiece, "Stesso pezzo", "Due copie dello stesso pezzo (una sola parte per lato): si sovrappongono dalla geometria"),
+        (AlignMode::Center, tn!("Centro"), tn!("Centro del riquadro dei pezzi")),
+        (AlignMode::Min, "Min", tn!("Lato basso del riquadro (X, Y o Z più piccola)")),
+        (AlignMode::Max, "Max", tn!("Lato alto del riquadro (X, Y o Z più grande)")),
+        (AlignMode::SamePiece, tn!("Stesso pezzo"), tn!("Due copie dello stesso pezzo (una sola parte per lato): si sovrappongono dalla geometria")),
     ];
 }
 
@@ -198,12 +199,12 @@ impl PositionPanel {
 }
 
 const AXES: [(&str, egui::Color32, &str); 6] = [
-    ("X", egui::Color32::from_rgb(230, 80, 80), "Sposta lungo X"),
-    ("Y", egui::Color32::from_rgb(80, 190, 90), "Sposta lungo Y"),
-    ("Z", egui::Color32::from_rgb(90, 130, 240), "Sposta lungo Z"),
-    ("A", egui::Color32::from_rgb(230, 80, 80), "Ruota attorno a X"),
-    ("B", egui::Color32::from_rgb(80, 190, 90), "Ruota attorno a Y"),
-    ("C", egui::Color32::from_rgb(90, 130, 240), "Ruota attorno a Z"),
+    ("X", egui::Color32::from_rgb(230, 80, 80), tn!("Sposta lungo X")),
+    ("Y", egui::Color32::from_rgb(80, 190, 90), tn!("Sposta lungo Y")),
+    ("Z", egui::Color32::from_rgb(90, 130, 240), tn!("Sposta lungo Z")),
+    ("A", egui::Color32::from_rgb(230, 80, 80), tn!("Ruota attorno a X")),
+    ("B", egui::Color32::from_rgb(80, 190, 90), tn!("Ruota attorno a Y")),
+    ("C", egui::Color32::from_rgb(90, 130, 240), tn!("Ruota attorno a Z")),
 ];
 
 const UNITS: [f32; 6] = [0.01, 0.1, 1.0, 5.0, 10.0, 100.0];
@@ -228,29 +229,29 @@ pub enum HingeMode {
 
 /// Nomi dei quattro perni, nell'ordine in cui si cliccano.
 const PIN_NAMES: [&str; 4] = [
-    "F1 (cerniera fissa, perno 1)",
-    "F2 (cerniera fissa, perno 2)",
-    "M1 (cerniera mobile, sulla biella di F1)",
-    "M2 (cerniera mobile, sulla biella di F2)",
+    tn!("F1 (cerniera fissa, perno 1)"),
+    tn!("F2 (cerniera fissa, perno 2)"),
+    tn!("M1 (cerniera mobile, sulla biella di F1)"),
+    tn!("M2 (cerniera mobile, sulla biella di F2)"),
 ];
 
 /// Promemoria nella finestra Posizione; la spiegazione completa è nella guida illustrata.
-const FOUR_BAR_HINT: &str = "Ordine: F1 e F2 sulla cerniera fissa, poi M1 e M2 sulla mobile \
-(M1 sulla stessa biella di F1). Su ogni perno 3 punti sul bordo, a triangolo.";
+const FOUR_BAR_HINT: &str = tn!("Ordine: F1 e F2 sulla cerniera fissa, poi M1 e M2 sulla mobile \
+(M1 sulla stessa biella di F1). Su ogni perno 3 punti sul bordo, a triangolo.");
 
 /// Passi della guida illustrata.
 const FOUR_BAR_STEPS: [&str; 6] = [
-    "Parti dalla posizione della matematica (di solito cofano chiuso) e premi «Scegli i 4 perni nella vista».",
-    "Su ogni perno clicca 3 punti sul bordo del cerchio, lontani tra loro in modo da formare un triangolo \
-     (non vicini e non in fila): dai 3 punti si trova il centro del perno.",
-    "Ordine dei perni: prima F1 e F2 sulla cerniera fissa (quella avvitata alla scocca), poi M1 e M2 sulla \
+    tn!("Parti dalla posizione della matematica (di solito cofano chiuso) e premi «Scegli i 4 perni nella vista»."),
+    tn!("Su ogni perno clicca 3 punti sul bordo del cerchio, lontani tra loro in modo da formare un triangolo \
+     (non vicini e non in fila): dai 3 punti si trova il centro del perno."),
+    tn!("Ordine dei perni: prima F1 e F2 sulla cerniera fissa (quella avvitata alla scocca), poi M1 e M2 sulla \
      cerniera mobile (il braccio avvitato al cofano). M1 è in cima alla biella che parte da F1, M2 in cima \
-     a quella che parte da F2.",
-    "Con «Usa selezione» indica la parte che si apre (cofano + braccio) e, se vuoi che si muovano, le due bielle.",
-    "Scrivi l'angolo di apertura del cofano o usa le frecce: le bielle si mettono da sole. Se si apre dalla \
-     parte sbagliata premi «Inverti verso»; oltre il fine corsa il cofano si ferma dove arriva il meccanismo.",
-    "Nella vista compaiono F1 F2 M1 M2 e le linee delle bielle: se le bielle risultano incrociate hai \
-     invertito M1 e M2, premi «Scambia i perni mobili».",
+     a quella che parte da F2."),
+    tn!("Con «Usa selezione» indica la parte che si apre (cofano + braccio) e, se vuoi che si muovano, le due bielle."),
+    tn!("Scrivi l'angolo di apertura del cofano o usa le frecce: le bielle si mettono da sole. Se si apre dalla \
+     parte sbagliata premi «Inverti verso»; oltre il fine corsa il cofano si ferma dove arriva il meccanismo."),
+    tn!("Nella vista compaiono F1 F2 M1 M2 e le linee delle bielle: se le bielle risultano incrociate hai \
+     invertito M1 e M2, premi «Scambia i perni mobili»."),
 ];
 
 /// Disegno del meccanismo come si vede di lato: piastra fissa, bielle, braccio e cofano, con i
@@ -276,20 +277,20 @@ fn draw_mechanism(ui: &mut egui::Ui) {
     );
     // Cofano e braccio
     painter.line_segment([p(20.0, 30.0), p(320.0, 105.0)], egui::Stroke::new(w(7.0), hood));
-    label(p(250.0, 75.0), egui::Align2::RIGHT_BOTTOM, "cofano", text);
+    label(p(250.0, 75.0), egui::Align2::RIGHT_BOTTOM, tr("cofano"), text);
     let (m1, m2) = (p(95.0, 72.0), p(185.0, 95.0));
     painter.line_segment([p(70.0, 66.0), p(215.0, 103.0)], egui::Stroke::new(w(14.0), arm));
-    label(p(222.0, 118.0), egui::Align2::LEFT_TOP, "cerniera mobile\n(braccio sul cofano)", text);
+    label(p(222.0, 118.0), egui::Align2::LEFT_TOP, tr("cerniera mobile\n(braccio sul cofano)"), text);
     // Piastra fissa
     let plate = vec![p(60.0, 190.0), p(220.0, 190.0), p(210.0, 222.0), p(70.0, 222.0)];
     painter.add(egui::Shape::convex_polygon(plate, fixed, egui::Stroke::NONE));
-    label(p(225.0, 205.0), egui::Align2::LEFT_CENTER, "cerniera fissa\n(sulla scocca)", text);
+    label(p(225.0, 205.0), egui::Align2::LEFT_CENTER, tr("cerniera fissa\n(sulla scocca)"), text);
     let (f1, f2) = (p(85.0, 195.0), p(180.0, 195.0));
     // Bielle
     painter.line_segment([f1, m1], egui::Stroke::new(w(12.0), link1));
     painter.line_segment([f2, m2], egui::Stroke::new(w(12.0), link2));
-    label(p(70.0, 140.0), egui::Align2::RIGHT_CENTER, "biella 1", text);
-    label(p(196.0, 150.0), egui::Align2::LEFT_CENTER, "biella 2", text);
+    label(p(70.0, 140.0), egui::Align2::RIGHT_CENTER, tr("biella 1"), text);
+    label(p(196.0, 150.0), egui::Align2::LEFT_CENTER, tr("biella 2"), text);
     // Perni, con l'ordine dei clic
     for (c, name) in [(f1, "1  F1"), (f2, "2  F2"), (m1, "3  M1"), (m2, "4  M2")] {
         painter.circle(c, w(7.0), egui::Color32::from_gray(150), egui::Stroke::new(1.5_f32, egui::Color32::BLACK));
@@ -320,7 +321,7 @@ fn draw_three_points(ui: &mut egui::Ui) {
             painter.circle(*q, 4.5, accent, egui::Stroke::new(1.0_f32, egui::Color32::BLACK));
             painter.text(*q + (*q - c).normalized() * 11.0, egui::Align2::CENTER_CENTER, format!("{}", i + 1), egui::FontId::proportional(12.0), text);
         }
-        let (caption, color) = if ok { ("Sì: 3 punti lontani, a triangolo", good) } else { ("No: punti vicini o in fila", bad) };
+        let (caption, color) = if ok { (tr("Sì: 3 punti lontani, a triangolo"), good) } else { (tr("No: punti vicini o in fila"), bad) };
         painter.text(c + egui::vec2(0.0, r + 22.0), egui::Align2::CENTER_CENTER, caption, egui::FontId::proportional(12.0), color);
         if !ok {
             let d = r * 0.8;
@@ -337,7 +338,7 @@ fn draw_four_bar_guide(ctx: &egui::Context, open: &mut bool) {
     let guide_pos = ctx
         .memory(|m| m.area_rect(egui::Id::new("finestra_posizione")))
         .map_or(ctx.screen_rect().right_top() + egui::vec2(-650.0, 60.0), |r| egui::pos2((r.left() - 370.0).max(0.0), r.top()));
-    egui::Window::new(format!("{}  Guida 4 perni", icon::INFO))
+    egui::Window::new(format!("{}  {}", icon::INFO, tr("Guida 4 perni")))
         .id(egui::Id::new("guida_quattro_perni"))
         .open(open)
         .resizable([true, false])
@@ -355,13 +356,13 @@ fn draw_four_bar_guide(ctx: &egui::Context, open: &mut bool) {
                 draw_three_points(ui);
                 ui.add_space(6.0);
                 for (i, step) in FOUR_BAR_STEPS.iter().enumerate() {
-                    ui.label(format!("{}. {step}", i + 1));
+                    ui.label(format!("{}. {}", i + 1, tr(step)));
                     ui.add_space(3.0);
                 }
                 ui.label(
                     egui::RichText::new(
-                        "Basta una cerniera: il cofano si muove tutto. Le bielle dell'altro lato si possono \
-                         selezionare insieme a quelle di questo lato se le due cerniere sono allineate.",
+                        tr("Basta una cerniera: il cofano si muove tutto. Le bielle dell'altro lato si possono \
+                         selezionare insieme a quelle di questo lato se le due cerniere sono allineate."),
                     )
                     .small()
                     .weak(),
@@ -405,9 +406,9 @@ fn draw_trilateration(ui: &mut egui::Ui) {
         }
         painter.circle(p(target), 5.0 * k.max(0.8), partc, egui::Stroke::new(1.0_f32, egui::Color32::BLACK));
         let (caption, color) = match n {
-            1 => ("1 misura: ovunque\nsul cerchio", bad),
-            2 => ("2 misure: due\nposizioni possibili", bad),
-            _ => ("3 misure: una sola\nposizione", good),
+            1 => (tr("1 misura: ovunque\nsul cerchio"), bad),
+            2 => (tr("2 misure: due\nposizioni possibili"), bad),
+            _ => (tr("3 misure: una sola\nposizione"), good),
         };
         ui.painter_at(rect).text(p(egui::vec2(55.0, 148.0)), egui::Align2::CENTER_TOP, caption, font.clone(), color);
     }
@@ -458,7 +459,7 @@ fn draw_measures_guide(ctx: &egui::Context, open: &mut bool) {
         .memory(|m| m.area_rect(egui::Id::new("finestra_posizione")))
         .map_or(ctx.screen_rect().right_top() + egui::vec2(-650.0, 60.0), |r| egui::pos2((r.left() - 370.0).max(0.0), r.top()));
     let (good, ok, bad) = (egui::Color32::from_rgb(60, 190, 90), egui::Color32::from_rgb(230, 160, 40), egui::Color32::from_rgb(230, 70, 60));
-    egui::Window::new(format!("{}  Guida misure", icon::INFO))
+    egui::Window::new(format!("{}  {}", icon::INFO, tr("Guida misure")))
         .id(egui::Id::new("guida_misure"))
         .open(open)
         .resizable([true, false])
@@ -470,42 +471,43 @@ fn draw_measures_guide(ctx: &egui::Context, open: &mut bool) {
         .show(ctx, |ui| {
             egui::ScrollArea::both().max_height((ctx.screen_rect().height() - 120.0).max(150.0)).show(ui, |ui| {
                 ui.set_width(ui.available_width().max(220.0));
-                ui.label(egui::RichText::new("Perché «Precisa: 3 punti fissi × 3 punti M»").strong());
+                ui.label(egui::RichText::new(tr("Perché «Precisa: 3 punti fissi × 3 punti M»")).strong());
                 ui.label(
-                    "Con il metro misuri la distanza tra un punto fisso F del riferimento fermo (in blu, es. il paraurti) \
+                    tr("Con il metro misuri la distanza tra un punto fisso F del riferimento fermo (in blu, es. il paraurti) \
                      e un punto M dell'oggetto da spostare (in arancione, es. il supporto del jig). Una distanza sola non \
-                     dice dove sta il punto M: può essere ovunque su un cerchio (nello spazio, su una sfera).",
+                     dice dove sta il punto M: può essere ovunque su un cerchio (nello spazio, su una sfera)."),
                 );
                 draw_trilateration(ui);
                 ui.label(
-                    "Con 3 distanze da 3 punti fissi diversi il punto M è fissato, come la punta di un treppiede. \
+                    tr("Con 3 distanze da 3 punti fissi diversi il punto M è fissato, come la punta di un treppiede. \
                      Un punto solo però non basta: l'oggetto ci potrebbe girare attorno. Con 3 punti M fissati così \
                      (M1, M2, M3, lontani tra loro) l'oggetto non può più né spostarsi né ruotare. Per questo in \
-                     «Precisa» da ogni punto fisso si misurano gli stessi 3 punti M.",
+                     «Precisa» da ogni punto fisso si misurano gli stessi 3 punti M."),
                 );
                 ui.add_space(8.0);
-                ui.label(egui::RichText::new("Quante misure prendere").strong());
+                ui.label(egui::RichText::new(tr("Quante misure prendere")).strong());
                 ui.horizontal_wrapped(|ui| {
                     draw_measure_scheme(
                         ui,
-                        "Precisa: 3 F × 3 M",
+                        tr("Precisa: 3 F × 3 M"),
                         &[(0, 0), (0, 1), (0, 3), (1, 0), (1, 1), (1, 3), (2, 0), (2, 1), (2, 3)],
                         good,
                     );
-                    draw_measure_scheme(ui, "Veloce: 4 misure", &[(0, 0), (0, 1), (1, 2), (1, 3)], ok);
-                    draw_measure_scheme(ui, "No: tutte da un punto", &[(0, 0), (0, 1), (0, 2), (0, 3)], bad);
+                    draw_measure_scheme(ui, tr("Veloce: 4 misure"), &[(0, 0), (0, 1), (1, 2), (1, 3)], ok);
+                    draw_measure_scheme(ui, tr("No: tutte da un punto"), &[(0, 0), (0, 1), (0, 2), (0, 3)], bad);
                 });
                 ui.add_space(4.0);
                 for (color, t) in [
-                    (good, "Precisa: almeno 3 punti fissi F (lontani tra loro), da ognuno le distanze verso 3 punti M \
+                    (good, tr("Precisa: almeno 3 punti fissi F (lontani tra loro), da ognuno le distanze verso 3 punti M \
                             dell'oggetto (lontani tra loro e non in fila), meglio gli stessi M per tutti: 9 misure. Il punto \
                             fisso si clicca una volta sola, poi i 3 punti M. Non c'è un massimo: più punti danno più \
-                            controllo. La scritta verde «Schema completo» conferma che ci sei."),
-                    (ok, "Veloce: con meno misure (minimo 4) Dima sposta l'oggetto il meno possibile e scrive \
+                            controllo. La scritta verde «Schema completo» conferma che ci sei.")),
+                    (ok, tr("Veloce: con meno misure (minimo 4) Dima sposta l'oggetto il meno possibile e scrive \
                           «Posizione approssimata». Va bene se sul 3D l'oggetto è già quasi giusto. Se è solo spostato e non \
-                          ruotato, con «Solo spostamento» bastano 3 misure, anche ΔX, ΔY o ΔZ."),
-                    (bad, "Tutte le misure verso lo stesso punto M: il punto è fissato ma l'oggetto ci gira attorno."),
-                    (bad, "Punti F e M quasi in un piano (es. tutti alla stessa altezza): la misura non dice da che parte                            del piano sta l'oggetto. Prendi almeno un punto fisso più in alto o più in basso degli altri."),
+                          ruotato, con «Solo spostamento» bastano 3 misure, anche ΔX, ΔY o ΔZ.")),
+                    (bad, tr("Tutte le misure verso lo stesso punto M: il punto è fissato ma l'oggetto ci gira attorno.")),
+                    (bad, tr("Punti F e M quasi in un piano (es. tutti alla stessa altezza): la misura non dice da che parte \
+                            del piano sta l'oggetto. Prendi almeno un punto fisso più in alto o più in basso degli altri.")),
                 ] {
                     ui.horizontal_wrapped(|ui| {
                         ui.label(egui::RichText::new("●").color(color));
@@ -513,19 +515,19 @@ fn draw_measures_guide(ctx: &egui::Context, open: &mut bool) {
                     });
                 }
                 ui.add_space(8.0);
-                ui.label(egui::RichText::new("Come si fa").strong());
+                ui.label(egui::RichText::new(tr("Come si fa")).strong());
                 for (i, step) in [
-                    "In cima alla finestra Posizione scegli come «Oggetto» il pezzo da spostare.",
-                    "In cabina misura con il metro da un punto del riferimento a un punto dell'oggetto. Scegli punti \
-                     facili da ritrovare sul 3D: spigoli, angoli, centri dei fori.",
-                    "Scegli «Veloce» o «Precisa». Precisa: «Nuovo punto fisso», clicca sul 3D il punto F e poi i 3 punti \
+                    tr("In cima alla finestra Posizione scegli come «Oggetto» il pezzo da spostare."),
+                    tr("In cabina misura con il metro da un punto del riferimento a un punto dell'oggetto. Scegli punti \
+                     facili da ritrovare sul 3D: spigoli, angoli, centri dei fori."),
+                    tr("Scegli «Veloce» o «Precisa». Precisa: «Nuovo punto fisso», clicca sul 3D il punto F e poi i 3 punti \
                      M dell'oggetto (il clic si aggancia al vertice vicino); ripeti per gli altri fissi. Veloce: «Nuova \
                      misura», un punto F e un punto M per volta. In alternativa misura con lo strumento Misura (M) e \
-                     premi «Dalla Misura».",
-                    "Scrivi in «Misurato» il valore del metro. In Veloce, se hai misurato solo l'altezza (livella) o solo \
-                     lungo un asse, cambia il tipo in ΔZ, ΔX o ΔY.",
-                    "Premi «Allinea». La colonna «Dopo» dice quanto resta su ogni misura: un valore grande indica una \
-                     misura letta o cliccata male, che puoi spegnere. Annulla rimette l'oggetto dov'era.",
+                     premi «Dalla Misura»."),
+                    tr("Scrivi in «Misurato» il valore del metro. In Veloce, se hai misurato solo l'altezza (livella) o solo \
+                     lungo un asse, cambia il tipo in ΔZ, ΔX o ΔY."),
+                    tr("Premi «Allinea». La colonna «Dopo» dice quanto resta su ogni misura: un valore grande indica una \
+                     misura letta o cliccata male, che puoi spegnere. Annulla rimette l'oggetto dov'era."),
                 ]
                 .iter()
                 .enumerate()
@@ -541,8 +543,9 @@ fn draw_measures_guide(ctx: &egui::Context, open: &mut bool) {
 fn build_four_bar(p: &[Vec3]) -> Result<FourBar, String> {
     let mut pins = [(Vec3::ZERO, Vec3::Z); 4];
     for (k, pin) in pins.iter_mut().enumerate() {
-        let [a, b, c] = p.get(k * 3..k * 3 + 3).and_then(|s| <[Vec3; 3]>::try_from(s).ok()).ok_or("Punti mancanti")?;
-        *pin = circle_through(a, b, c).ok_or_else(|| format!("{}: i tre punti sono in fila, cliccali lontani a triangolo sul bordo", PIN_NAMES[k]))?;
+        let [a, b, c] = p.get(k * 3..k * 3 + 3).and_then(|s| <[Vec3; 3]>::try_from(s).ok()).ok_or(tr("Punti mancanti"))?;
+        *pin = circle_through(a, b, c)
+            .ok_or_else(|| trf!("{pin}: i tre punti sono in fila, cliccali lontani a triangolo sul bordo", pin = tr(PIN_NAMES[k])))?;
     }
     FourBar::from_pins(pins)
 }
@@ -563,12 +566,17 @@ impl HingeMode {
     /// Cosa cliccare per il punto `i` (da 0).
     pub fn prompt(self, i: usize) -> String {
         match self {
-            HingeMode::TwoPoints => ["Clic sul primo punto dell'asse", "Clic sul secondo punto dell'asse"][i.min(1)].to_string(),
-            HingeMode::TwoHoles => format!("Foro {}: clic sul bordo, punto {} di 3", i / 3 + 1, i % 3 + 1),
-            HingeMode::OneHole => format!("Clic sul bordo del foro, punto {} di 3", i + 1),
-            HingeMode::PointAxis(_) => "Clic sul punto per cui passa l'asse".to_string(),
+            HingeMode::TwoPoints => [tr("Clic sul primo punto dell'asse"), tr("Clic sul secondo punto dell'asse")][i.min(1)].to_string(),
+            HingeMode::TwoHoles => trf!("Foro {hole}: clic sul bordo, punto {n} di 3", hole = i / 3 + 1, n = i % 3 + 1),
+            HingeMode::OneHole => trf!("Clic sul bordo del foro, punto {n} di 3", n = i + 1),
+            HingeMode::PointAxis(_) => tr("Clic sul punto per cui passa l'asse").to_string(),
             HingeMode::TwoPositions => String::new(),
-            HingeMode::FourBar => format!("perno {} di 4, {}: punto {} di 3 sul bordo (a triangolo)", (i / 3).min(3) + 1, PIN_NAMES[(i / 3).min(3)], i % 3 + 1),
+            HingeMode::FourBar => trf!(
+                "perno {k} di 4, {pin}: punto {n} di 3 sul bordo (a triangolo)",
+                k = (i / 3).min(3) + 1,
+                pin = tr(PIN_NAMES[(i / 3).min(3)]),
+                n = i % 3 + 1
+            ),
         }
     }
 
@@ -576,22 +584,22 @@ impl HingeMode {
     pub fn axis(self, p: &[Vec3]) -> Result<(Vec3, Vec3), &'static str> {
         let line = |a: Vec3, b: Vec3| {
             let d = b - a;
-            if d.length_squared() > 1e-12 { Ok((a, d.normalize())) } else { Err("I due punti coincidono") }
+            if d.length_squared() > 1e-12 { Ok((a, d.normalize())) } else { Err(tr("I due punti coincidono")) }
         };
         match (self, p) {
             (HingeMode::TwoPoints, [a, b]) => line(*a, *b),
             (HingeMode::TwoHoles, [a, b, c, d, e, f]) => {
-                let (c1, _) = circle_through(*a, *b, *c).ok_or("I tre punti del primo foro sono allineati")?;
-                let (c2, _) = circle_through(*d, *e, *f).ok_or("I tre punti del secondo foro sono allineati")?;
+                let (c1, _) = circle_through(*a, *b, *c).ok_or(tr("I tre punti del primo foro sono allineati"))?;
+                let (c2, _) = circle_through(*d, *e, *f).ok_or(tr("I tre punti del secondo foro sono allineati"))?;
                 line(c1, c2)
             }
-            (HingeMode::OneHole, [a, b, c]) => circle_through(*a, *b, *c).ok_or("I tre punti del foro sono allineati"),
+            (HingeMode::OneHole, [a, b, c]) => circle_through(*a, *b, *c).ok_or(tr("I tre punti del foro sono allineati")),
             (HingeMode::PointAxis(k), [a]) => {
                 let mut d = Vec3::ZERO;
                 d[k.min(2)] = 1.0;
                 Ok((*a, d))
             }
-            _ => Err("Punti mancanti"),
+            _ => Err(tr("Punti mancanti")),
         }
     }
 }
@@ -759,11 +767,11 @@ pub fn draw_overlay(
         }
     }
     if let Some(text) = hinge.prompt() {
-        let what = if hinge.mode == HingeMode::FourBar { "Perni della cerniera" } else { "Asse della cerniera" };
+        let what = if hinge.mode == HingeMode::FourBar { tr("Perni della cerniera") } else { tr("Asse della cerniera") };
         painter.text(
             rect.center_bottom() - egui::vec2(0.0, 40.0),
             egui::Align2::CENTER_CENTER,
-            format!("{what}: {text}  ·  Esc per annullare"),
+            trf!("{what}: {text}  ·  Esc per annullare", what = what, text = text),
             egui::FontId::proportional(15.0),
             accent,
         );
@@ -882,7 +890,7 @@ fn section<R>(ui: &mut egui::Ui, id: &str, title: &str, open: &mut bool, body: i
 fn angle_row(ui: &mut egui::Ui, angle: &mut f32, step: f32, hint: &str) {
     let slider = (ui.available_width() - 175.0).clamp(40.0, 200.0);
     ui.horizontal_wrapped(|ui| {
-        ui.label("Angolo");
+        ui.label(tr("Angolo"));
         if ui.small_button(icon::CARET_LEFT).clicked() {
             *angle -= step;
         }
@@ -899,7 +907,7 @@ fn angle_row(ui: &mut egui::Ui, angle: &mut f32, step: f32, hint: &str) {
 /// Scelta del passo dell'angolo.
 fn step_row(ui: &mut egui::Ui, step: &mut f32) {
     ui.horizontal_wrapped(|ui| {
-        ui.label("Passo");
+        ui.label(tr("Passo"));
         egui::ComboBox::from_id_salt("posizione_passo_cerniera")
             .width(70.0)
             .selected_text(format!("{} °", step))
@@ -909,7 +917,7 @@ fn step_row(ui: &mut egui::Ui, step: &mut f32) {
                 }
             })
             .response
-            .on_hover_text("Passo delle frecce e del cursore dell'angolo");
+            .on_hover_text(tr("Passo delle frecce e del cursore dell'angolo"));
     });
 }
 
@@ -918,7 +926,7 @@ fn slot_text(app: &GestoreApp, slot: &[u32]) -> (String, String) {
     let text = match slot {
         [] => "—".to_string(),
         [n] => node_label(app, Some(*n)),
-        many => format!("{} elementi", many.len()),
+        many => trf!("{n} elementi", n = many.len()),
     };
     // Nomi lunghi (percorsi dei file) accorciati: il pulsante resta nella finestra
     let short = if text.chars().count() > 24 {
@@ -946,15 +954,15 @@ fn pose_grid(ui: &mut egui::Ui, _id: &str, pose: &Pose) {
 /// «Misura dell'oggetto»: scelta del file local (0), world (1) o degli oggetti del robot (2).
 fn pick_measure_file(m: &mut super::object_measure::ObjectMeasure, kind: u8, last_program: Option<&std::path::Path>) {
     let title = match kind {
-        0 => "Apri il file local (punti presi sulla matematica)",
-        1 => "Apri il file world (punti presi con il robot)",
-        _ => "Apri il file degli oggetti del robot",
+        0 => tr("Apri il file local (punti presi sulla matematica)"),
+        1 => tr("Apri il file world (punti presi con il robot)"),
+        _ => tr("Apri il file degli oggetti del robot"),
     };
     let near = [m.local.as_ref(), m.world.as_ref()].into_iter().flatten().map(|f| f.path.clone()).next();
     let mut dialog = rfd::FileDialog::new()
         .set_title(title)
-        .add_filter("Dati del robot (TID)", &["tid", "TID"])
-        .add_filter("Tutti i file", &["*"]);
+        .add_filter(tr("Dati del robot (TID)"), &["tid", "TID"])
+        .add_filter(tr("Tutti i file"), &["*"]);
     if let Some(dir) = near.as_deref().or(last_program).and_then(|p| p.parent()) {
         dialog = dialog.set_directory(dir);
     }
@@ -962,7 +970,7 @@ fn pick_measure_file(m: &mut super::object_measure::ObjectMeasure, kind: u8, las
     match kind {
         0 | 1 => m.open(&path, kind == 1),
         _ => match m.read_bases(&path) {
-            Ok(0) => m.error = Some(format!("Nessun oggetto (CONST BASE o OBJECT) in {}", path.display())),
+            Ok(0) => m.error = Some(trf!("Nessun oggetto (CONST BASE o OBJECT) in {path}", path = path.display())),
             Ok(_) => m.error = None,
             Err(e) => m.error = Some(e),
         },
@@ -972,7 +980,7 @@ fn pick_measure_file(m: &mut super::object_measure::ObjectMeasure, kind: u8, las
 /// «Misura dell'oggetto»: salva il report HTML e lo apre nel browser; ritorna il messaggio.
 fn save_measure_report(m: &super::object_measure::ObjectMeasure) -> Option<String> {
     let (rows, Ok(res)) = m.compute() else { return None };
-    let mut dialog = rfd::FileDialog::new().set_title("Salva il report della misura").add_filter("Pagina HTML", &["html", "htm"]);
+    let mut dialog = rfd::FileDialog::new().set_title(tr("Salva il report della misura")).add_filter(tr("Pagina HTML"), &["html", "htm"]);
     if let Some(p) = m.report_path() {
         if let Some(dir) = p.parent() {
             dialog = dialog.set_directory(dir);
@@ -988,9 +996,9 @@ fn save_measure_report(m: &super::object_measure::ObjectMeasure) -> Option<Strin
         Ok(()) => {
             #[cfg(windows)]
             let _ = std::process::Command::new("explorer").arg(&path).spawn();
-            format!("Report salvato: {}", path.display())
+            trf!("Report salvato: {path}", path = path.display())
         }
-        Err(e) => format!("Report non salvato: {e}"),
+        Err(e) => trf!("Report non salvato: {e}", e = e),
     })
 }
 
@@ -1079,7 +1087,7 @@ pub fn draw(ctx: &egui::Context, app: &mut GestoreApp, pass: super::dock::Pass) 
                         h.arm_ref = None;
                         h.points.clear();
                         h.angle = 0.0;
-                        h.error = Some("La parte che si apre è stata spostata in un altro modo: scegli di nuovo i perni".to_string());
+                        h.error = Some(tr("La parte che si apre è stata spostata in un altro modo: scegli di nuovo i perni").to_string());
                     }
                 }
             }
@@ -1143,7 +1151,7 @@ pub fn draw(ctx: &egui::Context, app: &mut GestoreApp, pass: super::dock::Pass) 
     let part_name = |nodes: &[u32]| match nodes {
         [] => "—".to_string(),
         [n] => scene.display_name(*n),
-        many => format!("{} elementi", many.len()),
+        many => trf!("{n} elementi", n = many.len()),
     };
     let saved_hinges: Vec<(usize, crate::scene_graph::hinge::SavedHinge, String)> =
         scene.live_hinges().map(|(i, h)| (i, h.clone(), part_name(&h.nodes))).collect();
@@ -1168,7 +1176,7 @@ pub fn draw(ctx: &egui::Context, app: &mut GestoreApp, pass: super::dock::Pass) 
     // Si allarga e si stringe trascinando il bordo; il testo va a capo. Si aggancia ai bordi
     let window = super::dock::Dockable {
         id: "finestra_posizione",
-        title: format!("{}  Posizione", icon::ARROWS_OUT_CARDINAL),
+        title: format!("{}  {}", icon::ARROWS_OUT_CARDINAL, tr("Posizione")),
         state: &mut dock,
         open: &mut open,
         default_width: 270.0,
@@ -1190,10 +1198,10 @@ pub fn draw(ctx: &egui::Context, app: &mut GestoreApp, pass: super::dock::Pass) 
             ui.set_min_width(ui.available_width());
             ui.add_enabled_ui(!busy, |ui| {
                 // ── Oggetto ────────────────────────────────────────────────────
-                section(ui, "posizione_sez_oggetto", "Oggetto", &mut sections[0], |ui| {
+                section(ui, "posizione_sez_oggetto", tr("Oggetto"), &mut sections[0], |ui| {
                 let label = match target {
                     Some(Target::File(n)) => files.iter().find(|(f, _)| *f == n).map(|(_, s)| s.clone()).unwrap_or_default(),
-                    Some(Target::Selection) => format!("Pezzi selezionati ({})", selection.len()),
+                    Some(Target::Selection) => trf!("Pezzi selezionati ({n})", n = selection.len()),
                     None => "—".to_string(),
                 };
                 egui::ComboBox::from_id_salt("posizione_oggetto").width((ui.available_width() - 40.0).max(80.0)).selected_text(label).show_ui(ui, |ui| {
@@ -1204,24 +1212,24 @@ pub fn draw(ctx: &egui::Context, app: &mut GestoreApp, pass: super::dock::Pass) 
                         ui.selectable_value(
                             &mut panel.target,
                             Some(Target::Selection),
-                            format!("Pezzi selezionati ({})", selection.len()),
+                            trf!("Pezzi selezionati ({n})", n = selection.len()),
                         );
                     });
                 });
 
                 ui.add_space(4.0);
                 ui.horizontal_wrapped(|ui| {
-                    ui.label(egui::RichText::new("Coordinate dell'oggetto").strong());
-                    if ui.small_button(icon::COPY).on_hover_text("Copia X Y Z A B C").clicked() {
+                    ui.label(egui::RichText::new(tr("Coordinate dell'oggetto")).strong());
+                    if ui.small_button(icon::COPY).on_hover_text(tr("Copia X Y Z A B C")).clicked() {
                         copy = Some(frame_pose.to_text());
                     }
                 });
                 pose_grid(ui, "posizione_coordinate", &frame_pose);
                 ui.label(
                     egui::RichText::new(if has_frame {
-                        "Dai Transform del file, con gli spostamenti fatti qui"
+                        tr("Dai Transform del file, con gli spostamenti fatti qui")
                     } else {
-                        "Nessun Transform nel file: coincidono con la cabina"
+                        tr("Nessun Transform nel file: coincidono con la cabina")
                     })
                     .small()
                     .weak(),
@@ -1229,11 +1237,11 @@ pub fn draw(ctx: &egui::Context, app: &mut GestoreApp, pass: super::dock::Pass) 
                 });
 
                 // ── Trasformazione ─────────────────────────────────────────────
-                section(ui, "posizione_sez_trasformazione", "Trasformazione", &mut sections[1], |ui| {
+                section(ui, "posizione_sez_trasformazione", tr("Trasformazione"), &mut sections[1], |ui| {
                 ui.horizontal_wrapped(|ui| {
                     for (k, (name, color, hint)) in AXES.iter().enumerate() {
                         let text = egui::RichText::new(*name).color(*color).strong().size(16.0);
-                        if ui.add(egui::Button::new(text).selected(panel.axis == k).min_size(egui::vec2(36.0, 26.0))).on_hover_text(*hint).clicked() {
+                        if ui.add(egui::Button::new(text).selected(panel.axis == k).min_size(egui::vec2(36.0, 26.0))).on_hover_text(tr(hint)).clicked() {
                             panel.axis = k;
                         }
                     }
@@ -1243,7 +1251,7 @@ pub fn draw(ctx: &egui::Context, app: &mut GestoreApp, pass: super::dock::Pass) 
                 let before = panel.value;
                 let slider = (ui.available_width() - 185.0).clamp(40.0, 200.0);
                 ui.horizontal_wrapped(|ui| {
-                    ui.label("Modifica");
+                    ui.label(tr("Modifica"));
                     if ui.small_button(icon::CARET_LEFT).clicked() {
                         panel.value -= panel.unit;
                     }
@@ -1254,10 +1262,10 @@ pub fn draw(ctx: &egui::Context, app: &mut GestoreApp, pass: super::dock::Pass) 
                         panel.value += panel.unit;
                     }
                     ui.add(egui::DragValue::new(&mut panel.value).speed(panel.unit).max_decimals(3).suffix(suffix))
-                        .on_hover_text("Trascina, oppure fai doppio clic e scrivi il valore");
+                        .on_hover_text(tr("Trascina, oppure fai doppio clic e scrivi il valore"));
                 });
                 ui.horizontal_wrapped(|ui| {
-                    ui.label("Unità");
+                    ui.label(tr("Unità"));
                     egui::ComboBox::from_id_salt("posizione_unita")
                         .width(70.0)
                         .selected_text(format!("{}", panel.unit))
@@ -1267,19 +1275,19 @@ pub fn draw(ctx: &egui::Context, app: &mut GestoreApp, pass: super::dock::Pass) 
                             }
                         })
                         .response
-                        .on_hover_text("Passo del cursore e delle frecce (mm o gradi)");
-                    ui.checkbox(&mut panel.world, "Modifica in coordinate World").on_hover_text(
-                        "Acceso: assi della cabina; le rotazioni girano attorno all'origine dell'oggetto, \
+                        .on_hover_text(tr("Passo del cursore e delle frecce (mm o gradi)"));
+                    ui.checkbox(&mut panel.world, tr("Modifica in coordinate World")).on_hover_text(
+                        tr("Acceso: assi della cabina; le rotazioni girano attorno all'origine dell'oggetto, \
                          quindi X Y Z restano. Spento: assi e centro dell'oggetto (le sue coordinate, \
-                         uguali per tutti i suoi pezzi)",
+                         uguali per tutti i suoi pezzi)"),
                     );
                 });
                 if panel.value != before && !nodes.is_empty() {
                     let motion = axis_motion(panel.axis, panel.value - before);
                     actions.push(Action::Move { nodes: nodes.clone(), matrix: slider_motion(motion, frame, panel.world) });
                 }
-                if ui.button(icon_text(ui, icon::ARROW_COUNTER_CLOCKWISE, "Ripristina"))
-                    .on_hover_text("Riporta l'oggetto nella posizione in cui è stato aperto")
+                if ui.button(icon_text(ui, icon::ARROW_COUNTER_CLOCKWISE, tr("Ripristina")))
+                    .on_hover_text(tr("Riporta l'oggetto nella posizione in cui è stato aperto"))
                     .clicked()
                     && !nodes.is_empty()
                 {
@@ -1288,26 +1296,26 @@ pub fn draw(ctx: &egui::Context, app: &mut GestoreApp, pass: super::dock::Pass) 
                 });
 
                 // ── Allinea ────────────────────────────────────────────────────
-                section(ui, "posizione_allinea", "Allinea", &mut sections[5], |ui| {
+                section(ui, "posizione_allinea", tr("Allinea"), &mut sections[5], |ui| {
                     ui.label(
-                        egui::RichText::new("L'oggetto qui sopra si sposta sul riferimento lungo gli assi scelti della cabina, senza ruotare.")
+                        egui::RichText::new(tr("L'oggetto qui sopra si sposta sul riferimento lungo gli assi scelti della cabina, senza ruotare."))
                             .weak()
                             .small(),
                     );
                     ui.horizontal_wrapped(|ui| {
-                        ui.label("Su");
+                        ui.label(tr("Su"));
                         let (short, full) = slot_text(app, &panel.align_reference);
                         let zero = panel.align_reference.is_empty();
-                        ui.label(egui::RichText::new(if zero { "Zero della scena".to_string() } else { short }).strong())
-                            .on_hover_text(if zero { "Centro cabina (lo zero della scena)".to_string() } else { full });
+                        ui.label(egui::RichText::new(if zero { tr("Zero della scena").to_string() } else { short }).strong())
+                            .on_hover_text(if zero { tr("Centro cabina (lo zero della scena)").to_string() } else { full });
                         if ui
-                            .add_enabled(!selection.is_empty(), egui::Button::new("Usa selezione").small())
-                            .on_hover_text("Il riferimento diventa la selezione: un pezzo, un gruppo o più pezzi insieme")
+                            .add_enabled(!selection.is_empty(), egui::Button::new(tr("Usa selezione")).small())
+                            .on_hover_text(tr("Il riferimento diventa la selezione: un pezzo, un gruppo o più pezzi insieme"))
                             .clicked()
                         {
                             panel.align_reference = selection.clone();
                         }
-                        if !zero && ui.small_button("Zero").on_hover_text("Allinea sullo zero della scena (centro cabina)").clicked() {
+                        if !zero && ui.small_button(tr("Zero")).on_hover_text(tr("Allinea sullo zero della scena (centro cabina)")).clicked() {
                             panel.align_reference.clear();
                         }
                     });
@@ -1317,7 +1325,7 @@ pub fn draw(ctx: &egui::Context, app: &mut GestoreApp, pass: super::dock::Pass) 
                         }
                         ui.separator();
                         for (mode, name, hint) in AlignMode::ALL {
-                            ui.selectable_value(&mut panel.align_mode, mode, name).on_hover_text(hint);
+                            ui.selectable_value(&mut panel.align_mode, mode, tr(name)).on_hover_text(tr(hint));
                         }
                     });
                     let reference: Vec<u32> =
@@ -1334,9 +1342,9 @@ pub fn draw(ctx: &egui::Context, app: &mut GestoreApp, pass: super::dock::Pass) 
                     };
                     let axes = panel.align_axes;
                     let delta: Result<Vec3, String> = match bbox(&nodes) {
-                        None => Err("Scegli l'oggetto da spostare".to_string()),
-                        Some(_) if !axes.contains(&true) => Err("Scegli almeno un asse".to_string()),
-                        Some(_) if reference.iter().any(|r| nodes.contains(r)) => Err("Il riferimento è anche l'oggetto da spostare".to_string()),
+                        None => Err(tr("Scegli l'oggetto da spostare").to_string()),
+                        Some(_) if !axes.contains(&true) => Err(tr("Scegli almeno un asse").to_string()),
+                        Some(_) if reference.iter().any(|r| nodes.contains(r)) => Err(tr("Il riferimento è anche l'oggetto da spostare").to_string()),
                         Some(moving) if panel.align_mode == AlignMode::SamePiece => match (nodes.as_slice(), reference.as_slice()) {
                             ([n], [r]) => scene
                                 .geometric_offset(*n, *r)
@@ -1344,15 +1352,15 @@ pub fn draw(ctx: &egui::Context, app: &mut GestoreApp, pass: super::dock::Pass) 
                                     let c = moving.center();
                                     only_axes(fit.matrix.transform_point3(c) - c, axes)
                                 })
-                                .map_err(|why| format!("Non sono lo stesso pezzo: {why}")),
-                            _ => Err("«Stesso pezzo»: un solo oggetto da spostare e un solo riferimento".to_string()),
+                                .map_err(|why| trf!("Non sono lo stesso pezzo: {why}", why = why)),
+                            _ => Err(tr("«Stesso pezzo»: un solo oggetto da spostare e un solo riferimento").to_string()),
                         },
                         Some(moving) => Ok(align_delta(&moving, bbox(&reference).as_ref(), panel.align_mode, axes)),
                     };
                     match &delta {
                         Ok(d) => {
                             ui.horizontal_wrapped(|ui| {
-                                ui.label("Spostamento");
+                                ui.label(tr("Spostamento"));
                                 for k in (0..3).filter(|&k| axes[k]) {
                                     ui.label(egui::RichText::new(AXES[k].0).color(AXES[k].1).strong());
                                     ui.monospace(format!("{:+.2}", d[k] + 0.0));
@@ -1365,29 +1373,34 @@ pub fn draw(ctx: &egui::Context, app: &mut GestoreApp, pass: super::dock::Pass) 
                         }
                     }
                     let ok = delta.as_ref().ok().filter(|d| d.length() > 1e-4).copied();
-                    if ui.add_enabled(ok.is_some(), egui::Button::new(icon_text(ui, icon::ALIGN_CENTER_HORIZONTAL, "Allinea"))).clicked() {
+                    if ui.add_enabled(ok.is_some(), egui::Button::new(icon_text(ui, icon::ALIGN_CENTER_HORIZONTAL, tr("Allinea")))).clicked() {
                         if let Some(d) = ok {
                             actions.push(Action::Move { nodes: nodes.clone(), matrix: Mat4::from_translation(d) });
-                            status = Some(format!("Allineato: spostato di X {:+.2} Y {:+.2} Z {:+.2} mm", d.x, d.y, d.z));
+                            status = Some(trf!(
+                                "Allineato: spostato di X {x} Y {y} Z {z} mm",
+                                x = format!("{:+.2}", d.x),
+                                y = format!("{:+.2}", d.y),
+                                z = format!("{:+.2}", d.z)
+                            ));
                         }
                     }
                 });
 
                 // ── Allinea su punti ───────────────────────────────────────────
-                section(ui, "posizione_punti", "Allinea su punti", &mut sections[6], |ui| {
+                section(ui, "posizione_punti", tr("Allinea su punti"), &mut sections[6], |ui| {
                     let pa = &mut panel.points;
                     ui.label(
-                        egui::RichText::new(format!(
+                        egui::RichText::new(trf!(
                             "L'oggetto qui sopra si sposta sui riferimenti presi in cabina (punti del programma). \
-                             Almeno {} punti; sul 3D il clic si aggancia al vertice vicino.",
-                            super::point_align::MIN_POINTS
+                             Almeno {n} punti; sul 3D il clic si aggancia al vertice vicino.",
+                            n = super::point_align::MIN_POINTS
                         ))
                         .weak()
                         .small(),
                     );
                     if program_points.is_empty() {
                         ui.label(
-                            egui::RichText::new("Apri il programma con i riferimenti nella finestra Programma (punti Object)")
+                            egui::RichText::new(tr("Apri il programma con i riferimenti nella finestra Programma (punti Object)"))
                                 .weak()
                                 .small(),
                         );
@@ -1395,21 +1408,21 @@ pub fn draw(ctx: &egui::Context, app: &mut GestoreApp, pass: super::dock::Pass) 
                         ui.horizontal_wrapped(|ui| {
                             egui::ComboBox::from_id_salt("posizione_punti_programma")
                                 .width(110.0)
-                                .selected_text(pa.choice.clone().unwrap_or_else(|| "Punto…".to_string()))
+                                .selected_text(pa.choice.clone().unwrap_or_else(|| tr("Punto…").to_string()))
                                 .show_ui(ui, |ui| {
                                     for (name, _) in &program_points {
                                         ui.selectable_value(&mut pa.choice, Some(name.clone()), name);
                                     }
                                 })
                                 .response
-                                .on_hover_text("Punti del programma attivo, nell'ordine in cui li usa");
+                                .on_hover_text(tr("Punti del programma attivo, nell'ordine in cui li usa"));
                             let chosen = pa.choice.as_ref().and_then(|c| program_points.iter().find(|(n, _)| n == c)).cloned();
-                            if ui.add_enabled(chosen.is_some(), egui::Button::new(icon_text(ui, icon::PLUS, "Aggiungi"))).clicked() {
+                            if ui.add_enabled(chosen.is_some(), egui::Button::new(icon_text(ui, icon::PLUS, tr("Aggiungi")))).clicked() {
                                 if let Some((name, p)) = chosen {
                                     pa.add(&name, p);
                                 }
                             }
-                            if ui.button("Tutti").on_hover_text("Aggiunge tutti i punti del programma attivo").clicked() {
+                            if ui.button(tr("Tutti")).on_hover_text(tr("Aggiunge tutti i punti del programma attivo")).clicked() {
                                 for (name, p) in &program_points {
                                     pa.add(name, *p);
                                 }
@@ -1417,14 +1430,14 @@ pub fn draw(ctx: &egui::Context, app: &mut GestoreApp, pass: super::dock::Pass) 
                         });
                     }
                     ui.horizontal_wrapped(|ui| {
-                        ui.label("A mano");
-                        ui.add(egui::TextEdit::singleline(&mut pa.manual_name).desired_width(60.0).hint_text("Nome"));
+                        ui.label(tr("A mano"));
+                        ui.add(egui::TextEdit::singleline(&mut pa.manual_name).desired_width(60.0).hint_text(tr("Nome")));
                         for k in 0..3 {
                             ui.label(egui::RichText::new(AXES[k].0).color(AXES[k].1).strong());
                             ui.add(egui::DragValue::new(&mut pa.manual[k]).speed(0.1).max_decimals(3));
                         }
                         let name = pa.manual_name.trim().to_string();
-                        if ui.add_enabled(!name.is_empty(), egui::Button::new(icon::PLUS).small()).on_hover_text("Aggiunge il punto scritto a mano").clicked() {
+                        if ui.add_enabled(!name.is_empty(), egui::Button::new(icon::PLUS).small()).on_hover_text(tr("Aggiunge il punto scritto a mano")).clicked() {
                             let p = pa.manual;
                             pa.add(&name, p);
                             pa.manual_name.clear();
@@ -1440,22 +1453,22 @@ pub fn draw(ctx: &egui::Context, app: &mut GestoreApp, pass: super::dock::Pass) 
                     if !pa.pairs.is_empty() {
                         egui::Grid::new("posizione_punti_tabella").num_columns(6).spacing([6.0, 3.0]).striped(true).show(ui, |ui| {
                             ui.label("");
-                            ui.label(egui::RichText::new("Punto").small().strong());
-                            ui.label(egui::RichText::new("Sul 3D").small().strong());
-                            ui.label(egui::RichText::new("Ora").small().strong()).on_hover_text("Distanza tra il punto del 3D e il riferimento (mm)");
-                            ui.label(egui::RichText::new("Dopo").small().strong()).on_hover_text("Scarto che resta dopo «Allinea» (mm)");
+                            ui.label(egui::RichText::new(tr("Punto")).small().strong());
+                            ui.label(egui::RichText::new(tr("Sul 3D")).small().strong());
+                            ui.label(egui::RichText::new(tr("Ora")).small().strong()).on_hover_text(tr("Distanza tra il punto del 3D e il riferimento (mm)"));
+                            ui.label(egui::RichText::new(tr("Dopo")).small().strong()).on_hover_text(tr("Scarto che resta dopo «Allinea» (mm)"));
                             ui.label("");
                             ui.end_row();
                             for (i, p) in pa.pairs.iter_mut().enumerate() {
-                                ui.checkbox(&mut p.on, "").on_hover_text("Usa questo punto nel calcolo");
+                                ui.checkbox(&mut p.on, "").on_hover_text(tr("Usa questo punto nel calcolo"));
                                 let t = p.target;
                                 ui.label(egui::RichText::new(&p.name).monospace())
                                     .on_hover_text(format!("X {:.3}  Y {:.3}  Z {:.3}", t.x, t.y, t.z));
                                 let picking = pa.picking == Some(i);
                                 let (text, hover) = match (&p.cad, picking) {
-                                    (_, true) => (format!("{} …", icon::CROSSHAIR), "Clicca il punto sul 3D (Esc per smettere)"),
-                                    (Some(_), _) => (icon::CHECK.to_string(), "Preso: clic per riprenderlo"),
-                                    (None, _) => (format!("{} Prendi", icon::CROSSHAIR), "Clicca poi il punto sul 3D"),
+                                    (_, true) => (format!("{} …", icon::CROSSHAIR), tr("Clicca il punto sul 3D (Esc per smettere)")),
+                                    (Some(_), _) => (icon::CHECK.to_string(), tr("Preso: clic per riprenderlo")),
+                                    (None, _) => (format!("{} {}", icon::CROSSHAIR, tr("Prendi")), tr("Clicca poi il punto sul 3D")),
                                 };
                                 if ui.add(egui::Button::new(text).small().selected(picking)).on_hover_text(hover).clicked() {
                                     pick = Some(Some(i));
@@ -1466,7 +1479,7 @@ pub fn draw(ctx: &egui::Context, app: &mut GestoreApp, pass: super::dock::Pass) 
                                 let weak = |s: String| if p.on { egui::RichText::new(s).monospace() } else { egui::RichText::new(s).monospace().weak() };
                                 ui.label(weak(p.cad.as_ref().map_or("—".to_string(), |c| format!("{:.2}", c.pos.distance(t)))));
                                 ui.label(weak(residuals.as_ref().and_then(|r| r[i]).map_or("—".to_string(), |r| format!("{r:.2}"))));
-                                if ui.small_button(icon::X).on_hover_text("Togli il punto").clicked() {
+                                if ui.small_button(icon::X).on_hover_text(tr("Togli il punto")).clicked() {
                                     remove = Some(i);
                                 }
                                 ui.end_row();
@@ -1474,13 +1487,13 @@ pub fn draw(ctx: &egui::Context, app: &mut GestoreApp, pass: super::dock::Pass) 
                         });
                         ui.horizontal_wrapped(|ui| {
                             let missing = pa.pairs.iter().any(|p| p.cad.is_none());
-                            if ui.add_enabled(missing, egui::Button::new(icon_text(ui, icon::CROSSHAIR, "Prendi i mancanti")))
-                                .on_hover_text("Clicca sul 3D i punti che mancano, uno dopo l'altro")
+                            if ui.add_enabled(missing, egui::Button::new(icon_text(ui, icon::CROSSHAIR, tr("Prendi i mancanti"))))
+                                .on_hover_text(tr("Clicca sul 3D i punti che mancano, uno dopo l'altro"))
                                 .clicked()
                             {
                                 pick = Some(None);
                             }
-                            if ui.button("Svuota").on_hover_text("Toglie tutti i punti").clicked() {
+                            if ui.button(tr("Svuota")).on_hover_text(tr("Toglie tutti i punti")).clicked() {
                                 pa.pairs.clear();
                                 pa.picking = None;
                             }
@@ -1499,22 +1512,23 @@ pub fn draw(ctx: &egui::Context, app: &mut GestoreApp, pass: super::dock::Pass) 
                     match &fit {
                         Ok(f) => {
                             ui.horizontal_wrapped(|ui| {
-                                ui.label("Scarto");
-                                ui.monospace(format!("medio {:.2}  max {:.2}", f.rms, f.max));
+                                ui.label(tr("Scarto"));
+                                ui.monospace(trf!("medio {rms}  max {max}", rms = format!("{:.2}", f.rms), max = format!("{:.2}", f.max)));
                                 ui.label("mm");
                             });
                             let pose = Pose::from_matrix(f.matrix);
                             ui.horizontal_wrapped(|ui| {
-                                ui.label(egui::RichText::new("Spostamento (coordinate World)").strong());
-                                if ui.small_button(icon::COPY).on_hover_text("Copia X Y Z A B C").clicked() {
+                                ui.label(egui::RichText::new(tr("Spostamento (coordinate World)")).strong());
+                                if ui.small_button(icon::COPY).on_hover_text(tr("Copia X Y Z A B C")).clicked() {
                                     copy = Some(offset_text("Offset World", &pose));
                                 }
                             });
                             pose_grid(ui, "posizione_punti_spostamento", &pose);
                             if outside > 0 {
                                 ui.label(
-                                    egui::RichText::new(format!(
-                                        "{outside} punti sono su pezzi che non fanno parte dell'oggetto qui sopra: non lo seguiranno"
+                                    egui::RichText::new(trf!(
+                                        "{outside} punti sono su pezzi che non fanno parte dell'oggetto qui sopra: non lo seguiranno",
+                                        outside = outside
                                     ))
                                     .small()
                                     .color(egui::Color32::from_rgb(230, 160, 60)),
@@ -1522,12 +1536,16 @@ pub fn draw(ctx: &egui::Context, app: &mut GestoreApp, pass: super::dock::Pass) 
                             }
                             let ready = !nodes.is_empty() && !f.matrix.abs_diff_eq(Mat4::IDENTITY, 1e-6);
                             if ui
-                                .add_enabled(ready, egui::Button::new(icon_text(ui, icon::ALIGN_CENTER_HORIZONTAL, "Allinea")))
-                                .on_hover_text("Sposta l'oggetto qui sopra sui riferimenti")
+                                .add_enabled(ready, egui::Button::new(icon_text(ui, icon::ALIGN_CENTER_HORIZONTAL, tr("Allinea"))))
+                                .on_hover_text(tr("Sposta l'oggetto qui sopra sui riferimenti"))
                                 .clicked()
                             {
                                 actions.push(Action::Move { nodes: nodes.clone(), matrix: f.matrix });
-                                status = Some(format!("Allineato sui punti: scarto medio {:.2} mm, massimo {:.2} mm", f.rms, f.max));
+                                status = Some(trf!(
+                                    "Allineato sui punti: scarto medio {rms} mm, massimo {max} mm",
+                                    rms = format!("{:.2}", f.rms),
+                                    max = format!("{:.2}", f.max)
+                                ));
                             }
                         }
                         Err(e) => {
@@ -1539,12 +1557,12 @@ pub fn draw(ctx: &egui::Context, app: &mut GestoreApp, pass: super::dock::Pass) 
                 });
 
                 // ── Allinea su misure (quote prese a mano) ──────────────────────
-                section(ui, "posizione_misure", "Allinea su misure", &mut sections[8], |ui| {
+                section(ui, "posizione_misure", tr("Allinea su misure"), &mut sections[8], |ui| {
                     use super::distance_align::{Mode, RowState, EXACT_FIXED, EXACT_PER_FIXED, MIN_FULL, MIN_MOVE};
                     ui.label(
                         egui::RichText::new(
-                            "L'oggetto qui sopra si sposta finché le quote sul 3D sono quelle prese a mano in cabina, \
-                             dai punti fissi F (riferimento fermo) ai punti M dell'oggetto.",
+                            tr("L'oggetto qui sopra si sposta finché le quote sul 3D sono quelle prese a mano in cabina, \
+                             dai punti fissi F (riferimento fermo) ai punti M dell'oggetto."),
                         )
                         .weak()
                         .small(),
@@ -1552,18 +1570,22 @@ pub fn draw(ctx: &egui::Context, app: &mut GestoreApp, pass: super::dock::Pass) 
                     let da = &mut panel.distances;
                     // Veloce o Precisa: due pulsanti, quello scelto acceso
                     ui.horizontal_wrapped(|ui| {
-                        ui.selectable_value(&mut da.mode, Mode::Quick, format!("Veloce ({MIN_FULL} misure)")).on_hover_text(format!(
-                            "Posizione veloce, approssimata: bastano {MIN_FULL} misure ({MIN_MOVE} con «Solo spostamento»), \
-                             ognuna da un punto fisso a un punto dell'oggetto. L'oggetto si sposta il meno possibile."
+                        ui.selectable_value(&mut da.mode, Mode::Quick, trf!("Veloce ({n} misure)", n = MIN_FULL)).on_hover_text(trf!(
+                            "Posizione veloce, approssimata: bastano {full} misure ({moves} con «Solo spostamento»), \
+                             ognuna da un punto fisso a un punto dell'oggetto. L'oggetto si sposta il meno possibile.",
+                            full = MIN_FULL,
+                            moves = MIN_MOVE
                         ));
-                        ui.selectable_value(&mut da.mode, Mode::Precise, format!("Precisa ({EXACT_FIXED}×{EXACT_PER_FIXED})"))
-                            .on_hover_text(format!(
-                                "Posizione esatta: per ogni punto fisso un clic e poi {EXACT_PER_FIXED} clic sull'oggetto; almeno \
-                                 {EXACT_FIXED} punti fissi, solo distanze. Meglio usare gli stessi punti M per tutti i fissi."
+                        ui.selectable_value(&mut da.mode, Mode::Precise, trf!("Precisa ({fixed}×{per})", fixed = EXACT_FIXED, per = EXACT_PER_FIXED))
+                            .on_hover_text(trf!(
+                                "Posizione esatta: per ogni punto fisso un clic e poi {per} clic sull'oggetto; almeno \
+                                 {fixed} punti fissi, solo distanze. Meglio usare gli stessi punti M per tutti i fissi.",
+                                fixed = EXACT_FIXED,
+                                per = EXACT_PER_FIXED
                             ));
                         if ui
-                            .add(egui::Button::new(icon_text(ui, icon::INFO, "Guida")).small().selected(panel.measures_guide))
-                            .on_hover_text("Quante misure prendere e dove, con i disegni")
+                            .add(egui::Button::new(icon_text(ui, icon::INFO, tr("Guida"))).small().selected(panel.measures_guide))
+                            .on_hover_text(tr("Quante misure prendere e dove, con i disegni"))
                             .clicked()
                         {
                             panel.measures_guide = !panel.measures_guide;
@@ -1572,12 +1594,14 @@ pub fn draw(ctx: &egui::Context, app: &mut GestoreApp, pass: super::dock::Pass) 
                     let precise = da.mode == Mode::Precise;
                     ui.label(
                         egui::RichText::new(if precise {
-                            format!(
-                                "«Nuovo punto fisso»: clicca il punto F sul riferimento, poi {EXACT_PER_FIXED} punti M sull'oggetto. \
-                                 Ripeti per almeno {EXACT_FIXED} punti fissi e scrivi le distanze."
+                            trf!(
+                                "«Nuovo punto fisso»: clicca il punto F sul riferimento, poi {per} punti M sull'oggetto. \
+                                 Ripeti per almeno {fixed} punti fissi e scrivi le distanze.",
+                                fixed = EXACT_FIXED,
+                                per = EXACT_PER_FIXED
                             )
                         } else {
-                            "«Nuova misura»: clicca il punto F sul riferimento e il punto M sull'oggetto, poi scrivi la quota."
+                            tr("«Nuova misura»: clicca il punto F sul riferimento e il punto M sull'oggetto, poi scrivi la quota.")
                                 .to_string()
                         })
                         .weak()
@@ -1587,16 +1611,19 @@ pub fn draw(ctx: &egui::Context, app: &mut GestoreApp, pass: super::dock::Pass) 
                     let mut pick: Option<Option<usize>> = None;
                     ui.horizontal_wrapped(|ui| {
                         let (text, hover) = if precise {
-                            ("Nuovo punto fisso", format!("Clicca sul 3D il punto sul riferimento fermo, poi {EXACT_PER_FIXED} punti sull'oggetto da spostare"))
+                            (
+                                tr("Nuovo punto fisso"),
+                                trf!("Clicca sul 3D il punto sul riferimento fermo, poi {per} punti sull'oggetto da spostare", per = EXACT_PER_FIXED),
+                            )
                         } else {
-                            ("Nuova misura", "Clicca sul 3D il punto sul riferimento fermo, poi quello sull'oggetto da spostare".to_string())
+                            (tr("Nuova misura"), tr("Clicca sul 3D il punto sul riferimento fermo, poi quello sull'oggetto da spostare").to_string())
                         };
                         if ui.add_enabled(!nodes.is_empty(), egui::Button::new(icon_text(ui, icon::PLUS, text))).on_hover_text(hover).clicked() {
                             pick = Some(None);
                         }
                         if ui
-                            .add_enabled(tool_points.is_some(), egui::Button::new(icon_text(ui, icon::RULER, "Dalla Misura")))
-                            .on_hover_text("Usa i due punti presi con lo strumento Misura (tasto M)")
+                            .add_enabled(tool_points.is_some(), egui::Button::new(icon_text(ui, icon::RULER, tr("Dalla Misura"))))
+                            .on_hover_text(tr("Usa i due punti presi con lo strumento Misura (tasto M)"))
                             .clicked()
                         {
                             if let Some((a, b)) = tool_points {
@@ -1617,21 +1644,21 @@ pub fn draw(ctx: &egui::Context, app: &mut GestoreApp, pass: super::dock::Pass) 
                         let columns = if precise { 6 } else { 7 };
                         egui::Grid::new("posizione_misure_tabella").num_columns(columns).spacing([6.0, 3.0]).striped(true).show(ui, |ui| {
                             ui.label("");
-                            ui.label(egui::RichText::new("Misura").small().strong())
-                                .on_hover_text("F = punto fisso sul riferimento, M = punto sull'oggetto da spostare");
+                            ui.label(egui::RichText::new(tr("Misura")).small().strong())
+                                .on_hover_text(tr("F = punto fisso sul riferimento, M = punto sull'oggetto da spostare"));
                             if !precise {
-                                ui.label(egui::RichText::new("Tipo").small().strong());
+                                ui.label(egui::RichText::new(tr("Tipo")).small().strong());
                             }
-                            ui.label(egui::RichText::new("Sul 3D").small().strong()).on_hover_text("Valore adesso sul 3D (mm)");
-                            ui.label(egui::RichText::new("Misurato").small().strong()).on_hover_text("Valore preso in cabina: scrivilo qui (mm)");
-                            ui.label(egui::RichText::new("Dopo").small().strong())
-                                .on_hover_text("Differenza che resta dopo «Allinea» tra il 3D e il misurato (mm)");
+                            ui.label(egui::RichText::new(tr("Sul 3D")).small().strong()).on_hover_text(tr("Valore adesso sul 3D (mm)"));
+                            ui.label(egui::RichText::new(tr("Misurato")).small().strong()).on_hover_text(tr("Valore preso in cabina: scrivilo qui (mm)"));
+                            ui.label(egui::RichText::new(tr("Dopo")).small().strong())
+                                .on_hover_text(tr("Differenza che resta dopo «Allinea» tra il 3D e il misurato (mm)"));
                             ui.label("");
                             ui.end_row();
                             for (i, r) in da.rows.iter_mut().enumerate() {
-                                ui.checkbox(&mut r.on, "").on_hover_text("Usa questa misura nel calcolo");
+                                ui.checkbox(&mut r.on, "").on_hover_text(tr("Usa questa misura nel calcolo"));
                                 let picking = picking_row == Some(i);
-                                let again = if precise { "Clic per riprendere il punto M" } else { "Clic per riprendere i due punti" };
+                                let again = if precise { tr("Clic per riprendere il punto M") } else { tr("Clic per riprendere i due punti") };
                                 let hover = match states[i].problem() {
                                     Some(p) if !picking => format!("{p}\n{again}"),
                                     _ => again.to_string(),
@@ -1671,9 +1698,9 @@ pub fn draw(ctx: &egui::Context, app: &mut GestoreApp, pass: super::dock::Pass) 
                                     current.is_some(),
                                     egui::DragValue::new(&mut r.measured).speed(0.5).max_decimals(2).range(0.0..=f32::MAX),
                                 )
-                                .on_hover_text("Trascina, oppure fai doppio clic e scrivi il valore");
+                                .on_hover_text(tr("Trascina, oppure fai doppio clic e scrivi il valore"));
                                 ui.label(weak(residuals.as_ref().and_then(|v| v[i]).map_or("—".to_string(), |e| format!("{e:+.2}"))));
-                                if ui.small_button(icon::X).on_hover_text("Togli la misura").clicked() {
+                                if ui.small_button(icon::X).on_hover_text(tr("Togli la misura")).clicked() {
                                     remove = Some(i);
                                 }
                                 ui.end_row();
@@ -1681,10 +1708,10 @@ pub fn draw(ctx: &egui::Context, app: &mut GestoreApp, pass: super::dock::Pass) 
                         });
                         ui.horizontal_wrapped(|ui| {
                             if !precise {
-                                ui.checkbox(&mut da.only_move, "Solo spostamento")
-                                    .on_hover_text("Il pezzo si sposta senza ruotare: bastano 3 misure (es. una per asse)");
+                                ui.checkbox(&mut da.only_move, tr("Solo spostamento"))
+                                    .on_hover_text(tr("Il pezzo si sposta senza ruotare: bastano 3 misure (es. una per asse)"));
                             }
-                            if ui.button("Svuota").on_hover_text("Toglie tutte le misure").clicked() {
+                            if ui.button(tr("Svuota")).on_hover_text(tr("Toglie tutte le misure")).clicked() {
                                 da.rows.clear();
                                 da.stop_picking();
                             }
@@ -1714,33 +1741,42 @@ pub fn draw(ctx: &egui::Context, app: &mut GestoreApp, pass: super::dock::Pass) 
                             let complete = da.complete_fixed(&moving);
                             let per_fixed = coverage.iter().map(|c| c.1.to_string()).collect::<Vec<_>>().join(" · ");
                             let (text, color) = if complete >= EXACT_FIXED {
-                                (format!("Schema completo: {complete} punti fissi con {EXACT_PER_FIXED} misure, posizione esatta"), egui::Color32::from_rgb(60, 190, 90))
+                                (
+                                    trf!(
+                                        "Schema completo: {complete} punti fissi con {per} misure, posizione esatta",
+                                        complete = complete,
+                                        per = EXACT_PER_FIXED
+                                    ),
+                                    egui::Color32::from_rgb(60, 190, 90),
+                                )
                             } else {
                                 (
-                                    format!(
-                                        "Punti fissi: {} (misure per fisso: {}). Servono almeno {EXACT_FIXED} fissi con {EXACT_PER_FIXED} misure ciascuno",
-                                        coverage.len(),
-                                        if per_fixed.is_empty() { "—".to_string() } else { per_fixed }
+                                    trf!(
+                                        "Punti fissi: {n} (misure per fisso: {list}). Servono almeno {fixed} fissi con {per} misure ciascuno",
+                                        n = coverage.len(),
+                                        list = if per_fixed.is_empty() { "—".to_string() } else { per_fixed },
+                                        fixed = EXACT_FIXED,
+                                        per = EXACT_PER_FIXED
                                     ),
                                     egui::Color32::from_rgb(230, 160, 40),
                                 )
                             };
                             ui.label(egui::RichText::new(text).small().color(color));
                         } else {
-                            ui.label(egui::RichText::new(format!("Misure pronte: {ready}, ne servono almeno {}", da.minimum())).small());
+                            ui.label(egui::RichText::new(trf!("Misure pronte: {ready}, ne servono almeno {min}", ready = ready, min = da.minimum())).small());
                         }
                     }
                     match &fit {
                         Ok(f) => {
                             ui.horizontal_wrapped(|ui| {
-                                ui.label("Scarto");
-                                ui.monospace(format!("medio {:.2}  max {:.2}", f.rms, f.max));
+                                ui.label(tr("Scarto"));
+                                ui.monospace(trf!("medio {rms}  max {max}", rms = format!("{:.2}", f.rms), max = format!("{:.2}", f.max)));
                                 ui.label("mm");
                             });
                             let pose = Pose::from_matrix(f.matrix);
                             ui.horizontal_wrapped(|ui| {
-                                ui.label(egui::RichText::new("Spostamento (coordinate World)").strong());
-                                if ui.small_button(icon::COPY).on_hover_text("Copia X Y Z A B C").clicked() {
+                                ui.label(egui::RichText::new(tr("Spostamento (coordinate World)")).strong());
+                                if ui.small_button(icon::COPY).on_hover_text(tr("Copia X Y Z A B C")).clicked() {
                                     copy = Some(offset_text("Offset World", &pose));
                                 }
                             });
@@ -1748,8 +1784,8 @@ pub fn draw(ctx: &egui::Context, app: &mut GestoreApp, pass: super::dock::Pass) 
                             if f.free {
                                 ui.label(
                                     egui::RichText::new(
-                                        "Posizione approssimata: le misure non fissano tutte le direzioni e l'oggetto si sposta il meno \
-                                         possibile. Se l'oggetto è anche ruotato usa «Precisa», con i punti lontani e non in fila.",
+                                        tr("Posizione approssimata: le misure non fissano tutte le direzioni e l'oggetto si sposta il meno \
+                                         possibile. Se l'oggetto è anche ruotato usa «Precisa», con i punti lontani e non in fila."),
                                     )
                                     .small()
                                     .color(egui::Color32::from_rgb(230, 160, 60)),
@@ -1757,12 +1793,16 @@ pub fn draw(ctx: &egui::Context, app: &mut GestoreApp, pass: super::dock::Pass) 
                             }
                             let ready = !nodes.is_empty() && !f.matrix.abs_diff_eq(Mat4::IDENTITY, 1e-6);
                             if ui
-                                .add_enabled(ready, egui::Button::new(icon_text(ui, icon::ALIGN_CENTER_HORIZONTAL, "Allinea")))
-                                .on_hover_text("Sposta l'oggetto qui sopra perché le quote sul 3D siano quelle misurate (Annulla lo rimette)")
+                                .add_enabled(ready, egui::Button::new(icon_text(ui, icon::ALIGN_CENTER_HORIZONTAL, tr("Allinea"))))
+                                .on_hover_text(tr("Sposta l'oggetto qui sopra perché le quote sul 3D siano quelle misurate (Annulla lo rimette)"))
                                 .clicked()
                             {
                                 actions.push(Action::Move { nodes: nodes.clone(), matrix: f.matrix });
-                                status = Some(format!("Allineato sulle misure: scarto medio {:.2} mm, massimo {:.2} mm", f.rms, f.max));
+                                status = Some(trf!(
+                                    "Allineato sulle misure: scarto medio {rms} mm, massimo {max} mm",
+                                    rms = format!("{:.2}", f.rms),
+                                    max = format!("{:.2}", f.max)
+                                ));
                             }
                         }
                         Err(e) => {
@@ -1774,12 +1814,12 @@ pub fn draw(ctx: &egui::Context, app: &mut GestoreApp, pass: super::dock::Pass) 
                 });
 
                 // ── Misura dell'oggetto (file local e world) ─────────────────────
-                section(ui, "posizione_misura_oggetto", "Misura dell'oggetto", &mut sections[7], |ui| {
+                section(ui, "posizione_misura_oggetto", tr("Misura dell'oggetto"), &mut sections[7], |ui| {
                     let m = &mut panel.measure;
                     ui.label(
                         egui::RichText::new(
-                            "Oggetto del robot da due file di punti con gli stessi nomi: local (presi sulla matematica in \
-                             posizione 0) e world (presi con il robot in cabina, oggetto a 0). Contano solo X Y Z.",
+                            tr("Oggetto del robot da due file di punti con gli stessi nomi: local (presi sulla matematica in \
+                             posizione 0) e world (presi con il robot in cabina, oggetto a 0). Contano solo X Y Z."),
                         )
                         .weak()
                         .small(),
@@ -1788,12 +1828,12 @@ pub fn draw(ctx: &egui::Context, app: &mut GestoreApp, pass: super::dock::Pass) 
                         ui.horizontal_wrapped(|ui| {
                             ui.label(egui::RichText::new(title).strong());
                             let file = if world { &m.world } else { &m.local };
-                            let text = file.as_ref().map_or("—".to_string(), |f| format!("{}  ({} punti)", f.name(), f.points.len()));
+                            let text = file.as_ref().map_or("—".to_string(), |f| trf!("{name}  ({n} punti)", name = f.name(), n = f.points.len()));
                             let label = ui.label(egui::RichText::new(text).monospace());
                             if let Some(f) = file {
                                 label.on_hover_text(f.path.display().to_string());
                             }
-                            if ui.small_button(icon::FOLDER_OPEN).on_hover_text(format!("Apri il file {} (.tid)", title.to_lowercase())).clicked() {
+                            if ui.small_button(icon::FOLDER_OPEN).on_hover_text(trf!("Apri il file {kind} (.tid)", kind = title.to_lowercase())).clicked() {
                                 pick_measure = Some(if world { 1 } else { 0 });
                             }
                         });
@@ -1805,23 +1845,24 @@ pub fn draw(ctx: &egui::Context, app: &mut GestoreApp, pass: super::dock::Pass) 
                     let mut toggle: Option<(String, bool)> = None;
                     if !rows.is_empty() {
                         ui.horizontal_wrapped(|ui| {
-                            ui.label("Punti sul 3D");
-                            ui.selectable_value(&mut m.show_world, false, "Local")
-                                .on_hover_text("Punti presi sulla matematica in posizione 0 (pallini)");
-                            ui.selectable_value(&mut m.show_world, true, "World").on_hover_text(
-                                "Punti presi con il robot, riportati sulla matematica con l'oggetto calcolato (anelli):                                  passando da Local a World si vede di quanto si sposta ogni punto",
+                            ui.label(tr("Punti sul 3D"));
+                            ui.selectable_value(&mut m.show_world, false, tr("Local"))
+                                .on_hover_text(tr("Punti presi sulla matematica in posizione 0 (pallini)"));
+                            ui.selectable_value(&mut m.show_world, true, tr("World")).on_hover_text(
+                                tr("Punti presi con il robot, riportati sulla matematica con l'oggetto calcolato (anelli): \
+                                 passando da Local a World si vede di quanto si sposta ogni punto"),
                             );
                         });
                         let worst = result.as_ref().ok().and_then(|r| r.worst.clone());
                         let red = egui::Color32::from_rgb(230, 80, 70);
                         egui::Grid::new("posizione_misura_tabella").num_columns(6).spacing([10.0, 3.0]).striped(true).show(ui, |ui| {
-                            ui.label(egui::RichText::new("Punto").small().strong());
+                            ui.label(egui::RichText::new(tr("Punto")).small().strong());
                             for (t, axis) in [("dx", "X"), ("dy", "Y"), ("dz", "Z")] {
                                 ui.label(egui::RichText::new(t).small().strong())
-                                    .on_hover_text(format!("Scostamento in {axis}: punto world − oggetto calcolato · punto local (mm)"));
+                                    .on_hover_text(trf!("Scostamento in {axis}: punto world − oggetto calcolato · punto local (mm)", axis = axis));
                             }
-                            ui.label(egui::RichText::new("Dist.").small().strong()).on_hover_text("Distanza tra i due punti (mm)");
-                            ui.label(egui::RichText::new("Valido").small().strong()).on_hover_text("Usa questo punto nel calcolo e nella statistica");
+                            ui.label(egui::RichText::new(tr("Dist.")).small().strong()).on_hover_text(tr("Distanza tra i due punti (mm)"));
+                            ui.label(egui::RichText::new(tr("Valido")).small().strong()).on_hover_text(tr("Usa questo punto nel calcolo e nella statistica"));
                             ui.end_row();
                             for r in &rows {
                                 let is_worst = r.on && worst.as_ref() == Some(&r.name);
@@ -1856,10 +1897,10 @@ World  X {:.3}  Y {:.3}  Z {:.3}",
                                 let mut on = r.on;
                                 egui::ComboBox::from_id_salt(("posizione_misura_valido", &r.name))
                                     .width(48.0)
-                                    .selected_text(if on { "sì" } else { "no" })
+                                    .selected_text(if on { tr("sì") } else { tr("no") })
                                     .show_ui(ui, |ui| {
-                                        ui.selectable_value(&mut on, true, "sì");
-                                        ui.selectable_value(&mut on, false, "no");
+                                        ui.selectable_value(&mut on, true, tr("sì"));
+                                        ui.selectable_value(&mut on, false, tr("no"));
                                     });
                                 if on != r.on {
                                     toggle = Some((r.name.clone(), on));
@@ -1870,7 +1911,7 @@ World  X {:.3}  Y {:.3}  Z {:.3}",
                     }
                     let unmatched = m.unmatched();
                     if !unmatched.is_empty() {
-                        ui.label(egui::RichText::new(format!("In un file solo: {}", unmatched.join(", "))).small().weak());
+                        ui.label(egui::RichText::new(trf!("In un file solo: {list}", list = unmatched.join(", "))).small().weak());
                     }
                     if let Some((name, on)) = toggle {
                         m.set_on(&name, on);
@@ -1878,7 +1919,7 @@ World  X {:.3}  Y {:.3}  Z {:.3}",
                     match &result {
                         Ok(res) => {
                             // Statistica, come nel software di calibrazione, con la spiegazione al passaggio del mouse
-                            ui.label(egui::RichText::new("Statistica").strong());
+                            ui.label(egui::RichText::new(tr("Statistica")).strong());
                             let values = [
                                 format!("{:.2} mm", res.expected),
                                 format!("{:.2} mm", res.mean),
@@ -1896,10 +1937,10 @@ World  X {:.3}  Y {:.3}  Z {:.3}",
                                 let (r, g, b) = res.verdict.rgb();
                                 let text = egui::RichText::new(format!(" {} ", res.verdict.text())).strong().color(egui::Color32::WHITE)
                                     .background_color(egui::Color32::from_rgb(r, g, b));
-                                ui.label(text).on_hover_text(format!(
-                                    "OK fino a {} mm di errore massimo, accettabile fino a {} mm",
-                                    super::object_measure::TOL_OK,
-                                    super::object_measure::TOL_ACCEPTABLE
+                                ui.label(text).on_hover_text(trf!(
+                                    "OK fino a {ok} mm di errore massimo, accettabile fino a {acceptable} mm",
+                                    ok = super::object_measure::TOL_OK,
+                                    acceptable = super::object_measure::TOL_ACCEPTABLE
                                 ));
                                 let mut hint = res.verdict.hint();
                                 if let (Some(w), super::object_measure::Verdict::Acceptable | super::object_measure::Verdict::NotOk) = (&res.worst, res.verdict) {
@@ -1907,19 +1948,19 @@ World  X {:.3}  Y {:.3}  Z {:.3}",
                                 }
                                 ui.label(egui::RichText::new(hint).small());
                             });
-                            if ui.button(icon_text(ui, icon::FLOPPY_DISK, "Salva il report HTML")).on_hover_text("Report con file, oggetto, statistica e scostamenti dei punti").clicked() {
+                            if ui.button(icon_text(ui, icon::FLOPPY_DISK, tr("Salva il report HTML"))).on_hover_text(tr("Report con file, oggetto, statistica e scostamenti dei punti")).clicked() {
                                 save_report = true;
                             }
                             ui.horizontal_wrapped(|ui| {
-                                ui.label(egui::RichText::new("Oggetto calcolato").strong());
-                                if ui.small_button(icon::COPY).on_hover_text("Copia X Y Z A B C").clicked() {
-                                    copy = Some(offset_text("Oggetto calcolato", &res.pose));
+                                ui.label(egui::RichText::new(tr("Oggetto calcolato")).strong());
+                                if ui.small_button(icon::COPY).on_hover_text(tr("Copia X Y Z A B C")).clicked() {
+                                    copy = Some(offset_text(tr("Oggetto calcolato"), &res.pose));
                                 }
                             });
                             pose_grid(ui, "posizione_misura_oggetto_calcolato", &res.pose);
                             // Confronto con l'oggetto attuale del robot
                             ui.horizontal_wrapped(|ui| {
-                                ui.label("Oggetto attuale");
+                                ui.label(tr("Oggetto attuale"));
                                 egui::ComboBox::from_id_salt("posizione_misura_base")
                                     .width(120.0)
                                     .selected_text(m.base.clone().unwrap_or_else(|| "—".to_string()))
@@ -1930,20 +1971,20 @@ World  X {:.3}  Y {:.3}  Z {:.3}",
                                         }
                                     })
                                     .response
-                                    .on_hover_text(m.base_file.as_ref().map_or("Nessun file degli oggetti".to_string(), |f| f.display().to_string()));
-                                if ui.small_button(icon::FOLDER_OPEN).on_hover_text("Apri il file degli oggetti del robot (es. _GLOBAL.TID)").clicked() {
+                                    .on_hover_text(m.base_file.as_ref().map_or(tr("Nessun file degli oggetti").to_string(), |f| f.display().to_string()));
+                                if ui.small_button(icon::FOLDER_OPEN).on_hover_text(tr("Apri il file degli oggetti del robot (es. _GLOBAL.TID)")).clicked() {
                                     pick_measure = Some(2);
                                 }
                             });
                             if let Some(b) = m.current_base() {
                                 let d = super::object_measure::difference(&res.pose, &b.pose);
-                                ui.label(egui::RichText::new("Differenza (calcolato − attuale)").small())
-                                    .on_hover_text("Nelle stazioni in tracking la X dipende dalla posizione sul convogliatore");
+                                ui.label(egui::RichText::new(tr("Differenza (calcolato − attuale)")).small())
+                                    .on_hover_text(tr("Nelle stazioni in tracking la X dipende dalla posizione sul convogliatore"));
                                 pose_grid(ui, "posizione_misura_differenza", &d);
                             }
                             let line = m.robot_line(res.pose);
                             ui.add(egui::Label::new(egui::RichText::new(&line).monospace()).wrap());
-                            if ui.button(icon_text(ui, icon::COPY, "Copia la riga")).on_hover_text("Riga dell'oggetto da incollare nel file del robot").clicked() {
+                            if ui.button(icon_text(ui, icon::COPY, tr("Copia la riga"))).on_hover_text(tr("Riga dell'oggetto da incollare nel file del robot")).clicked() {
                                 copy = Some(line.clone());
                             }
                         }
@@ -1954,18 +1995,18 @@ World  X {:.3}  Y {:.3}  Z {:.3}",
                 });
 
                 // ── Rotazione su un asse (cerniere) ─────────────────────────────
-                section(ui, "posizione_cerniera", "Rotazione su cerniera", &mut sections[2], |ui| {
+                section(ui, "posizione_cerniera", tr("Rotazione su cerniera"), &mut sections[2], |ui| {
                         let h = &mut panel.hinge;
                         let before_mode = h.mode;
                         ui.horizontal_wrapped(|ui| {
-                            ui.selectable_value(&mut h.mode, HingeMode::TwoPoints, "Due punti")
-                                .on_hover_text("Due clic sull'asse, es. i centri delle due cerniere");
-                            ui.selectable_value(&mut h.mode, HingeMode::TwoHoles, "Due fori")
-                                .on_hover_text("Tre clic sul bordo di ogni foro: l'asse unisce i due centri");
-                            ui.selectable_value(&mut h.mode, HingeMode::OneHole, "Un foro")
-                                .on_hover_text("Tre clic sul bordo: l'asse passa per il centro, perpendicolare al foro (come un perno)");
+                            ui.selectable_value(&mut h.mode, HingeMode::TwoPoints, tr("Due punti"))
+                                .on_hover_text(tr("Due clic sull'asse, es. i centri delle due cerniere"));
+                            ui.selectable_value(&mut h.mode, HingeMode::TwoHoles, tr("Due fori"))
+                                .on_hover_text(tr("Tre clic sul bordo di ogni foro: l'asse unisce i due centri"));
+                            ui.selectable_value(&mut h.mode, HingeMode::OneHole, tr("Un foro"))
+                                .on_hover_text(tr("Tre clic sul bordo: l'asse passa per il centro, perpendicolare al foro (come un perno)"));
                             let axis_k = match h.mode { HingeMode::PointAxis(k) => Some(k), _ => None };
-                            if ui.selectable_label(axis_k.is_some(), "Punto + asse").on_hover_text("Un clic e la direzione X, Y o Z della cabina").clicked() {
+                            if ui.selectable_label(axis_k.is_some(), tr("Punto + asse")).on_hover_text(tr("Un clic e la direzione X, Y o Z della cabina")).clicked() {
                                 h.mode = HingeMode::PointAxis(axis_k.unwrap_or(2));
                             }
                             if let Some(k) = axis_k {
@@ -1976,13 +2017,13 @@ World  X {:.3}  Y {:.3}  Z {:.3}",
                                     }
                                 }
                             }
-                            ui.selectable_value(&mut h.mode, HingeMode::TwoPositions, "Da due posizioni").on_hover_text(
-                                "Lo stesso pezzo in due posizioni (es. chiuso e aperto, due matematiche già pronte): \
-                                 l'asse si calcola dal movimento, anche senza cerniere nel 3D",
+                            ui.selectable_value(&mut h.mode, HingeMode::TwoPositions, tr("Da due posizioni")).on_hover_text(
+                                tr("Lo stesso pezzo in due posizioni (es. chiuso e aperto, due matematiche già pronte): \
+                                 l'asse si calcola dal movimento, anche senza cerniere nel 3D"),
                             );
-                            ui.selectable_value(&mut h.mode, HingeMode::FourBar, "4 perni (cofano)").on_hover_text(
-                                "Cerniera con due bielle: due perni sulla cerniera fissa e due sulla mobile. \
-                                 Il cofano non gira su un asse fisso: le bielle si calcolano in automatico",
+                            ui.selectable_value(&mut h.mode, HingeMode::FourBar, tr("4 perni (cofano)")).on_hover_text(
+                                tr("Cerniera con due bielle: due perni sulla cerniera fissa e due sulla mobile. \
+                                 Il cofano non gira su un asse fisso: le bielle si calcolano in automatico"),
                             );
                         });
                         if h.mode != before_mode {
@@ -2005,12 +2046,12 @@ World  X {:.3}  Y {:.3}  Z {:.3}",
                         }
                         if h.mode == HingeMode::TwoPositions {
                             egui::Grid::new("posizione_due_posizioni").num_columns(3).spacing([8.0, 4.0]).show(ui, |ui| {
-                                for (label, slot) in [("Prima posizione", &mut h.first), ("Seconda posizione", &mut h.second)] {
+                                for (label, slot) in [(tr("Prima posizione"), &mut h.first), (tr("Seconda posizione"), &mut h.second)] {
                                     ui.label(label);
                                     let text = match slot.as_slice() {
                                         [] => "—".to_string(),
                                         [n] => node_label(app, Some(*n)),
-                                        many => format!("{} elementi", many.len()),
+                                        many => trf!("{n} elementi", n = many.len()),
                                     };
                                     // Nomi lunghi (percorsi dei file) accorciati: il pulsante resta nella finestra
                                     let short = if text.chars().count() > 24 {
@@ -2020,8 +2061,8 @@ World  X {:.3}  Y {:.3}  Z {:.3}",
                                     };
                                     ui.label(egui::RichText::new(short).strong()).on_hover_text(text);
                                     if ui
-                                        .add_enabled(!selection.is_empty(), egui::Button::new("Usa selezione").small())
-                                        .on_hover_text("Il file o i pezzi selezionati nell'albero")
+                                        .add_enabled(!selection.is_empty(), egui::Button::new(tr("Usa selezione")).small())
+                                        .on_hover_text(tr("Il file o i pezzi selezionati nell'albero"))
                                         .clicked()
                                     {
                                         *slot = selection.clone();
@@ -2030,8 +2071,8 @@ World  X {:.3}  Y {:.3}  Z {:.3}",
                                 }
                             });
                             if ui
-                                .add_enabled(!h.first.is_empty() && !h.second.is_empty(), egui::Button::new(icon_text(ui, icon::CROSSHAIR, "Calcola l'asse")))
-                                .on_hover_text("Confronta i pezzi delle due posizioni; la prima è quella che poi si ruota")
+                                .add_enabled(!h.first.is_empty() && !h.second.is_empty(), egui::Button::new(icon_text(ui, icon::CROSSHAIR, tr("Calcola l'asse"))))
+                                .on_hover_text(tr("Confronta i pezzi delle due posizioni; la prima è quella che poi si ruota"))
                                 .clicked()
                             {
                                 match scene.motion_between(&h.first, &h.second) {
@@ -2040,7 +2081,7 @@ World  X {:.3}  Y {:.3}  Z {:.3}",
                                         h.angle = 0.0;
                                         h.points.clear();
                                         h.error = None;
-                                        status = Some(format!("Asse trovato: {:.2}° tra le due posizioni", m.angle));
+                                        status = Some(trf!("Asse trovato: {angle}° tra le due posizioni", angle = format!("{:.2}", m.angle)));
                                         // Si ruotano solo i pezzi che si muovono: le parti fisse restano
                                         let mut moving: Vec<u32> = if m.fixed + m.other + m.unmatched == 0 {
                                             h.first.clone()
@@ -2061,30 +2102,34 @@ World  X {:.3}  Y {:.3}  Z {:.3}",
                             }
                             if let Some(m) = &h.motion {
                                 let mut lines = vec![
-                                    format!("Angolo tra le posizioni {:.2}°", m.angle),
-                                    format!("Pezzi che ruotano {}, fermi {}", m.moving, m.fixed),
-                                    format!("Scarto {:.3} mm, scorrimento lungo l'asse {:.3} mm", m.rms, m.slide.abs()),
+                                    trf!("Angolo tra le posizioni {angle}°", angle = format!("{:.2}", m.angle)),
+                                    trf!("Pezzi che ruotano {moving}, fermi {fixed}", moving = m.moving, fixed = m.fixed),
+                                    trf!(
+                                        "Scarto {rms} mm, scorrimento lungo l'asse {slide} mm",
+                                        rms = format!("{:.3}", m.rms),
+                                        slide = format!("{:.3}", m.slide.abs())
+                                    ),
                                 ];
                                 if m.other > 0 {
-                                    lines.push(format!("{} pezzi si muovono in un altro modo (es. pistoni): esclusi", m.other));
+                                    lines.push(trf!("{n} pezzi si muovono in un altro modo (es. pistoni): esclusi", n = m.other));
                                 }
                                 if m.unmatched > 0 {
-                                    lines.push(format!("{} pezzi senza corrispondente: esclusi", m.unmatched));
+                                    lines.push(trf!("{n} pezzi senza corrispondente: esclusi", n = m.unmatched));
                                 }
                                 ui.label(egui::RichText::new(lines.join("\n")).small());
                                 if m.slide.abs() > 1.0 {
                                     ui.colored_label(
                                         egui::Color32::from_rgb(230, 160, 40),
-                                        "Non è una rotazione pura: il pezzo scorre anche lungo l'asse",
+                                        tr("Non è una rotazione pura: il pezzo scorre anche lungo l'asse"),
                                     );
                                 }
                             }
                         }
                         if h.mode == HingeMode::FourBar {
-                            ui.label(egui::RichText::new(FOUR_BAR_HINT).small());
+                            ui.label(egui::RichText::new(tr(FOUR_BAR_HINT)).small());
                             if ui
-                                .add(egui::Button::new(icon_text(ui, icon::INFO, "Guida illustrata")).small().selected(panel.guide))
-                                .on_hover_text("Disegni e passi: quali perni cliccare e in che ordine")
+                                .add(egui::Button::new(icon_text(ui, icon::INFO, tr("Guida illustrata"))).small().selected(panel.guide))
+                                .on_hover_text(tr("Disegni e passi: quali perni cliccare e in che ordine"))
                                 .clicked()
                             {
                                 panel.guide = !panel.guide;
@@ -2098,9 +2143,9 @@ World  X {:.3}  Y {:.3}  Z {:.3}",
                             let [link1, link2] = &mut h.links;
                             {
                                 for (k, (label, hint, slot)) in [
-                                    ("Parte che si apre", "Cofano e braccio della cerniera mobile (con i suoi perni)", &mut h.arm),
-                                    ("Biella 1", "Biella tra perno fisso 1 e perno mobile 1 (facoltativa)", link1),
-                                    ("Biella 2", "Biella tra perno fisso 2 e perno mobile 2 (facoltativa)", link2),
+                                    (tr("Parte che si apre"), tr("Cofano e braccio della cerniera mobile (con i suoi perni)"), &mut h.arm),
+                                    (tr("Biella 1"), tr("Biella tra perno fisso 1 e perno mobile 1 (facoltativa)"), link1),
+                                    (tr("Biella 2"), tr("Biella tra perno fisso 2 e perno mobile 2 (facoltativa)"), link2),
                                 ]
                                 .into_iter()
                                 .enumerate()
@@ -2111,14 +2156,14 @@ World  X {:.3}  Y {:.3}  Z {:.3}",
                                         ui.label(egui::RichText::new(short).strong()).on_hover_text(full);
                                         let mut replace: Option<Vec<u32>> = None;
                                         if ui
-                                            .add_enabled(!selection.is_empty(), egui::Button::new("Usa selezione").small())
-                                            .on_hover_text("Il file o i pezzi selezionati nell'albero (al posto di quelli indicati prima)")
-                                            .on_disabled_hover_text("Seleziona prima i pezzi nell'albero o nella vista")
+                                            .add_enabled(!selection.is_empty(), egui::Button::new(tr("Usa selezione")).small())
+                                            .on_hover_text(tr("Il file o i pezzi selezionati nell'albero (al posto di quelli indicati prima)"))
+                                            .on_disabled_hover_text(tr("Seleziona prima i pezzi nell'albero o nella vista"))
                                             .clicked()
                                         {
                                             replace = Some(selection.clone());
                                         }
-                                        if ui.add_enabled(!slot.is_empty(), egui::Button::new("×").small()).on_hover_text("Togli (i pezzi tornano chiusi)").clicked() {
+                                        if ui.add_enabled(!slot.is_empty(), egui::Button::new("×").small()).on_hover_text(tr("Togli (i pezzi tornano chiusi)")).clicked() {
                                             replace = Some(Vec::new());
                                         }
                                         if let Some(new) = replace {
@@ -2147,17 +2192,17 @@ World  X {:.3}  Y {:.3}  Z {:.3}",
                             if h.mode == HingeMode::TwoPositions {
                                 // L'asse si calcola dalle due posizioni, non dai clic
                             } else if h.picking {
-                                if ui.button("Annulla scelta").clicked() {
+                                if ui.button(tr("Annulla scelta")).clicked() {
                                     h.picking = false;
                                     h.points.clear();
                                 }
                                 ui.label(egui::RichText::new(h.prompt().unwrap_or_default()).italics());
                             } else if h.mode == HingeMode::FourBar {
-                                let text = if h.four.is_some() { "Scegli di nuovo i perni" } else { "Scegli i 4 perni nella vista" };
+                                let text = if h.four.is_some() { tr("Scegli di nuovo i perni") } else { tr("Scegli i 4 perni nella vista") };
                                 if ui
                                     .add_enabled(h.four.as_ref().is_none_or(FourBar::at_start), egui::Button::new(icon_text(ui, icon::CROSSHAIR, text)))
-                                    .on_hover_text("3 clic sul bordo di ogni perno: prima i 2 della cerniera fissa, poi i 2 della mobile")
-                                    .on_disabled_hover_text("Riporta prima il cofano a 0°")
+                                    .on_hover_text(tr("3 clic sul bordo di ogni perno: prima i 2 della cerniera fissa, poi i 2 della mobile"))
+                                    .on_disabled_hover_text(tr("Riporta prima il cofano a 0°"))
                                     .clicked()
                                 {
                                     h.start();
@@ -2166,21 +2211,23 @@ World  X {:.3}  Y {:.3}  Z {:.3}",
                             } else if let Some((o, d)) = pins {
                                 // Perni selezionati: l'asse passa per i loro centri
                                 if ui
-                                    .button(icon_text(ui, icon::CROSSHAIR, &format!("Asse dai {} perni selezionati", selection.len())))
+                                    .button(icon_text(ui, icon::CROSSHAIR, &trf!("Asse dai {n} perni selezionati", n = selection.len())))
                                     .on_hover_text(
-                                        "L'asse passa per i centri dei pezzi selezionati (con più di due, per i due più lontani).                                          Per sceglierlo con i clic nella vista, togli prima la selezione multipla",
+                                        tr("L'asse passa per i centri dei pezzi selezionati (con più di due, per i due più lontani). \
+                                         Per sceglierlo con i clic nella vista, togli prima la selezione multipla"),
                                     )
                                     .clicked()
                                 {
                                     h.start();
                                     h.picking = false;
                                     h.axis = Some((o, d));
-                                    status = Some("Asse dai perni: ora seleziona la parte che si apre, poi «Salva cerniera»".to_string());
+                                    status = Some(tr("Asse dai perni: ora seleziona la parte che si apre, poi «Salva cerniera»").to_string());
                                 }
                             } else if ui
-                                .button(icon_text(ui, icon::CROSSHAIR, if h.axis.is_some() { "Scegli un altro asse" } else { "Scegli l'asse nella vista" }))
+                                .button(icon_text(ui, icon::CROSSHAIR, if h.axis.is_some() { tr("Scegli un altro asse") } else { tr("Scegli l'asse nella vista") }))
                                 .on_hover_text(
-                                    "Clic sui pezzi nella vista (si aggancia ai vertici vicini, come le Misure).                                      Oppure seleziona i due perni (Shift + clic nella vista) e il pulsante crea l'asse da loro",
+                                    tr("Clic sui pezzi nella vista (si aggancia ai vertici vicini, come le Misure). \
+                                     Oppure seleziona i due perni (Shift + clic nella vista) e il pulsante crea l'asse da loro"),
                                 )
                                 .clicked()
                             {
@@ -2195,25 +2242,33 @@ World  X {:.3}  Y {:.3}  Z {:.3}",
                             let warn = egui::Color32::from_rgb(230, 160, 40);
                             let [l1, l2, l3] = four.lengths();
                             ui.label(
-                                egui::RichText::new(format!("Biella 1 {l1:.1} mm  ·  biella 2 {l2:.1} mm  ·  tra i perni mobili {l3:.1} mm"))
+                                egui::RichText::new(trf!(
+                                    "Biella 1 {l1} mm  ·  biella 2 {l2} mm  ·  tra i perni mobili {l3} mm",
+                                    l1 = format!("{l1:.1}"),
+                                    l2 = format!("{l2:.1}"),
+                                    l3 = format!("{l3:.1}")
+                                ))
                                     .small()
                                     .weak(),
                             );
                             if four.skew_deg > 1.0 {
-                                ui.colored_label(warn, format!("I perni non sono del tutto paralleli (scarto {:.1}°): si usa la direzione media", four.skew_deg));
+                                ui.colored_label(
+                                    warn,
+                                    trf!("I perni non sono del tutto paralleli (scarto {skew}°): si usa la direzione media", skew = format!("{:.1}", four.skew_deg)),
+                                );
                             }
                             let at_zero = four.at_start();
                             if four.crossed() {
                                 ui.colored_label(
                                     warn,
-                                    "Le bielle risultano incrociate: di solito vuol dire che i perni mobili sono stati cliccati \
-                                     nell'ordine sbagliato. Se nel pezzo non si incrociano, premi «Scambia i perni mobili».",
+                                    tr("Le bielle risultano incrociate: di solito vuol dire che i perni mobili sono stati cliccati \
+                                     nell'ordine sbagliato. Se nel pezzo non si incrociano, premi «Scambia i perni mobili»."),
                                 );
                             }
                             if ui
-                                .add_enabled(at_zero, egui::Button::new("Scambia i perni mobili").small())
-                                .on_hover_text("Il mobile 1 diventa il mobile 2: per correggere l'abbinamento perno fisso ↔ perno mobile")
-                                .on_disabled_hover_text("Riporta prima il cofano a 0°")
+                                .add_enabled(at_zero, egui::Button::new(tr("Scambia i perni mobili")).small())
+                                .on_hover_text(tr("Il mobile 1 diventa il mobile 2: per correggere l'abbinamento perno fisso ↔ perno mobile"))
+                                .on_disabled_hover_text(tr("Riporta prima il cofano a 0°"))
                                 .clicked()
                             {
                                 let mut p = h.points.clone();
@@ -2230,17 +2285,17 @@ World  X {:.3}  Y {:.3}  Z {:.3}",
                                 }
                             }
                             if h.arm.is_empty() {
-                                ui.colored_label(warn, "Indica la parte che si apre (cofano + braccio) per poterla ruotare");
+                                ui.colored_label(warn, tr("Indica la parte che si apre (cofano + braccio) per poterla ruotare"));
                             }
                             let before = h.angle;
-                            angle_row(ui, &mut h.angle, h.step, "Apertura del cofano dalla posizione in cui sono stati scelti i perni");
+                            angle_row(ui, &mut h.angle, h.step, tr("Apertura del cofano dalla posizione in cui sono stati scelti i perni"));
                             step_row(ui, &mut h.step);
                             ui.horizontal_wrapped(|ui| {
-                                if ui.small_button("Inverti verso").on_hover_text("L'angolo positivo apre dall'altra parte").clicked() {
+                                if ui.small_button(tr("Inverti verso")).on_hover_text(tr("L'angolo positivo apre dall'altra parte")).clicked() {
                                     four.flip();
                                     h.angle = -h.angle;
                                 }
-                                if ui.add_enabled(!at_zero, egui::Button::new("Torna a 0°").small()).on_hover_text("Riporta il cofano dov'era quando hai scelto i perni").clicked() {
+                                if ui.add_enabled(!at_zero, egui::Button::new(tr("Torna a 0°")).small()).on_hover_text(tr("Riporta il cofano dov'era quando hai scelto i perni")).clicked() {
                                     h.angle = 0.0;
                                 }
                             });
@@ -2251,9 +2306,9 @@ World  X {:.3}  Y {:.3}  Z {:.3}",
                                         s
                                     }
                                     Err(s) => {
-                                        h.error = Some(format!(
-                                            "Fine corsa: il meccanismo arriva a {:.2}°",
-                                            s.phi.to_degrees()
+                                        h.error = Some(trf!(
+                                            "Fine corsa: il meccanismo arriva a {angle}°",
+                                            angle = format!("{:.2}", s.phi.to_degrees())
                                         ));
                                         s
                                     }
@@ -2277,21 +2332,21 @@ World  X {:.3}  Y {:.3}  Z {:.3}",
                             // Cerniera salvata: si apre poi dalla vista, cliccando il cofano
                             ui.label(
                                 egui::RichText::new(
-                                    "Per salvare: indica sopra la parte che si apre (e le bielle), dai un nome e premi \
-                                     «Salva cerniera». Poi basta cliccare il cofano nella vista per aprirlo con i gradi.",
+                                    tr("Per salvare: indica sopra la parte che si apre (e le bielle), dai un nome e premi \
+                                     «Salva cerniera». Poi basta cliccare il cofano nella vista per aprirlo con i gradi."),
                                 )
                                 .small()
                                 .weak(),
                             );
                             ui.horizontal_wrapped(|ui| {
-                                ui.add(egui::TextEdit::singleline(&mut h.save_name).hint_text("Nome, es. Cofano").desired_width(130.0));
+                                ui.add(egui::TextEdit::singleline(&mut h.save_name).hint_text(tr("Nome, es. Cofano")).desired_width(130.0));
                                 if ui
-                                    .add_enabled(!h.arm.is_empty(), egui::Button::new(icon_text(ui, icon::DOOR_OPEN, "Salva cerniera")))
+                                    .add_enabled(!h.arm.is_empty(), egui::Button::new(icon_text(ui, icon::DOOR_OPEN, tr("Salva cerniera"))))
                                     .on_hover_text(
-                                        "Ricorda perni, parte che si apre e bielle nel progetto. \
-                                         La posizione in cui hai scelto i perni è 0°; il limite di apertura è il fine corsa",
+                                        tr("Ricorda perni, parte che si apre e bielle nel progetto. \
+                                         La posizione in cui hai scelto i perni è 0°; il limite di apertura è il fine corsa"),
                                     )
-                                    .on_disabled_hover_text("Indica prima la parte che si apre (cofano + braccio)")
+                                    .on_disabled_hover_text(tr("Indica prima la parte che si apre (cofano + braccio)"))
                                     .clicked()
                                 {
                                     let pins = four.pins_at_start();
@@ -2313,28 +2368,29 @@ World  X {:.3}  Y {:.3}  Z {:.3}",
                         }
                         if let Some((o, d)) = h.axis {
                             ui.label(
-                                egui::RichText::new(format!(
-                                    "Asse per {:.2} {:.2} {:.2}, direzione {:.3} {:.3} {:.3}",
-                                    o.x, o.y, o.z, d.x, d.y, d.z
+                                egui::RichText::new(trf!(
+                                    "Asse per {point}, direzione {dir}",
+                                    point = format!("{:.2} {:.2} {:.2}", o.x, o.y, o.z),
+                                    dir = format!("{:.3} {:.3} {:.3}", d.x, d.y, d.z)
                                 ))
                                 .small()
                                 .weak(),
                             );
                             let before = h.angle;
-                            angle_row(ui, &mut h.angle, h.step, "Angolo dalla posizione in cui è stato scelto l'asse");
+                            angle_row(ui, &mut h.angle, h.step, tr("Angolo dalla posizione in cui è stato scelto l'asse"));
                             // Quota presa con il metro: l'angolo che porta la Misura a quella distanza
                             if let Some((moving, fixed, magnet)) = measured {
                                 if h.wanted <= 0.0 {
                                     h.wanted = (moving.distance(fixed) * 10.0).round() / 10.0;
                                 }
                                 ui.horizontal_wrapped(|ui| {
-                                    ui.label("Distanza");
+                                    ui.label(tr("Distanza"));
                                     ui.add(egui::DragValue::new(&mut h.wanted).speed(0.1).range(0.0..=f32::MAX).max_decimals(2).suffix(" mm"))
-                                        .on_hover_text("Distanza voluta tra i due punti della Misura (es. presa con il metro in cabina)");
+                                        .on_hover_text(tr("Distanza voluta tra i due punti della Misura (es. presa con il metro in cabina)"));
                                     if ui
-                                        .add_enabled(magnet, egui::Button::new("Porta a questa distanza"))
-                                        .on_hover_text("Ruota il pezzo dell'angolo più piccolo che dà questa distanza")
-                                        .on_disabled_hover_text("Accendi la calamita della Misura: il punto deve seguire il pezzo")
+                                        .add_enabled(magnet, egui::Button::new(tr("Porta a questa distanza")))
+                                        .on_hover_text(tr("Ruota il pezzo dell'angolo più piccolo che dà questa distanza"))
+                                        .on_disabled_hover_text(tr("Accendi la calamita della Misura: il punto deve seguire il pezzo"))
                                         .clicked()
                                         && !nodes.is_empty()
                                     {
@@ -2343,20 +2399,28 @@ World  X {:.3}  Y {:.3}  Z {:.3}",
                                                 // Lo spostamento lo fa il controllo dell'angolo qui sotto
                                                 h.angle += delta;
                                                 h.error = None;
-                                                status = Some(format!("Ruotato di {delta:.2}°: distanza {:.2} mm", h.wanted));
+                                                status = Some(trf!(
+                                                    "Ruotato di {delta}°: distanza {dist} mm",
+                                                    delta = format!("{delta:.2}"),
+                                                    dist = format!("{:.2}", h.wanted)
+                                                ));
                                             }
                                             Err((min, max)) => {
-                                                h.error = Some(format!("Distanza non raggiungibile ruotando su questo asse: da {min:.1} a {max:.1} mm"));
+                                                h.error = Some(trf!(
+                                                    "Distanza non raggiungibile ruotando su questo asse: da {min} a {max} mm",
+                                                    min = format!("{min:.1}"),
+                                                    max = format!("{max:.1}")
+                                                ));
                                             }
                                         }
                                     }
                                 });
                                 if !magnet {
-                                    ui.label(egui::RichText::new("Accendi la calamita della Misura per portare la distanza").small().weak());
+                                    ui.label(egui::RichText::new(tr("Accendi la calamita della Misura per portare la distanza")).small().weak());
                                 }
                             } else if app.ui_state.measure.is_some() {
                                 ui.label(
-                                    egui::RichText::new("Misura con un punto fermo e uno sul pezzo che ruota: qui si porta la distanza a una quota")
+                                    egui::RichText::new(tr("Misura con un punto fermo e uno sul pezzo che ruota: qui si porta la distanza a una quota"))
                                         .small()
                                         .weak(),
                                 );
@@ -2366,15 +2430,15 @@ World  X {:.3}  Y {:.3}  Z {:.3}",
                                 actions.push(Action::Move { nodes: nodes.clone(), matrix: about_axis(o, d, h.angle - before) });
                             }
                             ui.horizontal_wrapped(|ui| {
-                                if ui.small_button("Inverti verso").on_hover_text("L'angolo positivo gira dall'altra parte").clicked() {
+                                if ui.small_button(tr("Inverti verso")).on_hover_text(tr("L'angolo positivo gira dall'altra parte")).clicked() {
                                     h.axis = Some((o, -d));
                                     h.angle = -h.angle;
                                 }
                                 if let Some(m) = h.motion.as_ref().filter(|_| h.mode == HingeMode::TwoPositions) {
                                     let target = if d.dot(m.dir) >= 0.0 { m.angle } else { -m.angle };
                                     if ui
-                                        .small_button(format!("Vai alla seconda posizione ({target:.2}°)"))
-                                        .on_hover_text("Ruota la prima posizione fino a sovrapporla alla seconda")
+                                        .small_button(trf!("Vai alla seconda posizione ({angle}°)", angle = format!("{target:.2}")))
+                                        .on_hover_text(tr("Ruota la prima posizione fino a sovrapporla alla seconda"))
                                         .clicked()
                                         && !nodes.is_empty()
                                     {
@@ -2386,24 +2450,25 @@ World  X {:.3}  Y {:.3}  Z {:.3}",
                             // Cerniera salvata: si apre poi dalla vista, cliccando la parte
                             ui.label(
                                 egui::RichText::new(
-                                    "Per salvare: seleziona la parte che si apre (nella vista o nell'albero),                                      dai un nome e premi «Salva cerniera». Senza la parte giusta la cerniera non gira.",
+                                    tr("Per salvare: seleziona la parte che si apre (nella vista o nell'albero), \
+                                     dai un nome e premi «Salva cerniera». Senza la parte giusta la cerniera non gira."),
                                 )
                                 .small()
                                 .weak(),
                             );
                             ui.horizontal_wrapped(|ui| {
-                                ui.label("Parte");
+                                ui.label(tr("Parte"));
                                 ui.label(egui::RichText::new(part_name(&nodes)).italics());
                             });
                             ui.horizontal_wrapped(|ui| {
-                                ui.add(egui::TextEdit::singleline(&mut h.save_name).hint_text("Nome, es. Porta ant. sx").desired_width(130.0));
+                                ui.add(egui::TextEdit::singleline(&mut h.save_name).hint_text(tr("Nome, es. Porta ant. sx")).desired_width(130.0));
                                 if ui
-                                    .add_enabled(!nodes.is_empty(), egui::Button::new(icon_text(ui, icon::DOOR_OPEN, "Salva cerniera")))
+                                    .add_enabled(!nodes.is_empty(), egui::Button::new(icon_text(ui, icon::DOOR_OPEN, tr("Salva cerniera"))))
                                     .on_hover_text(
-                                        "Ricorda asse e parte (l'oggetto scelto sopra) nel progetto: poi basta cliccare la parte \
-                                         nella vista per aprirla con i gradi. La posizione in cui hai scelto l'asse è 0°",
+                                        tr("Ricorda asse e parte (l'oggetto scelto sopra) nel progetto: poi basta cliccare la parte \
+                                         nella vista per aprirla con i gradi. La posizione in cui hai scelto l'asse è 0°"),
                                     )
-                                    .on_disabled_hover_text("Scegli prima l'oggetto (la parte che si apre)")
+                                    .on_disabled_hover_text(tr("Scegli prima l'oggetto (la parte che si apre)"))
                                     .clicked()
                                 {
                                     // Parte ancora chiusa: il verso si sceglie perché si apra verso l'esterno
@@ -2419,12 +2484,12 @@ World  X {:.3}  Y {:.3}  Z {:.3}",
                             });
                         }
                         ui.separator();
-                        ui.label(egui::RichText::new("Cerniere salvate").strong());
+                        ui.label(egui::RichText::new(tr("Cerniere salvate")).strong());
                         hinge_cmds = super::hinge_label::draw_list(ui, &saved_hinges, (&selection, &selection_name));
                     });
 
                 // ── Applica offset ─────────────────────────────────────────────
-                section(ui, "posizione_offset", "Applica offset", &mut sections[3], |ui| {
+                section(ui, "posizione_offset", tr("Applica offset"), &mut sections[3], |ui| {
                         // Righe che vanno a capo: la finestra si può stringere. La casella accanto a
                         // ogni coordinata dice se usarla: spenta vale 0 quando si applica
                         egui::Grid::new("posizione_offset_valori").num_columns(4).spacing([6.0, 3.0]).show(ui, |ui| {
@@ -2433,7 +2498,7 @@ World  X {:.3}  Y {:.3}  Z {:.3}",
                                 for k in [row, row + 3] {
                                     ui.spacing_mut().icon_spacing = 2.0;
                                     ui.checkbox(&mut panel.offset_use[k], egui::RichText::new(AXES[k].0).color(AXES[k].1).strong())
-                                        .on_hover_text(format!("Usa {} quando si applica l'offset (spenta vale 0)", AXES[k].0));
+                                        .on_hover_text(trf!("Usa {axis} quando si applica l'offset (spenta vale 0)", axis = AXES[k].0));
                                     let (value, suffix) =
                                         if k < 3 { (&mut panel.offset.xyz[k], " mm") } else { (&mut panel.offset.abc[k - 3], " °") };
                                     ui.add_enabled(panel.offset_use[k], egui::DragValue::new(value).speed(0.1).max_decimals(3).suffix(suffix));
@@ -2445,9 +2510,9 @@ World  X {:.3}  Y {:.3}  Z {:.3}",
                         let offset = used_offset(&panel.offset, &panel.offset_use);
                         ui.label(
                             egui::RichText::new(if panel.world {
-                                "In coordinate della cabina (World acceso)"
+                                tr("In coordinate della cabina (World acceso)")
                             } else {
-                                "In coordinate dell'oggetto, come gli offset degli script"
+                                tr("In coordinate dell'oggetto, come gli offset degli script")
                             })
                             .small()
                             .weak(),
@@ -2457,41 +2522,41 @@ World  X {:.3}  Y {:.3}  Z {:.3}",
                                 egui::TextEdit::multiline(&mut panel.pasted)
                                     .desired_rows(1)
                                     .desired_width(f32::INFINITY)
-                                    .hint_text(format!("{}  Incolla qui (Ctrl+V) il risultato dello script", icon::CLIPBOARD_TEXT)),
+                                    .hint_text(format!("{}  {}", icon::CLIPBOARD_TEXT, tr("Incolla qui (Ctrl+V) il risultato dello script"))),
                             )
-                            .on_hover_text("Il testo copiato dagli script, oppure sei numeri X Y Z A B C");
+                            .on_hover_text(tr("Il testo copiato dagli script, oppure sei numeri X Y Z A B C"));
                         if paste.changed() && !panel.pasted.trim().is_empty() {
                             match parse_offset(&panel.pasted) {
                                 Some(p) => {
                                     panel.offset = p;
                                     panel.error = None;
                                     panel.pasted.clear();
-                                    status = Some("Offset incollato: controlla i valori e premi Applica".to_string());
+                                    status = Some(tr("Offset incollato: controlla i valori e premi Applica").to_string());
                                 }
-                                None => panel.error = Some("Nel testo incollato non c'è un offset X Y Z A B C".to_string()),
+                                None => panel.error = Some(tr("Nel testo incollato non c'è un offset X Y Z A B C").to_string()),
                             }
                         }
                         ui.horizontal_wrapped(|ui| {
-                            if ui.button("Applica").on_hover_text("Sposta l'oggetto di questo offset").clicked() && !nodes.is_empty() {
+                            if ui.button(tr("Applica")).on_hover_text(tr("Sposta l'oggetto di questo offset")).clicked() && !nodes.is_empty() {
                                 actions.push(Action::Move { nodes: nodes.clone(), matrix: in_frame(offset.matrix(), frame, panel.world) });
                             }
-                            if ui.small_button("Azzera").clicked() {
+                            if ui.small_button(tr("Azzera")).clicked() {
                                 panel.offset = Pose::default();
                             }
                         });
 
                         // Lo stesso offset su un oggetto del programma del robot, senza conti a mano
                         ui.separator();
-                        ui.label(egui::RichText::new("Nuovo oggetto del robot").strong()).on_hover_text(
-                            "Incolla la riga dell'oggetto: viene riscritta, nello stesso formato, spostata dell'offset qui sopra",
+                        ui.label(egui::RichText::new(tr("Nuovo oggetto del robot")).strong()).on_hover_text(
+                            tr("Incolla la riga dell'oggetto: viene riscritta, nello stesso formato, spostata dell'offset qui sopra"),
                         );
                         ui.add(
                             egui::TextEdit::singleline(&mut panel.robot_line)
                                 .desired_width(f32::INFINITY)
                                 .font(egui::TextStyle::Monospace)
-                                .hint_text("CONST BASE NOME = X Y Z A B C"),
+                                .hint_text(tr("CONST BASE NOME = X Y Z A B C")),
                         )
-                        .on_hover_text("CONST BASE NOME = X Y Z A B C\noppure\nNOME : OBJECT := (X, Y, Z, A, B, C)");
+                        .on_hover_text(tr("CONST BASE NOME = X Y Z A B C\noppure\nNOME : OBJECT := (X, Y, Z, A, B, C)"));
                         if !panel.robot_line.trim().is_empty() {
                             match parse_robot_base(&panel.robot_line) {
                                 Some(base) => {
@@ -2506,14 +2571,14 @@ World  X {:.3}  Y {:.3}  Z {:.3}",
                                     let line = base.moved(&offset, false).to_line();
                                     ui.add(egui::Label::new(egui::RichText::new(&line).monospace().strong()).wrap());
                                     ui.horizontal_wrapped(|ui| {
-                                        if ui.button(icon_text(ui, icon::COPY, "Copia")).clicked() {
+                                        if ui.button(icon_text(ui, icon::COPY, tr("Copia"))).clicked() {
                                             copy = Some(line.clone());
                                         }
                                         ui.label(
                                             egui::RichText::new(if panel.world {
-                                                "Offset in coordinate della cabina (World acceso)"
+                                                tr("Offset in coordinate della cabina (World acceso)")
                                             } else {
-                                                "Offset in coordinate dell'oggetto"
+                                                tr("Offset in coordinate dell'oggetto")
                                             })
                                             .small()
                                             .weak(),
@@ -2521,33 +2586,33 @@ World  X {:.3}  Y {:.3}  Z {:.3}",
                                     });
                                 }
                                 None => {
-                                    ui.label(egui::RichText::new("Riga non riconosciuta").small().color(egui::Color32::from_rgb(230, 90, 80)));
+                                    ui.label(egui::RichText::new(tr("Riga non riconosciuta")).small().color(egui::Color32::from_rgb(230, 90, 80)));
                                 }
                             }
                         }
                     });
 
                 // ── Calcola offset ─────────────────────────────────────────────
-                section(ui, "posizione_calcolo", "Calcola offset", &mut sections[4], |ui| {
+                section(ui, "posizione_calcolo", tr("Calcola offset"), &mut sections[4], |ui| {
                         ui.horizontal_wrapped(|ui| {
-                            ui.selectable_value(&mut panel.calc, CalcMode::Objects, "Tra due oggetti")
-                                .on_hover_text("Come WRLOffsetCalculator: due oggetti della scena, dalle loro coordinate");
-                            ui.selectable_value(&mut panel.calc, CalcMode::Bases, "Tra due CONST BASE")
-                                .on_hover_text("Come BaseOffsetCalculator: CONST BASE NOME = X Y Z A B C");
+                            ui.selectable_value(&mut panel.calc, CalcMode::Objects, tr("Tra due oggetti"))
+                                .on_hover_text(tr("Come WRLOffsetCalculator: due oggetti della scena, dalle loro coordinate"));
+                            ui.selectable_value(&mut panel.calc, CalcMode::Bases, tr("Tra due CONST BASE"))
+                                .on_hover_text(tr("Come BaseOffsetCalculator: CONST BASE NOME = X Y Z A B C"));
                         });
                         // (titolo, offset nel riferimento)
                         let mut calc_result: Option<Result<(String, Pose), String>> = None;
                         match panel.calc {
                             CalcMode::Objects => {
                                 egui::Grid::new("posizione_oggetti").num_columns(3).spacing([8.0, 4.0]).show(ui, |ui| {
-                                    for (label, slot) in [("Riferimento", &mut panel.reference), ("Destinazione", &mut panel.destination)] {
+                                    for (label, slot) in [(tr("Riferimento"), &mut panel.reference), (tr("Destinazione"), &mut panel.destination)] {
                                         ui.label(label);
                                         // Nomi lunghi accorciati al centro (il pulsante resta nella finestra);
                                         // sotto, il file: due pezzi con lo stesso nome si distinguono
                                         let full = node_label(app, *slot);
                                         let file = slot.and_then(|n| file_label(app, n));
                                         let hover = match &file {
-                                            Some(f) => format!("{full}\nFile: {f}"),
+                                            Some(f) => trf!("{full}\nFile: {f}", full = full, f = f),
                                             None => full.clone(),
                                         };
                                         ui.vertical(|ui| {
@@ -2556,8 +2621,8 @@ World  X {:.3}  Y {:.3}  Z {:.3}",
                                                 ui.label(egui::RichText::new(middle_ellipsis(f, 30)).small().weak()).on_hover_text(&hover);
                                             }
                                         });
-                                        if ui.add_enabled(app.ui_state.selected_node.is_some(), egui::Button::new("Usa selezione").small())
-                                            .on_hover_text("L'oggetto selezionato nell'albero")
+                                        if ui.add_enabled(app.ui_state.selected_node.is_some(), egui::Button::new(tr("Usa selezione")).small())
+                                            .on_hover_text(tr("L'oggetto selezionato nell'albero"))
                                             .clicked()
                                         {
                                             *slot = app.ui_state.selected_node;
@@ -2565,7 +2630,7 @@ World  X {:.3}  Y {:.3}  Z {:.3}",
                                         ui.end_row();
                                     }
                                 });
-                                if ui.button("Calcola").clicked() {
+                                if ui.button(tr("Calcola")).clicked() {
                                     calc_result = Some(match (panel.reference, panel.destination) {
                                         (Some(r), Some(d)) if r != d => {
                                             let title = format!("{}  ->  {}", node_label(app, Some(r)), node_label(app, Some(d)));
@@ -2576,35 +2641,36 @@ World  X {:.3}  Y {:.3}  Z {:.3}",
                                             match scene.geometric_offset(r, d) {
                                                 Ok(fit) => {
                                                     let m = a.matrix();
-                                                    panel.result_note = Some("Calcolato dalla geometria: i due oggetti sono lo stesso pezzo".to_string());
+                                                    panel.result_note = Some(tr("Calcolato dalla geometria: i due oggetti sono lo stesso pezzo").to_string());
                                                     Ok((title, Pose::from_matrix(m.inverse() * fit.matrix * m)))
                                                 }
                                                 Err(why) => {
                                                     let b = Pose::from_matrix(scene.object_frame(d));
-                                                    panel.result_note = Some(format!(
-                                                        "Calcolato dai Transform del file (non dalla geometria: {why})"
+                                                    panel.result_note = Some(trf!(
+                                                        "Calcolato dai Transform del file (non dalla geometria: {why})",
+                                                        why = why
                                                     ));
                                                     Ok((title, a.offset_to(&b)))
                                                 }
                                             }
                                         }
-                                        (Some(_), Some(_)) => Err("Riferimento e destinazione devono essere diversi".to_string()),
-                                        _ => Err("Scegli riferimento e destinazione".to_string()),
+                                        (Some(_), Some(_)) => Err(tr("Riferimento e destinazione devono essere diversi").to_string()),
+                                        _ => Err(tr("Scegli riferimento e destinazione").to_string()),
                                     });
                                 }
                             }
                             CalcMode::Bases => {
-                                for (label, text) in [("Origine", &mut panel.base_a), ("Destinazione", &mut panel.base_b)] {
+                                for (label, text) in [(tr("Origine"), &mut panel.base_a), (tr("Destinazione"), &mut panel.base_b)] {
                                     ui.label(label);
-                                    ui.add(egui::TextEdit::singleline(text).desired_width(f32::INFINITY).font(egui::TextStyle::Monospace).hint_text("CONST BASE NOME = X Y Z A B C"))
-                                        .on_hover_text("CONST BASE NOME = X Y Z A B C\noppure\nNOME : OBJECT := (X, Y, Z, A, B, C)");
+                                    ui.add(egui::TextEdit::singleline(text).desired_width(f32::INFINITY).font(egui::TextStyle::Monospace).hint_text(tr("CONST BASE NOME = X Y Z A B C")))
+                                        .on_hover_text(tr("CONST BASE NOME = X Y Z A B C\noppure\nNOME : OBJECT := (X, Y, Z, A, B, C)"));
                                 }
                                 let (mut calc, mut swap) = (false, false);
                                 ui.horizontal(|ui| {
-                                    calc = ui.button("Calcola").clicked();
+                                    calc = ui.button(tr("Calcola")).clicked();
                                     swap = ui
-                                        .button(icon_text(ui, icon::ARROWS_DOWN_UP, "Inverti"))
-                                        .on_hover_text("Scambia origine e destinazione (con un risultato già calcolato, lo ricalcola)")
+                                        .button(icon_text(ui, icon::ARROWS_DOWN_UP, tr("Inverti")))
+                                        .on_hover_text(tr("Scambia origine e destinazione (con un risultato già calcolato, lo ricalcola)"))
                                         .clicked();
                                 });
                                 if swap {
@@ -2614,8 +2680,8 @@ World  X {:.3}  Y {:.3}  Z {:.3}",
                                     panel.result_note = None;
                                     calc_result = Some(match (parse_const_base(&panel.base_a), parse_const_base(&panel.base_b)) {
                                         (Some((na, a)), Some((nb, b))) => Ok((format!("{na}  ->  {nb}"), a.offset_to(&b))),
-                                        (None, _) => Err("BASE di origine non riconosciuto".to_string()),
-                                        (_, None) => Err("BASE di destinazione non riconosciuto".to_string()),
+                                        (None, _) => Err(tr("BASE di origine non riconosciuto").to_string()),
+                                        (_, None) => Err(tr("BASE di destinazione non riconosciuto").to_string()),
                                     });
                                 }
                             }
@@ -2624,7 +2690,7 @@ World  X {:.3}  Y {:.3}  Z {:.3}",
                             Some(Ok((title, p))) => {
                                 panel.result = Some(p);
                                 panel.error = None;
-                                status = Some(format!("Offset calcolato: {title}"));
+                                status = Some(trf!("Offset calcolato: {title}", title = title));
                             }
                             Some(Err(e)) => {
                                 panel.result = None;
@@ -2637,19 +2703,19 @@ World  X {:.3}  Y {:.3}  Z {:.3}",
                             // (titolo, spiegazione, valori, World acceso con «Usa come offset»: None = come è)
                             let rows: Vec<(&str, &str, Pose, Option<bool>)> = if same_offset(&p, &in_world) {
                                 // Oggetto senza Transform né rotazioni: nell'oggetto e in World è lo stesso
-                                vec![("Offset", "Vale sia con World spento sia acceso", p, None)]
+                                vec![("Offset", tr("Vale sia con World spento sia acceso"), p, None)]
                             } else {
                                 vec![
                                     (
-                                        "Offset in coordinate dell'oggetto",
-                                        "Negli assi e nell'origine del riferimento: come gli script e i BASE del robot",
+                                        tr("Offset in coordinate dell'oggetto"),
+                                        tr("Negli assi e nell'origine del riferimento: come gli script e i BASE del robot"),
                                         p,
                                         Some(false),
                                     ),
                                     (
-                                        "Offset in coordinate World",
-                                        "Lo stesso spostamento visto dalla scena, per l'oggetto scelto in alto: \
-                                         assi e origine della scena",
+                                        tr("Offset in coordinate World"),
+                                        tr("Lo stesso spostamento visto dalla scena, per l'oggetto scelto in alto: \
+                                         assi e origine della scena"),
                                         in_world,
                                         Some(true),
                                     ),
@@ -2660,15 +2726,15 @@ World  X {:.3}  Y {:.3}  Z {:.3}",
                                 ui.label(egui::RichText::new(title).strong()).on_hover_text(hover);
                                 pose_grid(ui, &format!("posizione_risultato_{k}"), &pose);
                                 ui.horizontal_wrapped(|ui| {
-                                    if ui.button(icon_text(ui, icon::COPY, "Copia")).clicked() {
+                                    if ui.button(icon_text(ui, icon::COPY, tr("Copia"))).clicked() {
                                         copy = Some(offset_text(if world == Some(true) { "Offset World" } else { "Offset" }, &pose));
                                     }
                                     let hover = match world {
-                                        Some(true) => "Copia i valori in «Applica offset», con World acceso",
-                                        Some(false) => "Copia i valori in «Applica offset», con World spento",
-                                        None => "Copia i valori in «Applica offset»",
+                                        Some(true) => tr("Copia i valori in «Applica offset», con World acceso"),
+                                        Some(false) => tr("Copia i valori in «Applica offset», con World spento"),
+                                        None => tr("Copia i valori in «Applica offset»"),
                                     };
-                                    if ui.button("Usa come offset").on_hover_text(hover).clicked() {
+                                    if ui.button(tr("Usa come offset")).on_hover_text(hover).clicked() {
                                         panel.offset = pose;
                                         if let Some(w) = world {
                                             panel.world = w;
@@ -2702,7 +2768,7 @@ World  X {:.3}  Y {:.3}  Z {:.3}",
 
     if let Some(text) = copy {
         ctx.copy_text(text);
-        status = Some("Copiato negli appunti".to_string());
+        status = Some(tr("Copiato negli appunti").to_string());
     }
     panel.open = open;
     if panel.hinge.picking {

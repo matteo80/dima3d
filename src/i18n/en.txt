@@ -278,3 +278,690 @@ Predefiniti
 = Defaults
 Sfondo e colori predefiniti
 = Default background and colors
+
+# ── Finestra Posizione (ui/position_panel.rs) ───────────────────────────────
+
+1 misura: ovunque\nsul cerchio
+= 1 measurement: anywhere\non the circle
+2 misure: due\nposizioni possibili
+= 2 measurements: two\npossible positions
+3 clic sul bordo di ogni perno: prima i 2 della cerniera fissa, poi i 2 della mobile
+= 3 clicks on the edge of each pin: first the 2 on the fixed hinge, then the 2 on the moving one
+3 misure: una sola\nposizione
+= 3 measurements: only one\nposition
+4 perni (cofano)
+= 4 pins (hood)
+A mano
+= By hand
+Accendi la calamita della Misura per portare la distanza
+= Turn on the Measure magnet to set the distance
+Accendi la calamita della Misura: il punto deve seguire il pezzo
+= Turn on the Measure magnet: the point must follow the part
+Acceso: assi della cabina; le rotazioni girano attorno all'origine dell'oggetto, quindi X Y Z restano. Spento: assi e centro dell'oggetto (le sue coordinate, uguali per tutti i suoi pezzi)
+= On: booth axes; rotations turn around the object origin, so X Y Z stay the same. Off: object axes and center (its coordinates, the same for all its parts)
+Aggiunge il punto scritto a mano
+= Adds the point typed by hand
+Aggiunge tutti i punti del programma attivo
+= Adds all the points of the active program
+Allinea
+= Align
+Allinea su misure
+= Align on measurements
+Allinea su punti
+= Align on points
+Allinea sullo zero della scena (centro cabina)
+= Align on the scene zero (booth center)
+Allineato sui punti: scarto medio {rms} mm, massimo {max} mm
+= Aligned on the points: mean deviation {rms} mm, maximum {max} mm
+Allineato sulle misure: scarto medio {rms} mm, massimo {max} mm
+= Aligned on the measurements: mean deviation {rms} mm, maximum {max} mm
+Allineato: spostato di X {x} Y {y} Z {z} mm
+= Aligned: moved by X {x} Y {y} Z {z} mm
+Angolo
+= Angle
+Angolo dalla posizione in cui è stato scelto l'asse
+= Angle from the position where the axis was picked
+Angolo tra le posizioni {angle}°
+= Angle between the positions {angle}°
+Annulla scelta
+= Cancel picking
+Apertura del cofano dalla posizione in cui sono stati scelti i perni
+= Hood opening from the position where the pins were picked
+Applica
+= Apply
+Applica offset
+= Apply offset
+Apri il file degli oggetti del robot
+= Open the robot objects file
+Apri il file degli oggetti del robot (es. _GLOBAL.TID)
+= Open the robot objects file (e.g. _GLOBAL.TID)
+Apri il file local (punti presi sulla matematica)
+= Open the local file (points taken on the CAD model)
+Apri il file world (punti presi con il robot)
+= Open the world file (points taken with the robot)
+Apri il file {kind} (.tid)
+= Open the {kind} file (.tid)
+Apri il programma con i riferimenti nella finestra Programma (punti Object)
+= Open the program with the references in the Program window (Object points)
+Asse dai perni: ora seleziona la parte che si apre, poi «Salva cerniera»
+= Axis from the pins: now select the part that opens, then "Save hinge"
+Asse dai {n} perni selezionati
+= Axis from the {n} selected pins
+Asse della cerniera
+= Hinge axis
+Asse per {point}, direzione {dir}
+= Axis through {point}, direction {dir}
+Asse trovato: {angle}° tra le due posizioni
+= Axis found: {angle}° between the two positions
+Azzera
+= Reset
+BASE di destinazione non riconosciuto
+= Destination BASE not recognized
+BASE di origine non riconosciuto
+= Origin BASE not recognized
+Basta una cerniera: il cofano si muove tutto. Le bielle dell'altro lato si possono selezionare insieme a quelle di questo lato se le due cerniere sono allineate.
+= One hinge is enough: the whole hood moves. The links on the other side can be selected together with the ones on this side if the two hinges are aligned.
+Biella 1
+= Link 1
+Biella 1 {l1} mm  ·  biella 2 {l2} mm  ·  tra i perni mobili {l3} mm
+= Link 1 {l1} mm  ·  link 2 {l2} mm  ·  between the moving pins {l3} mm
+Biella 2
+= Link 2
+Biella tra perno fisso 1 e perno mobile 1 (facoltativa)
+= Link between fixed pin 1 and moving pin 1 (optional)
+Biella tra perno fisso 2 e perno mobile 2 (facoltativa)
+= Link between fixed pin 2 and moving pin 2 (optional)
+CONST BASE NOME = X Y Z A B C
+= CONST BASE NAME = X Y Z A B C
+CONST BASE NOME = X Y Z A B C\noppure\nNOME : OBJECT := (X, Y, Z, A, B, C)
+= CONST BASE NAME = X Y Z A B C\nor\nNAME : OBJECT := (X, Y, Z, A, B, C)
+Calcola
+= Calculate
+Calcola l'asse
+= Calculate the axis
+Calcola offset
+= Calculate offset
+Calcolato dai Transform del file (non dalla geometria: {why})
+= Calculated from the file Transforms (not from the geometry: {why})
+Calcolato dalla geometria: i due oggetti sono lo stesso pezzo
+= Calculated from the geometry: the two objects are the same part
+Centro
+= Center
+Centro cabina (lo zero della scena)
+= Booth center (the scene zero)
+Centro del riquadro dei pezzi
+= Center of the parts' bounding box
+Cerniera con due bielle: due perni sulla cerniera fissa e due sulla mobile. Il cofano non gira su un asse fisso: le bielle si calcolano in automatico
+= Hinge with two links: two pins on the fixed hinge and two on the moving one. The hood does not turn on a fixed axis: the links are calculated automatically
+Cerniere salvate
+= Saved hinges
+Clic per riprendere i due punti
+= Click to pick the two points again
+Clic per riprendere il punto M
+= Click to pick point M again
+Clic sui pezzi nella vista (si aggancia ai vertici vicini, come le Misure). Oppure seleziona i due perni (Shift + clic nella vista) e il pulsante crea l'asse da loro
+= Click on the parts in the view (it snaps to nearby vertices, like Measurements). Or select the two pins (Shift + click in the view) and the button creates the axis from them
+Clic sul bordo del foro, punto {n} di 3
+= Click on the edge of the hole, point {n} of 3
+Clic sul primo punto dell'asse
+= Click on the first point of the axis
+Clic sul punto per cui passa l'asse
+= Click on the point the axis goes through
+Clic sul secondo punto dell'asse
+= Click on the second point of the axis
+Clicca il punto sul 3D (Esc per smettere)
+= Click the point on the 3D (Esc to stop)
+Clicca poi il punto sul 3D
+= Then click the point on the 3D
+Clicca sul 3D i punti che mancano, uno dopo l'altro
+= Click on the 3D the missing points, one after the other
+Clicca sul 3D il punto sul riferimento fermo, poi quello sull'oggetto da spostare
+= Click on the 3D the point on the fixed reference, then the one on the object to move
+Clicca sul 3D il punto sul riferimento fermo, poi {per} punti sull'oggetto da spostare
+= Click on the 3D the point on the fixed reference, then {per} points on the object to move
+Cofano e braccio della cerniera mobile (con i suoi perni)
+= Hood and arm of the moving hinge (with its pins)
+Come BaseOffsetCalculator: CONST BASE NOME = X Y Z A B C
+= Like BaseOffsetCalculator: CONST BASE NAME = X Y Z A B C
+Come WRLOffsetCalculator: due oggetti della scena, dalle loro coordinate
+= Like WRLOffsetCalculator: two objects of the scene, from their coordinates
+Come si fa
+= How to do it
+Con 3 distanze da 3 punti fissi diversi il punto M è fissato, come la punta di un treppiede. Un punto solo però non basta: l'oggetto ci potrebbe girare attorno. Con 3 punti M fissati così (M1, M2, M3, lontani tra loro) l'oggetto non può più né spostarsi né ruotare. Per questo in «Precisa» da ogni punto fisso si misurano gli stessi 3 punti M.
+= With 3 distances from 3 different fixed points, point M is fixed, like the tip of a tripod. One point alone is not enough, though: the object could turn around it. With 3 points M fixed this way (M1, M2, M3, far apart) the object can no longer move or rotate. That is why in "Precise" the same 3 points M are measured from every fixed point.
+Con il metro misuri la distanza tra un punto fisso F del riferimento fermo (in blu, es. il paraurti) e un punto M dell'oggetto da spostare (in arancione, es. il supporto del jig). Una distanza sola non dice dove sta il punto M: può essere ovunque su un cerchio (nello spazio, su una sfera).
+= With the tape measure you measure the distance between a fixed point F on the stationary reference (in blue, e.g. the front fascia) and a point M on the object to move (in orange, e.g. the jig support). A single distance does not tell where point M is: it can be anywhere on a circle (in space, on a sphere).
+Con «Usa selezione» indica la parte che si apre (cofano + braccio) e, se vuoi che si muovano, le due bielle.
+= With "Use selection", indicate the part that opens (hood + arm) and, if you want them to move, the two links.
+Confronta i pezzi delle due posizioni; la prima è quella che poi si ruota
+= Compares the parts in the two positions; the first one is the one that is then rotated
+Coordinate dell'oggetto
+= Object coordinates
+Copia
+= Copy
+Copia X Y Z A B C
+= Copy X Y Z A B C
+Copia i valori in «Applica offset»
+= Copy the values into "Apply offset"
+Copia i valori in «Applica offset», con World acceso
+= Copy the values into "Apply offset", with World on
+Copia i valori in «Applica offset», con World spento
+= Copy the values into "Apply offset", with World off
+Copia la riga
+= Copy the line
+Copiato negli appunti
+= Copied to the clipboard
+Da due posizioni
+= From two positions
+Dai Transform del file, con gli spostamenti fatti qui
+= From the file Transforms, with the moves made here
+Dalla Misura
+= From Measure
+Dati del robot (TID)
+= Robot data (TID)
+Destinazione
+= Destination
+Differenza (calcolato − attuale)
+= Difference (calculated − current)
+Differenza che resta dopo «Allinea» tra il 3D e il misurato (mm)
+= Difference left after "Align" between the 3D and the measured value (mm)
+Disegni e passi: quali perni cliccare e in che ordine
+= Drawings and steps: which pins to click and in what order
+Dist.
+= Dist.
+Distanza
+= Distance
+Distanza non raggiungibile ruotando su questo asse: da {min} a {max} mm
+= Distance not reachable by rotating on this axis: from {min} to {max} mm
+Distanza tra i due punti (mm)
+= Distance between the two points (mm)
+Distanza tra il punto del 3D e il riferimento (mm)
+= Distance between the point on the 3D and the reference (mm)
+Distanza voluta tra i due punti della Misura (es. presa con il metro in cabina)
+= Desired distance between the two Measure points (e.g. taken with the tape measure in the booth)
+Dopo
+= After
+Due clic sull'asse, es. i centri delle due cerniere
+= Two clicks on the axis, e.g. the centers of the two hinges
+Due copie dello stesso pezzo (una sola parte per lato): si sovrappongono dalla geometria
+= Two copies of the same part (only one item per side): they are overlapped from the geometry
+Due fori
+= Two holes
+Due punti
+= Two points
+F = punto fisso sul riferimento, M = punto sull'oggetto da spostare
+= F = fixed point on the reference, M = point on the object to move
+F1 (cerniera fissa, perno 1)
+= F1 (fixed hinge, pin 1)
+F2 (cerniera fissa, perno 2)
+= F2 (fixed hinge, pin 2)
+Fine corsa: il meccanismo arriva a {angle}°
+= End of travel: the mechanism reaches {angle}°
+Foro {hole}: clic sul bordo, punto {n} di 3
+= Hole {hole}: click on the edge, point {n} of 3
+Guida
+= Guide
+Guida 4 perni
+= 4-pin guide
+Guida illustrata
+= Illustrated guide
+Guida misure
+= Measurement guide
+I due punti coincidono
+= The two points coincide
+I perni non sono del tutto paralleli (scarto {skew}°): si usa la direzione media
+= The pins are not fully parallel (deviation {skew}°): the average direction is used
+I tre punti del foro sono allineati
+= The three points of the hole are aligned
+I tre punti del primo foro sono allineati
+= The three points of the first hole are aligned
+I tre punti del secondo foro sono allineati
+= The three points of the second hole are aligned
+Il file o i pezzi selezionati nell'albero
+= The file or the parts selected in the tree
+Il file o i pezzi selezionati nell'albero (al posto di quelli indicati prima)
+= The file or the parts selected in the tree (replacing the ones set before)
+Il mobile 1 diventa il mobile 2: per correggere l'abbinamento perno fisso ↔ perno mobile
+= Moving pin 1 becomes moving pin 2: to fix the fixed pin ↔ moving pin pairing
+Il pezzo si sposta senza ruotare: bastano 3 misure (es. una per asse)
+= The part moves without rotating: 3 measurements are enough (e.g. one per axis)
+Il riferimento diventa la selezione: un pezzo, un gruppo o più pezzi insieme
+= The reference becomes the selection: one part, a group or several parts together
+Il riferimento è anche l'oggetto da spostare
+= The reference is also the object to move
+Il testo copiato dagli script, oppure sei numeri X Y Z A B C
+= The text copied from the scripts, or six numbers X Y Z A B C
+In cabina misura con il metro da un punto del riferimento a un punto dell'oggetto. Scegli punti facili da ritrovare sul 3D: spigoli, angoli, centri dei fori.
+= In the booth, measure with the tape measure from a point on the reference to a point on the object. Pick points that are easy to find on the 3D: edges, corners, hole centers.
+In cima alla finestra Posizione scegli come «Oggetto» il pezzo da spostare.
+= At the top of the Position window, choose the part to move as "Object".
+In coordinate dell'oggetto, come gli offset degli script
+= In object coordinates, like the script offsets
+In coordinate della cabina (World acceso)
+= In booth coordinates (World on)
+In un file solo: {list}
+= In one file only: {list}
+Incolla la riga dell'oggetto: viene riscritta, nello stesso formato, spostata dell'offset qui sopra
+= Paste the object line: it is rewritten, in the same format, moved by the offset above
+Incolla qui (Ctrl+V) il risultato dello script
+= Paste here (Ctrl+V) the script result
+Indica la parte che si apre (cofano + braccio) per poterla ruotare
+= Indicate the part that opens (hood + arm) to be able to rotate it
+Indica prima la parte che si apre (cofano + braccio)
+= First indicate the part that opens (hood + arm)
+Inverti
+= Swap
+Inverti verso
+= Reverse direction
+L'angolo positivo apre dall'altra parte
+= A positive angle opens the other way
+L'angolo positivo gira dall'altra parte
+= A positive angle turns the other way
+L'asse passa per i centri dei pezzi selezionati (con più di due, per i due più lontani). Per sceglierlo con i clic nella vista, togli prima la selezione multipla
+= The axis goes through the centers of the selected parts (with more than two, through the two farthest apart). To pick it with clicks in the view, clear the multiple selection first
+L'oggetto qui sopra si sposta finché le quote sul 3D sono quelle prese a mano in cabina, dai punti fissi F (riferimento fermo) ai punti M dell'oggetto.
+= The object above moves until the dimensions on the 3D match the ones taken by hand in the booth, from the fixed points F (stationary reference) to the points M on the object.
+L'oggetto qui sopra si sposta sui riferimenti presi in cabina (punti del programma). Almeno {n} punti; sul 3D il clic si aggancia al vertice vicino.
+= The object above moves onto the references taken in the booth (program points). At least {n} points; on the 3D the click snaps to the nearest vertex.
+L'oggetto qui sopra si sposta sul riferimento lungo gli assi scelti della cabina, senza ruotare.
+= The object above moves onto the reference along the chosen booth axes, without rotating.
+L'oggetto selezionato nell'albero
+= The object selected in the tree
+La parte che si apre è stata spostata in un altro modo: scegli di nuovo i perni
+= The part that opens was moved in some other way: pick the pins again
+Lato alto del riquadro (X, Y o Z più grande)
+= Upper side of the bounding box (larger X, Y or Z)
+Lato basso del riquadro (X, Y o Z più piccola)
+= Lower side of the bounding box (smaller X, Y or Z)
+Le bielle risultano incrociate: di solito vuol dire che i perni mobili sono stati cliccati nell'ordine sbagliato. Se nel pezzo non si incrociano, premi «Scambia i perni mobili».
+= The links appear crossed: this usually means the moving pins were clicked in the wrong order. If they do not cross on the part, press "Swap moving pins".
+Lo stesso pezzo in due posizioni (es. chiuso e aperto, due matematiche già pronte): l'asse si calcola dal movimento, anche senza cerniere nel 3D
+= The same part in two positions (e.g. closed and open, two ready-made CAD models): the axis is calculated from the motion, even without hinges in the 3D
+Lo stesso spostamento visto dalla scena, per l'oggetto scelto in alto: assi e origine della scena
+= The same move seen from the scene, for the object chosen at the top: scene axes and origin
+Local
+= Local
+M1 (cerniera mobile, sulla biella di F1)
+= M1 (moving hinge, on the F1 link)
+M2 (cerniera mobile, sulla biella di F2)
+= M2 (moving hinge, on the F2 link)
+Misura
+= Measurement
+Misura con un punto fermo e uno sul pezzo che ruota: qui si porta la distanza a una quota
+= Measure with one fixed point and one on the rotating part: here the distance can be set to a value
+Misura dell'oggetto
+= Object measurement
+Misurato
+= Measured
+Misure pronte: {ready}, ne servono almeno {min}
+= Measurements ready: {ready}, at least {min} needed
+Modifica
+= Change
+Modifica in coordinate World
+= Edit in World coordinates
+Negli assi e nell'origine del riferimento: come gli script e i BASE del robot
+= In the axes and origin of the reference: like the scripts and the robot BASEs
+Nel testo incollato non c'è un offset X Y Z A B C
+= The pasted text does not contain an X Y Z A B C offset
+Nella vista compaiono F1 F2 M1 M2 e le linee delle bielle: se le bielle risultano incrociate hai invertito M1 e M2, premi «Scambia i perni mobili».
+= F1 F2 M1 M2 and the link lines appear in the view: if the links appear crossed, you swapped M1 and M2; press "Swap moving pins".
+Nelle stazioni in tracking la X dipende dalla posizione sul convogliatore
+= In tracking stations X depends on the position on the conveyor
+Nessun Transform nel file: coincidono con la cabina
+= No Transform in the file: they match the booth
+Nessun file degli oggetti
+= No objects file
+Nessun oggetto (CONST BASE o OBJECT) in {path}
+= No object (CONST BASE or OBJECT) in {path}
+No: punti vicini o in fila
+= No: points close together or in a line
+No: tutte da un punto
+= No: all from one point
+Nome
+= Name
+Nome, es. Cofano
+= Name, e.g. Hood
+Nome, es. Porta ant. sx
+= Name, e.g. Front left door
+Non sono lo stesso pezzo: {why}
+= They are not the same part: {why}
+Non è una rotazione pura: il pezzo scorre anche lungo l'asse
+= This is not a pure rotation: the part also slides along the axis
+Nuova misura
+= New measurement
+Nuovo oggetto del robot
+= New robot object
+Nuovo punto fisso
+= New fixed point
+OK fino a {ok} mm di errore massimo, accettabile fino a {acceptable} mm
+= OK up to {ok} mm of maximum error, acceptable up to {acceptable} mm
+Offset calcolato: {title}
+= Offset calculated: {title}
+Offset in coordinate World
+= Offset in World coordinates
+Offset in coordinate dell'oggetto
+= Offset in object coordinates
+Offset in coordinate della cabina (World acceso)
+= Offset in booth coordinates (World on)
+Offset incollato: controlla i valori e premi Applica
+= Offset pasted: check the values and press Apply
+Oggetto
+= Object
+Oggetto attuale
+= Current object
+Oggetto calcolato
+= Calculated object
+Oggetto del robot da due file di punti con gli stessi nomi: local (presi sulla matematica in posizione 0) e world (presi con il robot in cabina, oggetto a 0). Contano solo X Y Z.
+= Robot object from two point files with the same names: local (taken on the CAD model in position 0) and world (taken with the robot in the booth, object at 0). Only X Y Z count.
+Ora
+= Now
+Ordine dei perni: prima F1 e F2 sulla cerniera fissa (quella avvitata alla scocca), poi M1 e M2 sulla cerniera mobile (il braccio avvitato al cofano). M1 è in cima alla biella che parte da F1, M2 in cima a quella che parte da F2.
+= Pin order: first F1 and F2 on the fixed hinge (the one bolted to the body), then M1 and M2 on the moving hinge (the arm bolted to the hood). M1 is at the top of the link that starts from F1, M2 at the top of the one that starts from F2.
+Ordine: F1 e F2 sulla cerniera fissa, poi M1 e M2 sulla mobile (M1 sulla stessa biella di F1). Su ogni perno 3 punti sul bordo, a triangolo.
+= Order: F1 and F2 on the fixed hinge, then M1 and M2 on the moving one (M1 on the same link as F1). On each pin 3 points on the edge, in a triangle.
+Origine
+= Origin
+Pagina HTML
+= HTML page
+Parte
+= Part
+Parte che si apre
+= Part that opens
+Parti dalla posizione della matematica (di solito cofano chiuso) e premi «Scegli i 4 perni nella vista».
+= Start from the position of the CAD model (usually hood closed) and press "Pick the 4 pins in the view".
+Passo
+= Step
+Passo del cursore e delle frecce (mm o gradi)
+= Step of the slider and arrows (mm or degrees)
+Passo delle frecce e del cursore dell'angolo
+= Step of the arrows and of the angle slider
+Per salvare: indica sopra la parte che si apre (e le bielle), dai un nome e premi «Salva cerniera». Poi basta cliccare il cofano nella vista per aprirlo con i gradi.
+= To save: indicate above the part that opens (and the links), give it a name and press "Save hinge". Then just click the hood in the view to open it by degrees.
+Per salvare: seleziona la parte che si apre (nella vista o nell'albero), dai un nome e premi «Salva cerniera». Senza la parte giusta la cerniera non gira.
+= To save: select the part that opens (in the view or in the tree), give it a name and press "Save hinge". Without the right part the hinge does not turn.
+Perché «Precisa: 3 punti fissi × 3 punti M»
+= Why "Precise: 3 fixed points × 3 points M"
+Perni della cerniera
+= Hinge pins
+Pezzi che ruotano {moving}, fermi {fixed}
+= Rotating parts {moving}, fixed {fixed}
+Pezzi selezionati ({n})
+= Selected parts ({n})
+Porta a questa distanza
+= Set to this distance
+Posizione approssimata: le misure non fissano tutte le direzioni e l'oggetto si sposta il meno possibile. Se l'oggetto è anche ruotato usa «Precisa», con i punti lontani e non in fila.
+= Approximate position: the measurements do not fix all directions and the object moves as little as possible. If the object is also rotated use "Precise", with points far apart and not in a line.
+Posizione esatta: per ogni punto fisso un clic e poi {per} clic sull'oggetto; almeno {fixed} punti fissi, solo distanze. Meglio usare gli stessi punti M per tutti i fissi.
+= Exact position: for each fixed point one click and then {per} clicks on the object; at least {fixed} fixed points, distances only. Better to use the same points M for all the fixed points.
+Posizione veloce, approssimata: bastano {full} misure ({moves} con «Solo spostamento»), ognuna da un punto fisso a un punto dell'oggetto. L'oggetto si sposta il meno possibile.
+= Quick, approximate position: {full} measurements are enough ({moves} with "Translation only"), each from a fixed point to a point on the object. The object moves as little as possible.
+Precisa ({fixed}×{per})
+= Precise ({fixed}×{per})
+Precisa: 3 F × 3 M
+= Precise: 3 F × 3 M
+Precisa: almeno 3 punti fissi F (lontani tra loro), da ognuno le distanze verso 3 punti M dell'oggetto (lontani tra loro e non in fila), meglio gli stessi M per tutti: 9 misure. Il punto fisso si clicca una volta sola, poi i 3 punti M. Non c'è un massimo: più punti danno più controllo. La scritta verde «Schema completo» conferma che ci sei.
+= Precise: at least 3 fixed points F (far apart), from each one the distances to 3 points M on the object (far apart and not in a line), preferably the same M for all: 9 measurements. The fixed point is clicked only once, then the 3 points M. There is no maximum: more points give more control. The green "Complete layout" message confirms you are there.
+Premi «Allinea». La colonna «Dopo» dice quanto resta su ogni misura: un valore grande indica una misura letta o cliccata male, che puoi spegnere. Annulla rimette l'oggetto dov'era.
+= Press "Align". The "After" column shows what is left on each measurement: a large value points to a measurement read or clicked wrong, which you can turn off. Undo puts the object back where it was.
+Prendi
+= Take
+Prendi i mancanti
+= Take the missing ones
+Preso: clic per riprenderlo
+= Taken: click to take it again
+Prima posizione
+= First position
+Punti F e M quasi in un piano (es. tutti alla stessa altezza): la misura non dice da che parte del piano sta l'oggetto. Prendi almeno un punto fisso più in alto o più in basso degli altri.
+= Points F and M almost on one plane (e.g. all at the same height): the measurement does not tell which side of the plane the object is on. Take at least one fixed point higher or lower than the others.
+Punti del programma attivo, nell'ordine in cui li usa
+= Points of the active program, in the order it uses them
+Punti fissi: {n} (misure per fisso: {list}). Servono almeno {fixed} fissi con {per} misure ciascuno
+= Fixed points: {n} (measurements per fixed point: {list}). At least {fixed} fixed points with {per} measurements each are needed
+Punti mancanti
+= Missing points
+Punti presi con il robot, riportati sulla matematica con l'oggetto calcolato (anelli): passando da Local a World si vede di quanto si sposta ogni punto
+= Points taken with the robot, brought onto the CAD model with the calculated object (rings): switching from Local to World shows how much each point moves
+Punti presi sulla matematica in posizione 0 (pallini)
+= Points taken on the CAD model in position 0 (dots)
+Punti sul 3D
+= Points on the 3D
+Punto
+= Point
+Punto + asse
+= Point + axis
+Punto…
+= Point…
+Quante misure prendere
+= How many measurements to take
+Quante misure prendere e dove, con i disegni
+= How many measurements to take and where, with drawings
+Report con file, oggetto, statistica e scostamenti dei punti
+= Report with files, object, statistics and point deviations
+Report non salvato: {e}
+= Report not saved: {e}
+Report salvato: {path}
+= Report saved: {path}
+Ricorda asse e parte (l'oggetto scelto sopra) nel progetto: poi basta cliccare la parte nella vista per aprirla con i gradi. La posizione in cui hai scelto l'asse è 0°
+= Remembers axis and part (the object chosen above) in the project: then just click the part in the view to open it by degrees. The position where you picked the axis is 0°
+Ricorda perni, parte che si apre e bielle nel progetto. La posizione in cui hai scelto i perni è 0°; il limite di apertura è il fine corsa
+= Remembers pins, part that opens and links in the project. The position where you picked the pins is 0°; the opening limit is the end of travel
+Riferimento
+= Reference
+Riferimento e destinazione devono essere diversi
+= Reference and destination must be different
+Riga dell'oggetto da incollare nel file del robot
+= Object line to paste into the robot file
+Riga non riconosciuta
+= Line not recognized
+Riporta il cofano dov'era quando hai scelto i perni
+= Puts the hood back where it was when you picked the pins
+Riporta l'oggetto nella posizione in cui è stato aperto
+= Puts the object back in the position it was opened in
+Riporta prima il cofano a 0°
+= First bring the hood back to 0°
+Ripristina
+= Restore
+Rotazione su cerniera
+= Hinge rotation
+Ruota attorno a X
+= Rotate around X
+Ruota attorno a Y
+= Rotate around Y
+Ruota attorno a Z
+= Rotate around Z
+Ruota il pezzo dell'angolo più piccolo che dà questa distanza
+= Rotates the part by the smallest angle that gives this distance
+Ruota la prima posizione fino a sovrapporla alla seconda
+= Rotates the first position until it overlaps the second
+Ruotato di {delta}°: distanza {dist} mm
+= Rotated by {delta}°: distance {dist} mm
+Salva cerniera
+= Save hinge
+Salva il report HTML
+= Save the HTML report
+Salva il report della misura
+= Save the measurement report
+Scambia i perni mobili
+= Swap moving pins
+Scambia origine e destinazione (con un risultato già calcolato, lo ricalcola)
+= Swaps origin and destination (with a result already calculated, it recalculates it)
+Scarto
+= Deviation
+Scarto che resta dopo «Allinea» (mm)
+= Deviation left after "Align" (mm)
+Scarto {rms} mm, scorrimento lungo l'asse {slide} mm
+= Deviation {rms} mm, slide along the axis {slide} mm
+Scegli almeno un asse
+= Choose at least one axis
+Scegli di nuovo i perni
+= Pick the pins again
+Scegli i 4 perni nella vista
+= Pick the 4 pins in the view
+Scegli l'asse nella vista
+= Pick the axis in the view
+Scegli l'oggetto da spostare
+= Choose the object to move
+Scegli prima l'oggetto (la parte che si apre)
+= First choose the object (the part that opens)
+Scegli riferimento e destinazione
+= Choose reference and destination
+Scegli un altro asse
+= Pick another axis
+Scegli «Veloce» o «Precisa». Precisa: «Nuovo punto fisso», clicca sul 3D il punto F e poi i 3 punti M dell'oggetto (il clic si aggancia al vertice vicino); ripeti per gli altri fissi. Veloce: «Nuova misura», un punto F e un punto M per volta. In alternativa misura con lo strumento Misura (M) e premi «Dalla Misura».
+= Choose "Quick" or "Precise". Precise: "New fixed point", click point F on the 3D and then the 3 points M on the object (the click snaps to the nearest vertex); repeat for the other fixed points. Quick: "New measurement", one point F and one point M at a time. Alternatively measure with the Measure tool (M) and press "From Measure".
+Schema completo: {complete} punti fissi con {per} misure, posizione esatta
+= Complete layout: {complete} fixed points with {per} measurements, exact position
+Scostamento in {axis}: punto world − oggetto calcolato · punto local (mm)
+= Deviation in {axis}: world point − calculated object · local point (mm)
+Scrivi in «Misurato» il valore del metro. In Veloce, se hai misurato solo l'altezza (livella) o solo lungo un asse, cambia il tipo in ΔZ, ΔX o ΔY.
+= Type the tape measure value in "Measured". In Quick, if you only measured the height (level) or only along one axis, change the type to ΔZ, ΔX or ΔY.
+Scrivi l'angolo di apertura del cofano o usa le frecce: le bielle si mettono da sole. Se si apre dalla parte sbagliata premi «Inverti verso»; oltre il fine corsa il cofano si ferma dove arriva il meccanismo.
+= Type the hood opening angle or use the arrows: the links follow by themselves. If it opens the wrong way press "Reverse direction"; past the end of travel the hood stops where the mechanism gets to.
+Seconda posizione
+= Second position
+Seleziona prima i pezzi nell'albero o nella vista
+= First select the parts in the tree or in the view
+Solo spostamento
+= Translation only
+Sposta l'oggetto di questo offset
+= Moves the object by this offset
+Sposta l'oggetto qui sopra perché le quote sul 3D siano quelle misurate (Annulla lo rimette)
+= Moves the object above so that the dimensions on the 3D match the measured ones (Undo puts it back)
+Sposta l'oggetto qui sopra sui riferimenti
+= Moves the object above onto the references
+Sposta lungo X
+= Move along X
+Sposta lungo Y
+= Move along Y
+Sposta lungo Z
+= Move along Z
+Spostamento
+= Move
+Spostamento (coordinate World)
+= Move (World coordinates)
+Statistica
+= Statistics
+Stesso pezzo
+= Same part
+Su
+= To
+Su ogni perno clicca 3 punti sul bordo del cerchio, lontani tra loro in modo da formare un triangolo (non vicini e non in fila): dai 3 punti si trova il centro del perno.
+= On each pin click 3 points on the edge of the circle, far apart so that they form a triangle (not close together and not in a line): the pin center is found from the 3 points.
+Sul 3D
+= On the 3D
+Svuota
+= Clear
+Sì: 3 punti lontani, a triangolo
+= Yes: 3 points far apart, in a triangle
+Tipo
+= Type
+Togli (i pezzi tornano chiusi)
+= Remove (the parts go back closed)
+Togli il punto
+= Remove the point
+Togli la misura
+= Remove the measurement
+Toglie tutte le misure
+= Removes all the measurements
+Toglie tutti i punti
+= Removes all the points
+Torna a 0°
+= Back to 0°
+Tra due CONST BASE
+= Between two CONST BASEs
+Tra due oggetti
+= Between two objects
+Trascina, oppure fai doppio clic e scrivi il valore
+= Drag, or double-click and type the value
+Trasformazione
+= Transformation
+Tre clic sul bordo di ogni foro: l'asse unisce i due centri
+= Three clicks on the edge of each hole: the axis joins the two centers
+Tre clic sul bordo: l'asse passa per il centro, perpendicolare al foro (come un perno)
+= Three clicks on the edge: the axis goes through the center, perpendicular to the hole (like a pin)
+Tutte le misure verso lo stesso punto M: il punto è fissato ma l'oggetto ci gira attorno.
+= All measurements to the same point M: the point is fixed but the object turns around it.
+Tutti
+= All
+Tutti i file
+= All files
+Un clic e la direzione X, Y o Z della cabina
+= One click and the X, Y or Z direction of the booth
+Un foro
+= One hole
+Usa come offset
+= Use as offset
+Usa i due punti presi con lo strumento Misura (tasto M)
+= Uses the two points taken with the Measure tool (M key)
+Usa questa misura nel calcolo
+= Use this measurement in the calculation
+Usa questo punto nel calcolo
+= Use this point in the calculation
+Usa questo punto nel calcolo e nella statistica
+= Use this point in the calculation and in the statistics
+Usa selezione
+= Use selection
+Usa {axis} quando si applica l'offset (spenta vale 0)
+= Use {axis} when the offset is applied (off counts as 0)
+Vai alla seconda posizione ({angle}°)
+= Go to the second position ({angle}°)
+Vale sia con World spento sia acceso
+= Valid with World both off and on
+Valido
+= Valid
+Valore adesso sul 3D (mm)
+= Current value on the 3D (mm)
+Valore preso in cabina: scrivilo qui (mm)
+= Value taken in the booth: type it here (mm)
+Veloce ({n} misure)
+= Quick ({n} measurements)
+Veloce: 4 misure
+= Quick: 4 measurements
+Veloce: con meno misure (minimo 4) Dima sposta l'oggetto il meno possibile e scrive «Posizione approssimata». Va bene se sul 3D l'oggetto è già quasi giusto. Se è solo spostato e non ruotato, con «Solo spostamento» bastano 3 misure, anche ΔX, ΔY o ΔZ.
+= Quick: with fewer measurements (at least 4) Dima moves the object as little as possible and shows "Approximate position". It is fine if the object on the 3D is already almost right. If it is only moved and not rotated, with "Translation only" 3 measurements are enough, ΔX, ΔY or ΔZ too.
+World
+= World
+Zero
+= Zero
+Zero della scena
+= Scene zero
+biella 1
+= link 1
+biella 2
+= link 2
+cerniera fissa\n(sulla scocca)
+= fixed hinge\n(on the body)
+cerniera mobile\n(braccio sul cofano)
+= moving hinge\n(arm on the hood)
+cofano
+= hood
+medio {rms}  max {max}
+= mean {rms}  max {max}
+no
+= no
+perno {k} di 4, {pin}: punto {n} di 3 sul bordo (a triangolo)
+= pin {k} of 4, {pin}: point {n} of 3 on the edge (in a triangle)
+sì
+= yes
+{full}\nFile: {f}
+= {full}\nFile: {f}
+{name}  ({n} punti)
+= {name}  ({n} points)
+{n} elementi
+= {n} items
+{n} pezzi senza corrispondente: esclusi
+= {n} parts without a match: excluded
+{n} pezzi si muovono in un altro modo (es. pistoni): esclusi
+= {n} parts move in some other way (e.g. pistons): excluded
+{outside} punti sono su pezzi che non fanno parte dell'oggetto qui sopra: non lo seguiranno
+= {outside} points are on parts that are not part of the object above: they will not follow it
+{pin}: i tre punti sono in fila, cliccali lontani a triangolo sul bordo
+= {pin}: the three points are in a line, click them far apart in a triangle on the edge
+{what}: {text}  ·  Esc per annullare
+= {what}: {text}  ·  Esc to cancel
+«Nuova misura»: clicca il punto F sul riferimento e il punto M sull'oggetto, poi scrivi la quota.
+= "New measurement": click point F on the reference and point M on the object, then type the dimension.
+«Nuovo punto fisso»: clicca il punto F sul riferimento, poi {per} punti M sull'oggetto. Ripeti per almeno {fixed} punti fissi e scrivi le distanze.
+= "New fixed point": click point F on the reference, then {per} points M on the object. Repeat for at least {fixed} fixed points and type the distances.
+«Stesso pezzo»: un solo oggetto da spostare e un solo riferimento
+= "Same part": only one object to move and only one reference
