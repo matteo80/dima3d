@@ -20,10 +20,15 @@ fn parse_pasted(text: &str) -> Option<(Option<String>, crate::scene_graph::place
 }
 
 /// Un robot nella lista. Ritorna `true` se va tolto.
-fn robot_ui(ui: &mut egui::Ui, index: usize, robot: &mut RobotParams) -> bool {
+/// `force` apre o chiude la scheda («Espandi» e «Comprimi»).
+fn robot_ui(ui: &mut egui::Ui, index: usize, robot: &mut RobotParams, force: Option<bool>) -> bool {
     let mut remove = false;
     let id = ui.make_persistent_id(("robot", index));
-    egui::collapsing_header::CollapsingState::load_with_default_open(ui.ctx(), id, true)
+    let mut state = egui::collapsing_header::CollapsingState::load_with_default_open(ui.ctx(), id, true);
+    if let Some(open) = force {
+        state.set_open(open);
+    }
+    state
         .show_header(ui, |ui| {
             ui.add(egui::TextEdit::singleline(&mut robot.name).desired_width(140.0)).on_hover_text("Nome del robot");
             if ui.small_button(icon::TRASH).on_hover_text("Togli questo robot").clicked() {
@@ -125,6 +130,7 @@ pub fn draw(ctx: &egui::Context, app: &mut GestoreApp, pass: super::dock::Pass) 
                 cell.robots.clear();
             }
         });
+        let force = if cell.robots.is_empty() { None } else { super::expand_collapse(ui) };
         ui.separator();
         egui::ScrollArea::vertical().max_height(520.0).auto_shrink([false, true]).show(ui, |ui| {
             if cell.robots.is_empty() {
@@ -132,7 +138,7 @@ pub fn draw(ctx: &egui::Context, app: &mut GestoreApp, pass: super::dock::Pass) 
             }
             let mut remove = None;
             for (i, robot) in cell.robots.iter_mut().enumerate() {
-                if robot_ui(ui, i, robot) {
+                if robot_ui(ui, i, robot, force) {
                     remove = Some(i);
                 }
             }

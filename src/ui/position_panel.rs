@@ -869,9 +869,10 @@ fn file_label(app: &GestoreApp, node: u32) -> Option<String> {
     s.sources.get(source).map(|f| f.name.clone())
 }
 
-/// Sezione richiudibile; `open` si aggiorna quando si apre o si chiude (resta nelle impostazioni).
+/// Sezione richiudibile; `open` si aggiorna quando si apre o si chiude (resta nelle impostazioni)
+/// e comanda la sezione: «Espandi» e «Comprimi» la cambiano per tutte.
 fn section<R>(ui: &mut egui::Ui, id: &str, title: &str, open: &mut bool, body: impl FnOnce(&mut egui::Ui) -> R) {
-    let r = egui::CollapsingHeader::new(egui::RichText::new(title).strong()).id_salt(id).default_open(*open).show(ui, body);
+    let r = egui::CollapsingHeader::new(egui::RichText::new(title).strong()).id_salt(id).open(Some(*open)).show(ui, body);
     if r.header_response.clicked() {
         *open = !*open;
     }
@@ -1180,6 +1181,9 @@ pub fn draw(ctx: &egui::Context, app: &mut GestoreApp, pass: super::dock::Pass) 
         scroll: true,
     };
     super::dock::show(ctx, pass, window, |ui| {
+            if let Some(open) = super::expand_collapse(ui) {
+                sections.fill(open);
+            }
             // Il contenuto prende la larghezza della finestra, non di più: con auto_shrink spento la
             // barra di scorrimento allargava la finestra a ogni disegno fino al bordo dello schermo
             egui::ScrollArea::vertical().max_height(max_height).show(ui, |ui| {
@@ -2595,7 +2599,18 @@ World  X {:.3}  Y {:.3}  Z {:.3}",
                                     ui.add(egui::TextEdit::singleline(text).desired_width(f32::INFINITY).font(egui::TextStyle::Monospace).hint_text("CONST BASE NOME = X Y Z A B C"))
                                         .on_hover_text("CONST BASE NOME = X Y Z A B C\noppure\nNOME : OBJECT := (X, Y, Z, A, B, C)");
                                 }
-                                if ui.button("Calcola").clicked() {
+                                let (mut calc, mut swap) = (false, false);
+                                ui.horizontal(|ui| {
+                                    calc = ui.button("Calcola").clicked();
+                                    swap = ui
+                                        .button(icon_text(ui, icon::ARROWS_DOWN_UP, "Inverti"))
+                                        .on_hover_text("Scambia origine e destinazione (con un risultato già calcolato, lo ricalcola)")
+                                        .clicked();
+                                });
+                                if swap {
+                                    std::mem::swap(&mut panel.base_a, &mut panel.base_b);
+                                }
+                                if calc || (swap && panel.result.is_some()) {
                                     panel.result_note = None;
                                     calc_result = Some(match (parse_const_base(&panel.base_a), parse_const_base(&panel.base_b)) {
                                         (Some((na, a)), Some((nb, b))) => Ok((format!("{na}  ->  {nb}"), a.offset_to(&b))),

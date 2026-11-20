@@ -90,6 +90,10 @@ pub fn load_blocking(
         Ok(mmap) => {
             tracing::info!("File mappato con successo in memoria: {} bytes", mmap.len());
             let mut scene = super::shape_extractor::parse_wrl_with_config(&mmap, cluster, progress);
+            if scene.shapes_data.is_empty() {
+                let _ = sender.send(LoadEvent::Error(empty_file_message(&mmap)));
+                return;
+            }
             if scene.source_data.is_empty() {
                 scene.source_data = SourceData::Mmap(Arc::new(mmap));
             }
@@ -104,6 +108,10 @@ pub fn load_blocking(
             match std::fs::read(path) {
                 Ok(buffer) => {
                     let mut scene = super::shape_extractor::parse_wrl_with_config(&buffer, cluster, progress);
+                    if scene.shapes_data.is_empty() {
+                        let _ = sender.send(LoadEvent::Error(empty_file_message(&buffer)));
+                        return;
+                    }
                     if scene.source_data.is_empty() {
                         scene.source_data = SourceData::Memory(Arc::new(buffer));
                     }
@@ -116,6 +124,21 @@ pub fn load_blocking(
         }
     }
 }
+/// Messaggio per un file senza superfici da mostrare. Dima legge solo le facce
+/// (`IndexedFaceSet`): un file di sole linee o punti (wireframe) si apre ma resterebbe vuoto.
+fn empty_file_message(data: &[u8]) -> String {
+    let has = |word: &[u8]| data.windows(word.len()).any(|w| w == word);
+    let lines = has(b"IndexedLineSet");
+    let points = has(b"PointSet");
+    let what = match (lines, points) {
+        (true, true) => "solo linee e punti",
+        (true, false) => "solo linee (wireframe)",
+        (false, true) => "solo punti",
+        (false, false) => "nessuna superficie",
+    };
+    format!("Il file contiene {what}: non ci sono superfici da mostrare. Dima 3D apre solo matematiche con facce.")
+}
+
 /// Nome del nodo radice di un file: il nome del file con estensione.
 pub fn file_label(path: &std::path::Path) -> String {
     path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| "File".to_string())
@@ -161,6 +184,30 @@ mod tests {
 
         assert!(received_finished, "Deve ricevere evento Finished");
         let _ = std::fs::remove_file(file_path);
+    }
+
+    /// Un file di sole linee (wireframe) non apre una scena vuota: dice perché non si vede nulla.
+    #[test]
+    fn wireframe_only_file_reports_lines() {
+        let path = std::env::temp_dir().join("test_solo_linee.wrl");
+        std::fs::write(
+            &path,
+            "#VRML V2.0 utf8
+Shape { geometry IndexedLineSet { coord Coordinate { point [ 0 0 0, 1 0 0 ] } coordIndex [ 0 1 -1 ] } }
+",
+        )
+        .unwrap();
+        let (tx, rx) = std::sync::mpsc::channel();
+        load_wrl_async(path.clone(), tx);
+        let err = loop {
+            match rx.recv().expect("evento") {
+                LoadEvent::Error(err) => break err,
+                LoadEvent::Finished(_) => panic!("un file di sole linee non deve aprire una scena vuota"),
+                _ => {}
+            }
+        };
+        assert!(err.contains("solo linee"), "{err}");
+        let _ = std::fs::remove_file(path);
     }
 
     /// Un file VRML 1.0 si apre, e per l'export resta il testo convertito, non quello originale.

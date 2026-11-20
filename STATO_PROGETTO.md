@@ -962,6 +962,13 @@ Fatto:
       %LOCALAPPDATA%\Programs\Dima3D senza permessi da amministratore, menu Start, desktop facoltativo,
       associazione dei .dima3d facoltativa, disinstallazione. `pacchetto.ps1` lo crea, `pubblica.ps1` lo carica nella
       Release accanto allo zip; dopo un aggiornamento dal programma si aggiorna la versione in «App installate».
+- [x] (2026-11-20, 0.2.40) **Espandi/Comprimi, Inverti nel calcolo tra CONST BASE, file senza superfici**:
+      (1) Pulsanti «Espandi» e «Comprimi» (`ui::expand_collapse`) nelle finestre con sezioni richiudibili:
+      Posizione (le sezioni seguono `position_sections`, `.open(Some(..))`), Cabina e Robot; l'albero Scena aveva
+      già i suoi. (2) Calcola offset → Tra due CONST BASE: «Inverti» scambia origine e destinazione e, se c'è già
+      un risultato, lo ricalcola. (3) Un WRL senza facce (solo `IndexedLineSet`/`PointSet`, es. wireframe) non apre
+      più una scena vuota: errore «Il file contiene solo linee (wireframe)…» (`loader::empty_file_message`).
+      (4) Repository di nuovo pubblico (2026-11-20): l'aggiornamento automatico torna a funzionare.
 - [x] (2026-11-18, 0.2.39) **Finestre strette, misure salvate nella scena, Allinea su misure Veloce/Precisa**:
       (1) Regola per tutte le finestre (anche agganciate, guide e albero): si stringono fino a 120 punti e sotto
       la larghezza del contenuto compare la barra di scorrimento orizzontale (`dock::NARROW_WIDTH`,
