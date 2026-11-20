@@ -1,0 +1,280 @@
+# Traduzioni inglesi dell'interfaccia di Dima 3D.
+#
+# Per ogni testo: una riga con l'italiano esatto (come scritto nel codice dentro tr, trf! o tn!)
+# e sotto una riga che inizia con "= " e la traduzione. Gli a capo dentro un testo si scrivono \n.
+# I segnaposto tra graffe ({n}, {app}…) vanno lasciati uguali, anche se cambiano posto.
+# Il test every_key_is_translated segnala i testi del codice che mancano qui.
+#
+# Glossario (approvato il 20/11/2026, si può rivedere):
+#   Cabina (di verniciatura) = Booth (paint booth)   Centro cabina = Booth center
+#   Grigliato / Testate / Soffitto = Grating / End walls / Ceiling
+#   Pezzo / Elemento / Albero = Part / Item / Tree    Cerniera = Hinge
+#   Offset, CONST BASE: invariati    Applica / Calcola offset = Apply / Calculate offset
+#   Allinea / Allinea su punti = Align / Align on points
+#   Misura Veloce / Precisa = Quick / Precise measurement
+#   Pannello del robot = Plate    Riduci facce = Reduce faces
+#   Modifiche non esportate = Unexported changes    Pipetta / I miei colori = Eyedropper / My colors
+#   Stazione v3 = v3 station    Maiusc = Shift, Canc = Del    Inglese americano (color, center)
+
+# ── Viste e assi (renderer/camera.rs) ──────────────────────────────────────
+
+Fronte
+= Front
+Retro
+= Back
+Destra
+= Right
+Sinistra
+= Left
+Alto
+= Top
+Basso
+= Bottom
+Isometrica
+= Isometric
+Veicolo
+= Vehicle
+Coordinate vettura: X verso il retro, Y a destra, Z in alto. Fronte = muso della vettura
+= Vehicle coordinates: X toward the rear, Y to the right, Z up. Front = nose of the vehicle
+Z in alto
+= Z up
+Come FreeCAD: Z in alto, fronte guardando lungo +Y
+= Like FreeCAD: Z up, front looking along +Y
+Y in alto
+= Y up
+VRML generico: Y in alto, fronte guardando lungo -Z
+= Generic VRML: Y up, front looking along -Z
+
+# ── Barra degli strumenti (ui/toolbar.rs) ───────────────────────────────────
+
+Modifiche non esportate
+= Unexported changes
+Apri
+= Open
+Apri un file WRL, STEP, JT, STL, HSF o IV (puoi anche trascinarlo sulla finestra)  [Ctrl+O]
+= Open a WRL, STEP, JT, STL, HSF or IV file (you can also drag it onto the window)  [Ctrl+O]
+File recenti
+= Recent files
+Progetto
+= Project
+Apri progetto…
+= Open project…
+Riapre i modelli di un progetto .dima3d e le sue modifiche
+= Reopens the models of a .dima3d project and its changes
+Salva progetto
+= Save project
+Salva progetto con nome…
+= Save project as…
+Ctrl+Maiusc+S
+= Ctrl+Shift+S
+Il progetto (.dima3d) ricorda quali modelli sono aperti e le modifiche: posizioni, colori, nomi, pezzi nascosti o eliminati e la vista. La geometria non c'è: all'apertura si rileggono i modelli originali, quindi non vanno spostati o modificati (se mancano, Dima 3D chiede dove sono). La riduzione delle facce non viene salvata.
+= The project (.dima3d) remembers which models are open and their changes: positions, colors, names, hidden or deleted parts and the view. It holds no geometry: on opening, the original models are read again, so they must not be moved or modified (if they are missing, Dima 3D asks where they are). Face reduction is not saved.
+Progetto: salva e riapri la scena con le modifiche  [Ctrl+S]
+= Project: save and reopen the scene with its changes  [Ctrl+S]
+Aggiungi
+= Add
+Aggiunge uno o più file (WRL, STEP, JT, STL, HSF, IV) alla scena aperta, anche trascinandoli sulla finestra
+= Adds one or more files (WRL, STEP, JT, STL, HSF, IV) to the open scene, also by dragging them onto the window
+Esporta
+= Export
+Salva solo le parti visibili in un nuovo file WRL, STL, IV o HSF  [Ctrl+E]\nSolo la selezione: Ctrl+Maiusc+E o il tasto destro
+= Saves only the visible parts to a new WRL, STL, IV or HSF file  [Ctrl+E]\nSelection only: Ctrl+Shift+E or right-click
+Esporta selezionati…    Ctrl+Maiusc+E
+= Export selected…    Ctrl+Shift+E
+Salva solo le parti visibili degli elementi selezionati, con i gruppi che li contengono
+= Saves only the visible parts of the selected items, with the groups that contain them
+Seleziona prima uno o più elementi nell'albero o nella vista
+= First select one or more items in the tree or in the view
+Formato dell'export
+= Export format
+Formato compatto
+= Compact format
+Niente rientri e numeri con la precisione che serve (un milionesimo dell'ingombro): il file è meno della metà. Senza, si copia il testo del file originale.
+= No indentation, and numbers only as precise as needed (a millionth of the overall size): the file is less than half the size. Without it, the text of the original file is copied.
+Scrivi le normali
+= Write normals
+Con le normali gli spigoli vivi restano quelli del file. Senza, il visualizzatore le ricalcola (creaseAngle 0,5) e il file è circa la metà.
+= With normals, the sharp edges stay as in the file. Without them, the viewer recalculates them (creaseAngle 0.5) and the file is about half the size.
+STL (scegli .stl nella finestra Salva)
+= STL (choose .stl in the Save window)
+In formato testo (ASCII)
+= As text (ASCII)
+Il testo tiene un nome per pezzo ma è circa 5 volte più grande. Il binario è letto da tutti i programmi. In entrambi i casi colori e albero non esistono nel formato STL.
+= Text keeps a name for each part but is about 5 times larger. Binary is read by every program. Either way, the STL format has no colors and no tree.
+Open Inventor (scegli .iv nella finestra Salva)
+= Open Inventor (choose .iv in the Save window)
+In formato binario
+= As binary
+Il binario è circa un terzo del testo e si apre molte volte più in fretta (FreeCAD, Coin3D). Il testo si può leggere e modificare con un editor. Pezzi, nomi e colori restano in entrambi; le normali seguono l'opzione «Scrivi le normali».
+= Binary is about a third of the text size and opens many times faster (FreeCAD, Coin3D). Text can be read and edited in an editor. Parts, names and colors are kept in both; normals follow the "Write normals" option.
+In metri (non scalare)
+= In meters (no scaling)
+Di solito l'IV si scrive in millimetri: la stazione v3 all'apertura chiede di scalarlo. Con questa opzione si scrive in metri, come i WRL e gli HSF.
+= IV is usually written in millimeters: the v3 station asks to scale it when opening it. With this option it is written in meters, like WRL and HSF.
+Unità
+= Units
+WRL e HSF si scrivono in metri, IV in millimetri (salvo «In metri»), STL in millimetri.
+= WRL and HSF are written in meters, IV in millimeters (unless "In meters" is on), STL in millimeters.
+HSF (scegli .hsf nella finestra Salva)
+= HSF (choose .hsf in the Save window)
+Le normali seguono l'opzione «Scrivi le normali». Con le normali i pezzi hanno gli spigoli vivi calcolati qui (vertici sdoppiati sugli spigoli) e il file è più grande. Senza, il visualizzatore le ricalcola sui vertici uniti: il file è più piccolo ma l'ombreggiatura può sfumare sugli spigoli.
+= Normals follow the "Write normals" option. With normals, parts get the sharp edges calculated here (vertices split along the edges) and the file is larger. Without them, the viewer recalculates them on merged vertices: the file is smaller but shading may blur across the edges.
+Opzioni dell'export ed export della selezione
+= Export options and export of the selection
+Riduci
+= Reduce
+Riduci facce\nToglie triangoli dove non servono (come MeshLab), con anteprima e dimensione prevista del file
+= Reduce faces\nRemoves triangles where they are not needed (like MeshLab), with a preview and the expected file size
+Posizione
+= Position
+Posizione\nSposta e ruota un file o i pezzi selezionati (X Y Z, A B C), applica e calcola gli offset
+= Position\nMoves and rotates a file or the selected parts (X Y Z, A B C), applies and calculates offsets
+Cabina
+= Booth
+Cabina\nCostruisce la cabina di verniciatura dalle misure: grigliato, pareti, testate con le aperture, soffitto
+= Booth\nBuilds the paint booth from its dimensions: grating, walls, end walls with openings, ceiling
+Robot
+= Robot
+Robot\nRobot generici con le coordinate del controllore (X Y Z A B C dal centro cabina), con il pannello a quota 0
+= Robot\nGeneric robots with controller coordinates (X Y Z A B C from the booth center), with the plate at height 0
+Programma
+= Program
+Programma del robot\nApre un programma (.TIS / .tip) e disegna la traiettoria nella vista; righe da copiare, tagliare, incollare, invertire e trascinare
+= Robot program\nOpens a program (.TIS / .tip) and draws the path in the view; lines can be copied, cut, pasted, reversed and dragged
+Misure PDF
+= PDF measure
+Misure PDF\nApre un layout in PDF, calibra la scala su una distanza nota e misura Delta X, Delta Y e distanza in mm
+= PDF measure\nOpens a PDF layout, calibrates the scale on a known distance and measures Delta X, Delta Y and distance in mm
+Chiudi
+= Close
+Chiude tutti i file aperti (chiede conferma se ci sono modifiche non esportate). Per chiuderne uno solo: tasto destro sul file nell'albero
+= Closes all open files (asks for confirmation if there are unexported changes). To close just one: right-click the file in the tree
+Annulla
+= Undo
+Annulla  [Ctrl+Z]  ({n} passi)
+= Undo  [Ctrl+Z]  ({n} steps)
+Ripeti
+= Redo
+Ripeti  [Ctrl+Y]  ({n} passi)
+= Redo  [Ctrl+Y]  ({n} steps)
+Isola
+= Isolate
+Mostra solo l'elemento selezionato  [I]
+= Show only the selected item  [I]
+Nascondi
+= Hide
+Nascondi l'elemento selezionato  [H]
+= Hide the selected item  [H]
+Mostra
+= Show
+Mostra l'elemento selezionato  [H]
+= Show the selected item  [H]
+Elimina
+= Delete
+Rimuove l'elemento dalla scena e dall'export  [Canc]
+= Removes the item from the scene and from the export  [Del]
+Colore
+= Color
+Colore dell'elemento selezionato (vale per tutto il suo contenuto)
+= Color of the selected item (applies to everything it contains)
+Pipetta: clic su un pezzo nella vista per leggerne il colore e darlo alla selezione. Senza selezione il colore va tra i miei colori (menu Colore).  [Esc per annullare]
+= Eyedropper: click a part in the view to read its color and give it to the selection. With nothing selected, the color goes to My colors (Color menu).  [Esc to cancel]
+Pipetta: clic sul pezzo da cui leggere il colore
+= Eyedropper: click the part to read the color from
+Pipetta: clic su un pezzo per salvarne il colore tra i miei colori
+= Eyedropper: click a part to save its color to My colors
+Colori casuali
+= Random colors
+Colori casuali\nUn colore diverso per ogni pezzo selezionato; senza selezione, per tutti i pezzi della scena. Ogni clic dà nuovi colori (Ctrl+Z per tornare indietro)
+= Random colors\nA different color for each selected part; with nothing selected, for every part in the scene. Each click gives new colors (Ctrl+Z to go back)
+Mostra tutto
+= Show all
+Mostra tutte le parti nascoste
+= Shows all hidden parts
+Vista
+= View
+Sfondo, rotazione, lingua, viste standard e colori generali
+= Background, rotation, language, standard views and general colors
+Info su {app}
+= About {app}
+Passa al tema chiaro
+= Switch to the light theme
+Passa al tema scuro
+= Switch to the dark theme
+
+# ── Menu Vista (ui/toolbar.rs) ──────────────────────────────────────────────
+
+Sfondo
+= Background
+Grigio (predefinito)
+= Gray (default)
+Scuro
+= Dark
+Bianco
+= White
+Azzurro chiaro
+= Light blue
+Nero
+= Black
+Sfumato
+= Gradient
+Più chiaro in alto e più scuro in basso, attorno al colore scelto
+= Lighter at the top and darker at the bottom, around the chosen color
+Rotazione
+= Rotation
+Trackball come in FreeCAD: vicino al centro della finestra il modello segue il mouse, verso i bordi ruota attorno all'asse di vista
+= Trackball as in FreeCAD: near the center of the window the model follows the mouse, toward the edges it rotates around the view axis
+Asse fisso
+= Fixed axis
+L'orizzonte resta dritto: gira attorno all'asse verticale del modello
+= The horizon stays level: rotates around the model's vertical axis
+Sensibilità
+= Sensitivity
+Velocità della rotazione con il mouse (1 = normale)
+= Rotation speed with the mouse (1 = normal)
+Zoom invertito
+= Inverted zoom
+Rotella in avanti per allontanarsi invece di avvicinarsi (anche dal tasto Zoom nella vista)
+= Scroll wheel forward to zoom out instead of in (also for the Zoom button in the view)
+Aggiornamenti
+= Updates
+Verifica all'avvio
+= Check at startup
+All'avvio chiede a GitHub se c'è una versione nuova e, se c'è, propone di aggiornare. Si può verificare anche a mano dalla finestra Info.
+= At startup, asks GitHub whether there is a new version and, if so, offers to update. You can also check manually from the About window.
+Viste standard
+= Standard views
+Assi del modello:
+= Model axes:
+Raddrizza
+= Straighten
+Annulla il rollio mantenendo la direzione di vista  [5]
+= Removes the roll while keeping the view direction  [5]
+Colori
+= Colors
+Parti senza materiale
+= Parts without material
+Predefinito
+= Default
+Ripristina tutti i colori originali
+= Restore all original colors
+Raggruppamento automatico
+= Automatic grouping
+All'apertura, i pezzi con abbastanza vertici in comune (entro la tolleranza, nelle unità del file) diventano un componente.
+= On opening, parts with enough shared vertices (within the tolerance, in file units) become one component.
+Tolleranza
+= Tolerance
+Distanza entro cui due vertici di pezzi diversi contano come coincidenti (predefinito 0,01)
+= Distance within which two vertices of different parts count as coincident (default 0.01)
+Vertici in comune
+= Shared vertices
+Quanti vertici coincidenti servono per unire due pezzi (predefinito 5)
+= How many coincident vertices are needed to join two parts (default 5)
+Ricarica i file aperti
+= Reload open files
+Riapre i file con questi parametri (chiede conferma se ci sono modifiche non esportate)
+= Reopens the files with these settings (asks for confirmation if there are unexported changes)
+Predefiniti
+= Defaults
+Sfondo e colori predefiniti
+= Default background and colors

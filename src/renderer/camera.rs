@@ -341,9 +341,9 @@ impl Axes {
     }
 
     pub const ALL: [(Axes, &'static str, &'static str); 3] = [
-        (Axes::Vehicle, "Veicolo", "Coordinate vettura: X verso il retro, Y a destra, Z in alto. Fronte = muso della vettura"),
-        (Axes::ZUp, "Z in alto", "Come FreeCAD: Z in alto, fronte guardando lungo +Y"),
-        (Axes::YUp, "Y in alto", "VRML generico: Y in alto, fronte guardando lungo -Z"),
+        (Axes::Vehicle, tn!("Veicolo"), tn!("Coordinate vettura: X verso il retro, Y a destra, Z in alto. Fronte = muso della vettura")),
+        (Axes::ZUp, tn!("Z in alto"), tn!("Come FreeCAD: Z in alto, fronte guardando lungo +Y")),
+        (Axes::YUp, tn!("Y in alto"), tn!("VRML generico: Y in alto, fronte guardando lungo -Z")),
     ];
 }
 
@@ -374,13 +374,13 @@ pub enum StandardView {
 
 impl StandardView {
     pub const ALL: [(StandardView, &'static str, &'static str); 7] = [
-        (StandardView::Front, "Fronte", "1"),
-        (StandardView::Back, "Retro", "Ctrl+1"),
-        (StandardView::Right, "Destra", "3"),
-        (StandardView::Left, "Sinistra", "Ctrl+3"),
-        (StandardView::Top, "Alto", "7"),
-        (StandardView::Bottom, "Basso", "Ctrl+7"),
-        (StandardView::Iso, "Isometrica", "0"),
+        (StandardView::Front, tn!("Fronte"), "1"),
+        (StandardView::Back, tn!("Retro"), "Ctrl+1"),
+        (StandardView::Right, tn!("Destra"), "3"),
+        (StandardView::Left, tn!("Sinistra"), "Ctrl+3"),
+        (StandardView::Top, tn!("Alto"), "7"),
+        (StandardView::Bottom, tn!("Basso"), "Ctrl+7"),
+        (StandardView::Iso, tn!("Isometrica"), "0"),
     ];
 
     /// Etichetta breve per i pulsanti della viewport.

@@ -1,6 +1,9 @@
 // Nell'exe finale niente finestra di console dietro a quella del programma
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+// Per primo: le macro trf! e tn! servono a tutti gli altri moduli
+#[macro_use]
+mod i18n;
 mod app;
 mod cabin;
 mod clusterer;

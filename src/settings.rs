@@ -87,6 +87,8 @@ pub enum ThemeMode {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Settings {
+    /// Lingua dell'interfaccia
+    pub language: crate::i18n::Lang,
     /// Tema dell'interfaccia
     pub theme: ThemeMode,
     /// Colore di sfondo della viewport (sRGB)
@@ -151,6 +153,9 @@ pub const POSITION_SECTIONS: usize = 9;
 impl Default for Settings {
     fn default() -> Self {
         Self {
+            // Chi ha già le impostazioni le aveva in italiano; al primo avvio vale la lingua di
+            // Windows (vedi `load`)
+            language: crate::i18n::Lang::It,
             theme: ThemeMode::default(),
             background: crate::renderer::DEFAULT_BACKGROUND,
             default_color: crate::renderer::DEFAULT_MESH_COLOR,
@@ -248,6 +253,7 @@ impl Settings {
             let Some((key, value)) = line.split_once('=') else { continue };
             let value = value.trim();
             match key.trim() {
+                "lingua" => s.language = crate::i18n::Lang::from_code(value).unwrap_or_default(),
                 "tema" => s.theme = if value == "chiaro" { ThemeMode::Light } else { ThemeMode::Dark },
                 "sfondo" => {
                     if let Some(v) = parse_floats::<3>(value) {
@@ -354,7 +360,8 @@ impl Settings {
         let [r, g, b] = self.background;
         let [dr, dg, db, da] = self.default_color;
         let mut out = format!(
-            "tema = {}\nsfondo = {r} {g} {b}\ncolore_predefinito = {dr} {dg} {db} {da}\nsfondo_sfumato = {}\nraggruppamento_tolleranza = {}\nraggruppamento_vertici = {}\nassi = {}\nrotazione = {}\nsensibilita_rotazione = {}\nexport_compatto = {}\nexport_normali = {}\nexport_stl_testo = {}\nexport_iv_binario = {}\nexport_iv_metri = {}\nzoom_invertito = {}\nstep_deviazione = {}\nstep_angolo = {}\nstep_relativa = {}\n",
+            "lingua = {}\ntema = {}\nsfondo = {r} {g} {b}\ncolore_predefinito = {dr} {dg} {db} {da}\nsfondo_sfumato = {}\nraggruppamento_tolleranza = {}\nraggruppamento_vertici = {}\nassi = {}\nrotazione = {}\nsensibilita_rotazione = {}\nexport_compatto = {}\nexport_normali = {}\nexport_stl_testo = {}\nexport_iv_binario = {}\nexport_iv_metri = {}\nzoom_invertito = {}\nstep_deviazione = {}\nstep_angolo = {}\nstep_relativa = {}\n",
+            self.language.code(),
             match self.theme {
                 ThemeMode::Dark => "scuro",
                 ThemeMode::Light => "chiaro",
@@ -417,7 +424,8 @@ impl Settings {
         settings_path()
             .and_then(|p| std::fs::read_to_string(p).ok())
             .map(|t| Self::from_text(&t))
-            .unwrap_or_default()
+            // Primo avvio: la lingua di Windows
+            .unwrap_or_else(|| Settings { language: crate::i18n::Lang::system(), ..Default::default() })
     }
 
     pub fn save(&self) {
@@ -443,6 +451,7 @@ mod tests {
     #[test]
     fn settings_roundtrip() {
         let mut s = Settings {
+            language: crate::i18n::Lang::En,
             theme: ThemeMode::Light,
             background: [0.1, 0.2, 0.3],
             default_color: [0.5, 0.6, 0.7, 1.0],

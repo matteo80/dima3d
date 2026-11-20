@@ -140,6 +140,7 @@ impl GestoreApp {
     pub fn new(cc: &eframe::CreationContext) -> Self {
         let wgpu_render_state = cc.wgpu_render_state.clone();
         let settings = crate::settings::Settings::load();
+        crate::i18n::set(settings.language);
         parser::external::cleanup_old_conversions();
         ui::theme::install_fonts(&cc.egui_ctx);
         ui::theme::apply(&cc.egui_ctx, settings.theme);
@@ -201,6 +202,7 @@ impl GestoreApp {
             r.background_gradient = settings.background_gradient;
             r.default_color = settings.default_color;
         }
+        crate::i18n::set(settings.language);
         settings.save();
         self.settings = settings;
     }
