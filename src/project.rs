@@ -1866,7 +1866,7 @@ pub fn draw_unit_suggestion(ctx: &egui::Context, app: &mut GestoreApp) {
             }
             ui.add_space(8.0);
             ui.horizontal(|ui| {
-                let all = if list.len() > 1 { "Converti tutti" } else { "Converti" };
+                let all = if list.len() > 1 { tr("Converti tutti") } else { tr("Converti") };
                 if ui.button(all).clicked() {
                     convert = list.clone();
                 }
@@ -1994,12 +1994,12 @@ pub fn draw_step_prompt(ctx: &egui::Context, app: &mut GestoreApp) {
 pub fn draw_confirm_dialog(ctx: &egui::Context, app: &mut GestoreApp) {
     let Some(pending) = app.project.pending.clone() else { return };
     let what = match &pending {
-        Pending::Close => "chiudere il progetto",
-        Pending::Open(_) => "aprire un altro file",
-        Pending::Exit => "uscire",
-        Pending::Reload(_) => "ricaricare i file",
-        Pending::OpenProject(_) => "aprire un altro progetto",
-        Pending::Update(_) => "aggiornare il programma",
+        Pending::Close => tr("chiudere il progetto"),
+        Pending::Open(_) => tr("aprire un altro file"),
+        Pending::Exit => tr("uscire"),
+        Pending::Reload(_) => tr("ricaricare i file"),
+        Pending::OpenProject(_) => tr("aprire un altro progetto"),
+        Pending::Update(_) => tr("aggiornare il programma"),
     };
 
     let mut choice: Option<u8> = None; // 0 = esporta, 1 = continua, 2 = annulla, 3 = salva progetto

@@ -128,10 +128,10 @@ fn empty_file_message(data: &[u8]) -> String {
     let lines = has(b"IndexedLineSet");
     let points = has(b"PointSet");
     let what = match (lines, points) {
-        (true, true) => "solo linee e punti",
-        (true, false) => "solo linee (wireframe)",
-        (false, true) => "solo punti",
-        (false, false) => "nessuna superficie",
+        (true, true) => crate::i18n::tr("solo linee e punti"),
+        (true, false) => crate::i18n::tr("solo linee (wireframe)"),
+        (false, true) => crate::i18n::tr("solo punti"),
+        (false, false) => crate::i18n::tr("nessuna superficie"),
     };
     trf!("Il file contiene {what}: non ci sono superfici da mostrare. Dima 3D apre solo matematiche con facce.", what = what)
 }

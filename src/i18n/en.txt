@@ -2553,3 +2553,82 @@ VRML 1.0: {multi_colors} superfici con più colori mostrate con il solo primo co
 = VRML 1.0: {multi_colors} surfaces with more colors shown with only the first color
 VRML 1.0: {unsupported} nodi non supportati (primitive, testo o WWWInline) non caricati né esportati
 = VRML 1.0: {unsupported} unsupported nodes (primitives, text or WWWInline) not loaded or exported
+
+# ── Ultimi messaggi ─────────────────────────────────────────────────────────
+
+Cabina non costruita: {problems}
+= Booth not built: {problems}
+font non letto: {font} ({e})
+= font not read: {font} ({e})
+scritta non fatta: {e}
+= lettering not made: {e}
+IV binario rovinato da un trasferimento in modalità testo (es. FTP in ASCII): i fine riga sono stati cambiati e i byte 0x1A tolti. Non si può ricostruire: serve una copia integra del file.
+= Binary IV damaged by a text-mode transfer (e.g. FTP in ASCII): line endings were changed and 0x1A bytes removed. It cannot be rebuilt: an intact copy of the file is needed.
+file troncato
+= truncated file
+stringa oltre la fine del file
+= string past the end of the file
+I perni non sono paralleli (scarto {skew}°): controlla di aver cliccato sul bordo tondo di ogni perno
+= The pins are not parallel (deviation {skew}°): check that you clicked on the round edge of each pin
+nessuna superficie
+= no surfaces
+solo linee (wireframe)
+= only lines (wireframe)
+solo linee e punti
+= only lines and points
+solo punti
+= only points
+I pezzi si spostano senza ruotare: non c'è un asse di rotazione
+= The parts move without rotating: there is no rotation axis
+Troppo pochi vertici
+= Too few vertices
+Converti tutti
+= Convert all
+aggiornare il programma
+= updating the program
+aprire un altro file
+= opening another file
+aprire un altro progetto
+= opening another project
+chiudere il progetto
+= closing the project
+ricaricare i file
+= reloading the files
+uscire
+= exiting
+, simbolo del centro
+= , center symbol
+Centro e robot aggiornati: {n} robot
+= Center and robots updated: {n} robots
+Centro e robot aggiunti: {n} robot
+= Center and robots added: {n} robots
+Centro e robot tolti dalla scena
+= Center and robots removed from the scene
+Robot non aggiornati: {problems}
+= Robots not updated: {problems}
+{name} aggiornato: X {x} Y {y} Z {z}
+= {name} updated: X {x} Y {y} Z {z}
+{name} aggiunto: X {x} Y {y} Z {z}
+= {name} added: X {x} Y {y} Z {z}
+troppi triangoli per un STL binario
+= too many triangles for a binary STL
+destinazione inesistente
+= destination does not exist
+destinazione non valida
+= invalid destination
+elementi di file diversi
+= items from different files
+elemento inesistente
+= item does not exist
+file non trovato
+= file not found
+gruppo di destinazione non valido
+= invalid destination group
+nessun elemento da raggruppare
+= no items to group
+pezzo senza gruppo
+= part without a group
+Pagina della versione
+= Release page
+cartella del programma non trovata
+= program folder not found

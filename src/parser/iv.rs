@@ -40,8 +40,8 @@ pub(crate) fn ascii(data: &[u8]) -> (Cow<'_, [u8]>, Vec<String>) {
     if damaged_by_text_transfer(data) {
         return (
             Cow::Owned(b"#Inventor V2.1 ascii\n".to_vec()),
-            vec!["IV binario rovinato da un trasferimento in modalità testo (es. FTP in ASCII): i fine riga sono \
-                  stati cambiati e i byte 0x1A tolti. Non si può ricostruire: serve una copia integra del file."
+            vec![crate::i18n::tr("IV binario rovinato da un trasferimento in modalità testo (es. FTP in ASCII): i fine riga sono \
+                  stati cambiati e i byte 0x1A tolti. Non si può ricostruire: serve una copia integra del file.")
                 .to_string()],
         );
     }
@@ -122,7 +122,7 @@ struct Binary<'a> {
 
 impl<'a> Binary<'a> {
     fn u32(&mut self) -> Result<u32, String> {
-        let bytes = self.data.get(self.pos..self.pos + 4).ok_or("file troncato")?;
+        let bytes = self.data.get(self.pos..self.pos + 4).ok_or(crate::i18n::tr("file troncato"))?;
         self.pos += 4;
         Ok(u32::from_be_bytes(bytes.try_into().unwrap()))
     }
@@ -132,14 +132,14 @@ impl<'a> Binary<'a> {
     }
 
     fn f64(&mut self) -> Result<f64, String> {
-        let bytes = self.data.get(self.pos..self.pos + 8).ok_or("file troncato")?;
+        let bytes = self.data.get(self.pos..self.pos + 8).ok_or(crate::i18n::tr("file troncato"))?;
         self.pos += 8;
         Ok(f64::from_be_bytes(bytes.try_into().unwrap()))
     }
 
     fn string(&mut self) -> Result<&'a str, String> {
         let len = self.u32()? as usize;
-        let end = self.pos.checked_add(len).filter(|&e| e <= self.data.len()).ok_or("stringa oltre la fine del file")?;
+        let end = self.pos.checked_add(len).filter(|&e| e <= self.data.len()).ok_or(crate::i18n::tr("stringa oltre la fine del file"))?;
         let s = std::str::from_utf8(&self.data[self.pos..end]).map_err(|_| trf!("testo non valido alla posizione {pos}", pos = self.pos))?;
         self.pos = end.next_multiple_of(4).min(self.data.len());
         Ok(s)

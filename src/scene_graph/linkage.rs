@@ -102,8 +102,9 @@ impl FourBar {
             .map(|(_, n)| n.as_dvec3().normalize_or_zero().dot(normal).abs().clamp(0.0, 1.0).acos().to_degrees())
             .fold(0.0, f64::max);
         if skew > 15.0 {
-            return Err(format!(
-                "I perni non sono paralleli (scarto {skew:.0}°): controlla di aver cliccato sul bordo tondo di ogni perno"
+            return Err(trf!(
+                "I perni non sono paralleli (scarto {skew}°): controlla di aver cliccato sul bordo tondo di ogni perno",
+                skew = format!("{skew:.0}")
             ));
         }
         let origin = pins[0].0.as_dvec3();

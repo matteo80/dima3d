@@ -858,7 +858,7 @@ pub fn vrml_with_label(p: &CabinParams) -> (String, Option<String>) {
 fn label_shapes(p: &CabinParams, out: &mut String) -> Result<(), String> {
     use glam::Vec3;
     let label = &p.label;
-    let bytes = std::fs::read(&label.font).map_err(|e| format!("font non letto: {} ({e})", label.font))?;
+    let bytes = std::fs::read(&label.font).map_err(|e| trf!("font non letto: {font} ({e})", font = label.font, e = e))?;
     let mesh = crate::text3d::text_mesh(&bytes, label.text.trim(), label.height, label.depth)?;
     let (half, l) = (p.width / 2.0, p.length);
     // Le scritte esterne stanno davanti ai montanti, che sporgono più dei pannelli
@@ -909,7 +909,7 @@ pub fn scene(p: &CabinParams) -> crate::scene_graph::SceneGraph {
 pub fn scene_named(p: &CabinParams, name: &str) -> crate::scene_graph::SceneGraph {
     let (text, problem) = vrml_with_label(p);
     let mut scene = crate::parser::parse_wrl(text.as_bytes());
-    scene.load_warnings.extend(problem.map(|e| format!("scritta non fatta: {e}")));
+    scene.load_warnings.extend(problem.map(|e| trf!("scritta non fatta: {e}", e = e)));
     // Le misure sono già in millimetri: niente proposte di cambio di unità
     scene.units_mm = true;
     scene.into_file(name.to_string(), None);
@@ -1021,7 +1021,7 @@ impl crate::app::GestoreApp {
     pub fn build_cabin(&mut self, params: CabinParams) {
         let problems = params.problems();
         if !problems.is_empty() {
-            self.ui_state.status_message = format!("Cabina non costruita: {}", problems.join("; "));
+            self.ui_state.status_message = trf!("Cabina non costruita: {problems}", problems = problems.join("; "));
             return;
         }
         if self.ui_state.is_loading || self.project.busy() {

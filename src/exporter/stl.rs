@@ -86,7 +86,7 @@ pub fn export_stl(scene: &SceneGraph, scope: &Scope, path: &std::path::Path, asc
             .filter_map(|(m, _)| scene.shapes_data.get(*m as usize))
             .map(|s| triangles(s).count())
             .sum();
-        let count = u32::try_from(total).map_err(|_| io::Error::other("troppi triangoli per un STL binario"))?;
+        let count = u32::try_from(total).map_err(|_| io::Error::other(crate::i18n::tr("troppi triangoli per un STL binario")))?;
         let mut header = b"Dima 3D - STL binario".to_vec();
         header.resize(80, b' ');
         w.write_all(&header)?;

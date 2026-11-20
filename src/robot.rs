@@ -309,7 +309,7 @@ impl crate::app::GestoreApp {
     fn robot_cell_ready(&mut self, cell: &RobotCell) -> bool {
         let problems = cell.problems();
         if !problems.is_empty() {
-            self.ui_state.status_message = format!("Robot non aggiornati: {}", problems.join("; "));
+            self.ui_state.status_message = trf!("Robot non aggiornati: {problems}", problems = problems.join("; "));
             return false;
         }
         !(self.ui_state.is_loading || self.project.busy())
@@ -328,7 +328,7 @@ impl crate::app::GestoreApp {
             if shift {
                 self.shift_cabin_to_center(center);
             }
-            self.ui_state.status_message = "Centro e robot tolti dalla scena".to_string();
+            self.ui_state.status_message = crate::i18n::tr("Centro e robot tolti dalla scena").to_string();
             return;
         }
         self.replace_generated(replaced, scene(&cell), None);
@@ -336,11 +336,25 @@ impl crate::app::GestoreApp {
             self.shift_cabin_to_center(center);
         }
         let n = cell.robots.len();
-        let done = if replaced.is_some() { "aggiornat" } else { "aggiunt" };
+        let updated = replaced.is_some();
+        let [x, y, z] = cell.center;
         self.ui_state.status_message = if n == 0 {
-            format!("{CENTER_NAME} {done}o: X {} Y {} Z {}", cell.center[0], cell.center[1], cell.center[2])
+            let name = crate::i18n::tr(CENTER_NAME);
+            if updated {
+                trf!("{name} aggiornato: X {x} Y {y} Z {z}", name = name, x = x, y = y, z = z)
+            } else {
+                trf!("{name} aggiunto: X {x} Y {y} Z {z}", name = name, x = x, y = y, z = z)
+            }
         } else {
-            format!("Centro e robot {done}i: {n} robot{}", if cell.marker { ", simbolo del centro" } else { "" })
+            let mut text = if updated {
+                trf!("Centro e robot aggiornati: {n} robot", n = n)
+            } else {
+                trf!("Centro e robot aggiunti: {n} robot", n = n)
+            };
+            if cell.marker {
+                text.push_str(crate::i18n::tr(", simbolo del centro"));
+            }
+            text
         };
     }
 }

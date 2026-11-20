@@ -93,7 +93,7 @@ impl SceneGraph {
 
     /// Controlla che `nodes` si possano spostare dentro `target` (che può non esistere ancora).
     fn check_move(&self, nodes: &[u32], target: u32) -> Result<(), String> {
-        let source = self.source_of_node(target).ok_or("gruppo di destinazione non valido")?;
+        let source = self.source_of_node(target).ok_or(crate::i18n::tr("gruppo di destinazione non valido"))?;
         for &n in nodes {
             if self.info[n as usize].parent == NO_PARENT {
                 return Err(crate::i18n::tr("un file intero non si sposta in un gruppo").to_string());
@@ -128,12 +128,12 @@ impl SceneGraph {
     /// Sposta i nodi (e il loro contenuto) dentro il gruppo `target`, in fondo ai suoi figli.
     /// Se `target` è un pezzo, li sposta nel suo gruppo. Ritorna quanti nodi ha spostato.
     pub fn move_into(&mut self, nodes: &[u32], target: u32) -> Result<usize, String> {
-        let info = self.info.get(target as usize).copied().ok_or("destinazione inesistente")?;
+        let info = self.info.get(target as usize).copied().ok_or(crate::i18n::tr("destinazione inesistente"))?;
         if info.deleted {
             return Err(crate::i18n::tr("destinazione eliminata").to_string());
         }
         let target = match self.nodes[target as usize] {
-            SceneNode::Shape { .. } => self.parent_of(target).ok_or("destinazione non valida")?,
+            SceneNode::Shape { .. } => self.parent_of(target).ok_or(crate::i18n::tr("destinazione non valida"))?,
             _ => target,
         };
         let tops: Vec<u32> = self.tops(nodes).into_iter().filter(|&n| self.info[n as usize].parent != target).collect();
@@ -153,13 +153,13 @@ impl SceneGraph {
     /// tutti. Il gruppo ha il sistema di riferimento del gruppo in cui nasce. Ritorna il gruppo.
     pub fn new_group(&mut self, nodes: &[u32], name: &str) -> Result<u32, String> {
         let tops = self.tops(nodes);
-        let first = *tops.first().ok_or("nessun elemento da raggruppare")?;
+        let first = *tops.first().ok_or(crate::i18n::tr("nessun elemento da raggruppare"))?;
         // Gruppo comune: il più vicino che li contiene tutti
-        let mut parent = self.parent_of(first).ok_or("un file intero non si raggruppa")?;
+        let mut parent = self.parent_of(first).ok_or(crate::i18n::tr("un file intero non si raggruppa"))?;
         while !tops.iter().all(|&n| self.ancestors(n).contains(&parent)) {
-            parent = self.parent_of(parent).ok_or("elementi di file diversi")?;
+            parent = self.parent_of(parent).ok_or(crate::i18n::tr("elementi di file diversi"))?;
         }
-        let source = self.source_of_node(parent).ok_or("file non trovato")?;
+        let source = self.source_of_node(parent).ok_or(crate::i18n::tr("file non trovato"))?;
         for &n in &tops {
             if self.source_of_node(n) != Some(source) {
                 return Err(crate::i18n::tr("si raggruppa solo dentro lo stesso file").to_string());
@@ -185,15 +185,15 @@ impl SceneGraph {
     /// Gruppo vuoto dentro `target` (un file o un gruppo; se è un pezzo, nel suo gruppo), in fondo
     /// ai figli: poi ci si trascinano dentro gli elementi. Ritorna il gruppo.
     pub fn new_empty_group(&mut self, target: u32, name: &str) -> Result<u32, String> {
-        let info = self.info.get(target as usize).copied().ok_or("elemento inesistente")?;
+        let info = self.info.get(target as usize).copied().ok_or(crate::i18n::tr("elemento inesistente"))?;
         if info.deleted {
             return Err(crate::i18n::tr("elemento eliminato").to_string());
         }
         let parent = match self.nodes[target as usize] {
-            SceneNode::Shape { .. } => self.parent_of(target).ok_or("pezzo senza gruppo")?,
+            SceneNode::Shape { .. } => self.parent_of(target).ok_or(crate::i18n::tr("pezzo senza gruppo"))?,
             _ => target,
         };
-        let source = self.source_of_node(parent).ok_or("file non trovato")?;
+        let source = self.source_of_node(parent).ok_or(crate::i18n::tr("file non trovato"))?;
         let group = self.add_group(parent, source, None, name);
         self.recompute_shape_counts();
         self.revision += 1;

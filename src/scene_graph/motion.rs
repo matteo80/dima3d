@@ -242,8 +242,8 @@ impl SceneGraph {
             .iter()
             .flat_map(|&i| sampled[i].0.iter().copied().zip(sampled[i].1.iter().copied()))
             .unzip();
-        let (m, rms) = fit_rigid(&pa, &pb).ok_or("Troppo pochi vertici")?;
-        let screw = screw_axis(m).ok_or("I pezzi si spostano senza ruotare: non c'è un asse di rotazione")?;
+        let (m, rms) = fit_rigid(&pa, &pb).ok_or(crate::i18n::tr("Troppo pochi vertici"))?;
+        let screw = screw_axis(m).ok_or(crate::i18n::tr("I pezzi si spostano senza ruotare: non c'è un asse di rotazione"))?;
         // Punto dell'asse vicino ai pezzi mossi
         let centre = pa.iter().copied().sum::<DVec3>() / pa.len() as f64;
         let point = screw.point + screw.dir * screw.dir.dot(centre - screw.point);

@@ -346,7 +346,7 @@ fn install_elevated(package: &Path, install: &Path) -> Result<(), String> {
 /// in quel caso i file li copia lo script da amministratore, dopo la chiusura del programma.
 pub fn install_and_restart(package: &Path) -> Result<(), String> {
     let current = std::env::current_exe().map_err(|e| e.to_string())?;
-    let install = current.parent().ok_or("cartella del programma non trovata")?;
+    let install = current.parent().ok_or(crate::i18n::tr("cartella del programma non trovata"))?;
     if !writable(install) {
         return install_elevated(package, install);
     }
@@ -538,7 +538,7 @@ pub fn draw(ctx: &egui::Context, app: &mut crate::app::GestoreApp) {
                     });
                 }
                 if !release.page_url.is_empty() {
-                    ui.hyperlink_to("Pagina della versione", &release.page_url);
+                    ui.hyperlink_to(tr("Pagina della versione"), &release.page_url);
                 }
                 ui.add_space(6.0);
                 ui.label(
