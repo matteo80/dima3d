@@ -60,9 +60,9 @@ impl SceneGraph {
     /// Nome della radice di una copia.
     pub fn copy_name(&self, nodes: &[u32]) -> String {
         match nodes {
-            [] => "Copia".to_string(),
-            [one] => format!("Copia di {}", self.display_name(*one)),
-            [first, rest @ ..] => format!("Copia di {} e altri {}", self.display_name(*first), rest.len()),
+            [] => crate::i18n::tr("Copia").to_string(),
+            [one] => trf!("Copia di {name}", name = self.display_name(*one)),
+            [first, rest @ ..] => trf!("Copia di {name} e altri {n}", name = self.display_name(*first), n = rest.len()),
         }
     }
 

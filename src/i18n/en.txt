@@ -1643,3 +1643,226 @@ Zoom −
 = Zoom −
 ◀ Pagina
 = ◀ Page
+
+# ── Misure, allineamenti, cerniere, errori della scena ──────────────────────
+
+Copia di {name}
+= Copy of {name}
+Copia di {name} e altri {n}
+= Copy of {name} and {n} more
+Distanza diretta tra i due punti (metro teso da punto a punto)
+= Direct distance between the two points (tape stretched from point to point)
+Esc per smettere
+= Esc to stop
+F{n}: clicca il punto fisso sul riferimento fermo
+= F{n}: click the fixed point on the stationary reference
+Mancano i punti
+= Points missing
+Nessun punto sul pezzo da spostare (l'Oggetto in cima alla finestra)
+= No point on the part to move (the Object at the top of the window)
+Precisa: servono almeno {fixed} punti fissi, ognuno misurato verso {per} punti dell'oggetto (ora {complete} completi)
+= Precise: at least {fixed} fixed points are needed, each measured to {per} points of the object (now {complete} complete)
+Servono almeno {min} misure pronte e accese (ora {n})
+= At least {min} ready and enabled measurements are needed (now {n})
+Solo la distanza lungo X della cabina
+= Only the distance along the booth X
+Solo la distanza lungo Y della cabina
+= Only the distance along the booth Y
+Solo la distanza lungo Z della cabina (es. altezza con la livella)
+= Only the distance along the booth Z (e.g. height with the level)
+Tutti e due i punti sono sul pezzo da spostare: uno va preso sul riferimento fermo
+= Both points are on the part to move: one must be taken on the stationary reference
+{fixed}: clicca il punto sul pezzo da spostare (M)
+= {fixed}: click the point on the part to move (M)
+{fixed}: clicca il punto {n} di {total} sul pezzo da spostare (M)
+= {fixed}: click point {n} of {total} on the part to move (M)
+0° qui
+= 0° here
+Apertura
+= Opening
+Apertura: trascina il numero o fai doppio clic e scrivi i gradi
+= Opening: drag the number or double-click and type the degrees
+Apre di 1°
+= Opens by 1°
+Apri ({deg}°)
+= Open ({deg}°)
+Cambia parte
+= Change part
+Cerniera non cambiata: la selezione non ha pezzi
+= Hinge not changed: the selection has no parts
+Cerniera non salvata: scegli la parte che si apre
+= Hinge not saved: choose the part that opens
+Cerniera {n}
+= Hinge {n}
+Cerniera «{name}» assegnata a {parts}
+= Hinge "{name}" assigned to {parts}
+Cerniera «{name}» salvata: clicca la parte nella vista per aprirla
+= Hinge "{name}" saved: click the part in the view to open it
+Cerniera «{name}» tolta (la parte resta dov'è)
+= Hinge "{name}" removed (the part stays where it is)
+Cerniera «{name}»: verso di apertura invertito (la parte è chiusa)
+= Hinge "{name}": opening direction reversed (the part is closed)
+Chiude di 1°
+= Closes by 1°
+Chiudi ({deg}°)
+= Close ({deg}°)
+Ctrl + trascina la parte per aprirla col mouse
+= Ctrl + drag the part to open it with the mouse
+Da
+= From
+La cerniera passa alla selezione ({name}): la parte di prima torna chiusa, la nuova parte da 0° dove si trova
+= The hinge moves to the selection ({name}): the previous part goes back closed, the new part starts at 0° where it is
+La parte si apre dall'altra parte (per esempio verso l'interno invece che verso l'esterno): prima torna chiusa
+= The part opens the other way (for example inward instead of outward): it goes back closed first
+La posizione attuale diventa quella chiusa (0°), senza muovere la parte
+= The current position becomes the closed one (0°), without moving the part
+Limite di apertura
+= Opening limit
+Limite di chiusura
+= Closing limit
+Nessuna cerniera salvata: scegli l'asse e la parte, poi «Salva cerniera».
+= No hinges saved: choose the axis and the part, then "Save hinge".
+Seleziona la parte: nella vista compare l'etichetta con i gradi
+= Select the part: the label with the degrees appears in the view
+Seleziona prima (nella vista o nell'albero) la parte giusta
+= First select (in the view or in the tree) the right part
+Togli la cerniera (la parte resta dov'è)
+= Remove the hinge (the part stays where it is)
+Trascina per spostare l'etichetta; doppio clic la rimette vicino alla parte
+= Drag to move the label; double-click puts it back next to the part
+a
+= to
+{name}: questa è la posizione chiusa (0°)
+= {name}: this is the closed position (0°)
+Direzione dei perni non valida
+= Invalid pin direction
+I due perni fissi coincidono: scegli perni diversi
+= The two fixed pins coincide: choose different pins
+I due perni mobili
+= The two moving pins
+Perno fisso 1 e perno mobile 1
+= Fixed pin 1 and moving pin 1
+Perno fisso 2 e perno mobile 2
+= Fixed pin 2 and moving pin 2
+{name} coincidono: scegli perni diversi
+= {name} coincide: choose different pins
+Calamita
+= Snap
+Clic sul secondo punto
+= Click the second point
+I punti restano incollati ai pezzi: spostando o ruotando un pezzo (finestra Posizione, cerniera) il suo punto lo segue e la distanza si aggiorna
+= The points stay attached to the parts: when a part is moved or rotated (Position window, hinge) its point follows and the distance updates
+Misura: clic sul primo punto
+= Measurement: click the first point
+Prendi prima i due punti
+= Take the two points first
+Salva
+= Save
+Salva la misura nella scena: va nel gruppo «Misure» sotto l'albero e nel progetto
+= Save the measurement in the scene: it goes in the "Measurements" group under the tree and in the project
+Vertice
+= Vertex
+Vicino a un vertice il punto si aggancia al vertice  ·  Esc o M per uscire
+= Near a vertex the point snaps to the vertex  ·  Esc or M to exit
+I pezzi non si muovono come un corpo rigido tra le due posizioni
+= The parts do not move as a rigid body between the two positions
+I pezzi sono nella stessa posizione nei due oggetti
+= The parts are in the same position in the two objects
+Le due posizioni devono essere oggetti diversi
+= The two positions must be different objects
+Nessun pezzo corrisponde tra le due posizioni (servono la stessa matematica e gli stessi pezzi)
+= No part matches between the two positions (the same CAD model and the same parts are needed)
+Scegli le due posizioni
+= Choose the two positions
+Accettabile
+= Acceptable
+Apri il file local e il file world
+= Open the local file and the world file
+Calcolo non riuscito
+= Computation failed
+Data
+= Date
+Dati
+= Data
+Differenza dall'oggetto attuale {name}
+= Difference from the current object {name}
+Dispersione degli errori
+= Error spread
+Esito: OK fino a {ok} mm di errore massimo, accettabile fino a {acceptable} mm. I punti non validi non entrano nel calcolo né nella statistica.
+= Result: OK up to {ok} mm of maximum error, acceptable up to {acceptable} mm. Invalid points are not used in the computation or in the statistics.
+File coordinate locali
+= Local coordinates file
+File coordinate world
+= World coordinates file
+I punti sono tutti in fila: l'oggetto non si può calcolare
+= The points are all in a line: the object cannot be computed
+Il dx, dy o dz più grande in valore assoluto: indica il punto peggiore (in rosso).
+= The largest dx, dy or dz in absolute value: it shows the worst point (in red).
+Media degli errori
+= Mean error
+Media degli scostamenti dx dy dz con il loro segno. Con il calcolo ai minimi quadrati viene sempre circa 0: è solo un controllo che il calcolo sia centrato.
+= Mean of the signed dx dy dz deviations. With the least-squares computation it is always about 0: it only checks that the computation is centered.
+Media dei quadrati di dx dy dz (varianza, in mm²). Pesa di più gli scostamenti grandi; la sua radice è lo scarto tipico in mm.
+= Mean of the squares of dx dy dz (variance, in mm²). Large deviations weigh more; its square root is the typical deviation in mm.
+Media dei valori assoluti di dx dy dz di tutti i punti usati: di quanto sbaglia in media ogni coordinata.
+= Mean of the absolute values of dx dy dz of all the points used: how much each coordinate is off on average.
+Nessun punto Object in {path}
+= No Object points in {path}
+Non OK
+= Not OK
+Punti usati
+= Points used
+Qualità della trasformazione
+= Transformation quality
+Rotazione {a} ({t})
+= Rotation {a} ({t})
+Scostamenti dei punti
+= Point deviations
+Scostamento massimo tra {ok} e {acceptable} mm: si può usare, meglio ricontrollare il punto peggiore
+= Maximum deviation between {ok} and {acceptable} mm: usable, better recheck the worst point
+Scostamento oltre {acceptable} mm: riprendere il punto peggiore o escluderlo (servono almeno {min} punti)
+= Deviation over {acceptable} mm: retake the worst point or exclude it (at least {min} points are needed)
+Servono almeno {min} punti presenti in tutti e due i file e accesi (ora {n})
+= At least {min} points present in both files and enabled are needed (now {n})
+Traslazione {t}
+= Translation {t}
+Tutti gli scostamenti entro {ok} mm
+= All deviations within {ok} mm
+Valore atteso
+= Expected value
+dx dy dz = punto world − oggetto · punto local [mm]
+= dx dy dz = world point − object · local point [mm]
+world = oggetto · local; rotazione secondo Eulero Z-Y-X (A attorno a X, B attorno a Y, C attorno a Z)
+= world = object · local; rotation by Euler Z-Y-X (A around X, B around Y, C around Z)
+{used} di {n}
+= {used} of {n}
+Clicca sul 3D il punto {name} ({n} di {total})
+= Click point {name} on the 3D model ({n} of {total})
+I punti sul 3D sono tutti in fila: prendine qualcuno fuori dalla linea
+= The points on the 3D model are all in a line: take some off the line
+Servono almeno {min} punti presi sul 3D e accesi (ora {n})
+= At least {min} points taken on the 3D model and enabled are needed (now {n})
+i pezzi hanno un numero di vertici diverso
+= the parts have a different number of vertices
+la geometria non è la stessa (scarto fino a {err})
+= the geometry is not the same (deviation up to {err})
+numero di pezzi diverso ({a} e {b})
+= different number of parts ({a} and {b})
+un oggetto contiene l'altro
+= one object contains the other
+uno dei due oggetti non ha pezzi
+= one of the two objects has no parts
+destinazione eliminata
+= destination deleted
+elemento eliminato
+= item deleted
+si raggruppa solo dentro lo stesso file
+= grouping only works within the same file
+si sposta solo dentro lo stesso file (per un altro file: Copia e Incolla)
+= moving only works within the same file (for another file: Copy and Paste)
+un file intero non si raggruppa
+= a whole file cannot be grouped
+un file intero non si sposta in un gruppo
+= a whole file cannot be moved into a group
+«{name}» non può andare dentro sé stesso
+= "{name}" cannot go inside itself

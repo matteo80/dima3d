@@ -2,6 +2,7 @@
 //! i gradi di apertura; Ctrl + trascina sulla parte la apre con il mouse (vedi
 //! `scene_graph::hinge`).
 
+use crate::i18n::tr;
 use glam::Vec3;
 
 use super::theme::{icon, icon_text};
@@ -44,16 +45,16 @@ impl GestoreApp {
         build: impl FnOnce(&crate::scene_graph::SceneGraph, String) -> Option<SavedHinge>,
     ) -> Option<usize> {
         let scene = self.scene_graph.as_ref()?;
-        let name = if name.trim().is_empty() { format!("Cerniera {}", scene.hinges.len() + 1) } else { name.trim().to_string() };
+        let name = if name.trim().is_empty() { trf!("Cerniera {n}", n = scene.hinges.len() + 1) } else { name.trim().to_string() };
         let Some(hinge) = build(scene, name.clone()) else {
-            self.ui_state.status_message = "Cerniera non salvata: scegli la parte che si apre".to_string();
+            self.ui_state.status_message = tr("Cerniera non salvata: scegli la parte che si apre").to_string();
             return None;
         };
         self.push_undo(None);
         let scene = self.scene_graph.as_mut()?;
         scene.hinges.push(hinge);
         scene.revision += 1;
-        self.ui_state.status_message = format!("Cerniera «{name}» salvata: clicca la parte nella vista per aprirla");
+        self.ui_state.status_message = trf!("Cerniera «{name}» salvata: clicca la parte nella vista per aprirla", name = name);
         Some(scene.hinges.len() - 1)
     }
 
@@ -93,7 +94,7 @@ impl GestoreApp {
             if let Some(l) = &mut h.linkage {
                 l.zero += shift;
             }
-            self.ui_state.status_message = format!("{}: questa è la posizione chiusa (0°)", h.name);
+            self.ui_state.status_message = trf!("{name}: questa è la posizione chiusa (0°)", name = h.name);
         }
         if let Some(s) = self.scene_graph.as_mut() {
             s.revision += 1;
@@ -110,7 +111,7 @@ impl GestoreApp {
             return;
         }
         if scene.meshes_of(&nodes).is_empty() {
-            self.ui_state.status_message = "Cerniera non cambiata: la selezione non ha pezzi".to_string();
+            self.ui_state.status_message = tr("Cerniera non cambiata: la selezione non ha pezzi").to_string();
             return;
         }
         self.push_undo(None);
@@ -132,7 +133,7 @@ impl GestoreApp {
         }
         scene.revision += 1;
         self.sync_moved_geometry();
-        self.ui_state.status_message = format!("Cerniera «{}» assegnata a {}", old.name, names.join(", "));
+        self.ui_state.status_message = trf!("Cerniera «{name}» assegnata a {parts}", name = old.name, parts = names.join(", "));
     }
 
     /// Inverte il verso di apertura: la parte torna chiusa (0°) e da lì gli angoli positivi la
@@ -160,7 +161,7 @@ impl GestoreApp {
         let name = h.name.clone();
         scene.revision += 1;
         self.sync_moved_geometry();
-        self.ui_state.status_message = format!("Cerniera «{name}»: verso di apertura invertito (la parte è chiusa)");
+        self.ui_state.status_message = trf!("Cerniera «{name}»: verso di apertura invertito (la parte è chiusa)", name = name);
     }
 
     /// Toglie una cerniera (la parte resta dov'è). Un passo di Annulla.
@@ -172,7 +173,7 @@ impl GestoreApp {
         if let Some(scene) = self.scene_graph.as_mut() {
             let h = scene.hinges.remove(index);
             scene.revision += 1;
-            self.ui_state.status_message = format!("Cerniera «{}» tolta (la parte resta dov'è)", h.name);
+            self.ui_state.status_message = trf!("Cerniera «{name}» tolta (la parte resta dov'è)", name = h.name);
         }
     }
 
@@ -240,7 +241,7 @@ pub fn draw_label(
                                 .sense(egui::Sense::click_and_drag()),
                         )
                         .on_hover_cursor(egui::CursorIcon::Grab)
-                        .on_hover_text("Trascina per spostare l'etichetta; doppio clic la rimette vicino alla parte");
+                        .on_hover_text(tr("Trascina per spostare l'etichetta; doppio clic la rimette vicino alla parte"));
                     if title.dragged() {
                         offset += title.drag_delta();
                     }
@@ -249,7 +250,7 @@ pub fn draw_label(
                     }
                 });
                 ui.horizontal(|ui| {
-                    if ui.small_button(icon::CARET_LEFT).on_hover_text("Chiude di 1°").clicked() {
+                    if ui.small_button(icon::CARET_LEFT).on_hover_text(tr("Chiude di 1°")).clicked() {
                         angle -= 1.0;
                     }
                     ui.add(
@@ -259,20 +260,20 @@ pub fn draw_label(
                             .max_decimals(1)
                             .suffix("°"),
                     )
-                    .on_hover_text("Apertura: trascina il numero o fai doppio clic e scrivi i gradi");
-                    if ui.small_button(icon::CARET_RIGHT).on_hover_text("Apre di 1°").clicked() {
+                    .on_hover_text(tr("Apertura: trascina il numero o fai doppio clic e scrivi i gradi"));
+                    if ui.small_button(icon::CARET_RIGHT).on_hover_text(tr("Apre di 1°")).clicked() {
                         angle += 1.0;
                     }
                 });
                 ui.horizontal(|ui| {
-                    if ui.button(format!("Chiudi ({:.0}°)", h.min)).clicked() {
+                    if ui.button(trf!("Chiudi ({deg}°)", deg = format!("{:.0}", h.min))).clicked() {
                         angle = h.min;
                     }
-                    if ui.button(format!("Apri ({:.0}°)", h.max)).clicked() {
+                    if ui.button(trf!("Apri ({deg}°)", deg = format!("{:.0}", h.max))).clicked() {
                         angle = h.max;
                     }
                 });
-                ui.label(egui::RichText::new("Ctrl + trascina la parte per aprirla col mouse").small().weak());
+                ui.label(egui::RichText::new(tr("Ctrl + trascina la parte per aprirla col mouse")).small().weak());
             });
         });
     ui.ctx().data_mut(|d| d.insert_temp(offset_id, offset));
@@ -307,7 +308,7 @@ pub fn draw_list(ui: &mut egui::Ui, hinges: &[(usize, SavedHinge, String)], sele
     let mut out = Vec::new();
     if hinges.is_empty() {
         ui.label(
-            egui::RichText::new("Nessuna cerniera salvata: scegli l'asse e la parte, poi «Salva cerniera».")
+            egui::RichText::new(tr("Nessuna cerniera salvata: scegli l'asse e la parte, poi «Salva cerniera»."))
                 .small()
                 .weak(),
         );
@@ -319,55 +320,56 @@ pub fn draw_list(ui: &mut egui::Ui, hinges: &[(usize, SavedHinge, String)], sele
         ui.horizontal_wrapped(|ui| {
             if ui
                 .selectable_label(false, egui::RichText::new(format!("{}  {}", icon::DOOR_OPEN, h.name)).strong())
-                .on_hover_text("Seleziona la parte: nella vista compare l'etichetta con i gradi")
+                .on_hover_text(tr("Seleziona la parte: nella vista compare l'etichetta con i gradi"))
                 .clicked()
             {
                 out.push(HingeCmd::Select(h.nodes.clone()));
             }
             let mut angle = h.angle;
             ui.add(egui::DragValue::new(&mut angle).range(h.min..=h.max).speed(0.5).max_decimals(1).suffix("°"))
-                .on_hover_text("Apertura");
+                .on_hover_text(tr("Apertura"));
             if (angle - h.angle).abs() > 1e-5 {
                 out.push(HingeCmd::Angle(i, angle));
             }
         });
         ui.horizontal_wrapped(|ui| {
-            ui.label("Nome");
+            ui.label(tr("Nome"));
             ui.add(egui::TextEdit::singleline(&mut e.name).desired_width(120.0));
         });
         ui.horizontal_wrapped(|ui| {
-            ui.label("Parte");
+            ui.label(tr("Parte"));
             ui.label(egui::RichText::new(part).italics());
             let (nodes, name) = selection;
             if ui
-                .add_enabled(!nodes.is_empty() && nodes != h.nodes.as_slice(), egui::Button::new(icon_text(ui, icon::PENCIL_SIMPLE, "Cambia parte")).small())
-                .on_hover_text(format!(
-                    "La cerniera passa alla selezione ({name}): la parte di prima torna chiusa, la nuova parte da 0° dove si trova"
+                .add_enabled(!nodes.is_empty() && nodes != h.nodes.as_slice(), egui::Button::new(icon_text(ui, icon::PENCIL_SIMPLE, tr("Cambia parte"))).small())
+                .on_hover_text(trf!(
+                    "La cerniera passa alla selezione ({name}): la parte di prima torna chiusa, la nuova parte da 0° dove si trova",
+                    name = name
                 ))
-                .on_disabled_hover_text("Seleziona prima (nella vista o nell'albero) la parte giusta")
+                .on_disabled_hover_text(tr("Seleziona prima (nella vista o nell'albero) la parte giusta"))
                 .clicked()
             {
                 out.push(HingeCmd::Reassign(i));
             }
         });
         ui.horizontal_wrapped(|ui| {
-            ui.label("Da");
+            ui.label(tr("Da"));
             ui.add(egui::DragValue::new(&mut e.min).range(-360.0..=h.max).speed(1.0).max_decimals(1).suffix("°"))
-                .on_hover_text("Limite di chiusura");
-            ui.label("a");
+                .on_hover_text(tr("Limite di chiusura"));
+            ui.label(tr("a"));
             ui.add(egui::DragValue::new(&mut e.max).range(h.min..=360.0).speed(1.0).max_decimals(1).suffix("°"))
-                .on_hover_text("Limite di apertura");
+                .on_hover_text(tr("Limite di apertura"));
             if ui
-                .small_button("Inverti verso")
-                .on_hover_text("La parte si apre dall'altra parte (per esempio verso l'interno invece che verso l'esterno): prima torna chiusa")
+                .small_button(tr("Inverti verso"))
+                .on_hover_text(tr("La parte si apre dall'altra parte (per esempio verso l'interno invece che verso l'esterno): prima torna chiusa"))
                 .clicked()
             {
                 out.push(HingeCmd::Flip(i));
             }
-            if ui.small_button("0° qui").on_hover_text("La posizione attuale diventa quella chiusa (0°), senza muovere la parte").clicked() {
+            if ui.small_button(tr("0° qui")).on_hover_text(tr("La posizione attuale diventa quella chiusa (0°), senza muovere la parte")).clicked() {
                 out.push(HingeCmd::ClosedHere(i));
             }
-            if ui.small_button(icon::TRASH).on_hover_text("Togli la cerniera (la parte resta dov'è)").clicked() {
+            if ui.small_button(icon::TRASH).on_hover_text(tr("Togli la cerniera (la parte resta dov'è)")).clicked() {
                 out.push(HingeCmd::Remove(i));
             }
         });

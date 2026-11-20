@@ -95,7 +95,7 @@ impl FourBar {
         }
         let normal = sum.normalize_or_zero();
         if normal == DVec3::ZERO {
-            return Err("Direzione dei perni non valida".to_string());
+            return Err(crate::i18n::tr("Direzione dei perni non valida").to_string());
         }
         let skew = pins
             .iter()
@@ -120,14 +120,14 @@ impl FourBar {
         };
         let [f1, f2, m1, m2] = pins.map(|(c, _)| flat(c));
         let lengths = [(m1 - f1).length(), (m2 - f2).length(), (m2 - m1).length()];
-        let names = ["Perno fisso 1 e perno mobile 1", "Perno fisso 2 e perno mobile 2", "I due perni mobili"];
+        let names = [tn!("Perno fisso 1 e perno mobile 1"), tn!("Perno fisso 2 e perno mobile 2"), tn!("I due perni mobili")];
         for (l, name) in lengths.iter().zip(names) {
             if *l < 0.5 {
-                return Err(format!("{name} coincidono: scegli perni diversi"));
+                return Err(trf!("{name} coincidono: scegli perni diversi", name = crate::i18n::tr(name)));
             }
         }
         if (f2 - f1).length() < 0.5 {
-            return Err("I due perni fissi coincidono: scegli perni diversi".to_string());
+            return Err(crate::i18n::tr("I due perni fissi coincidono: scegli perni diversi").to_string());
         }
         Ok(FourBar {
             normal: normal.as_vec3(),

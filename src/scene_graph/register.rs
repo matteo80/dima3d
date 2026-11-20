@@ -110,19 +110,19 @@ impl SceneGraph {
     pub fn geometric_offset(&self, reference: u32, destination: u32) -> Result<RigidFit, String> {
         let (ma, mb) = (self.meshes_of(&[reference]), self.meshes_of(&[destination]));
         if ma.is_empty() || mb.is_empty() {
-            return Err("uno dei due oggetti non ha pezzi".to_string());
+            return Err(crate::i18n::tr("uno dei due oggetti non ha pezzi").to_string());
         }
         if ma.iter().any(|m| mb.contains(m)) {
-            return Err("un oggetto contiene l'altro".to_string());
+            return Err(crate::i18n::tr("un oggetto contiene l'altro").to_string());
         }
         if ma.len() != mb.len() {
-            return Err(format!("numero di pezzi diverso ({} e {})", ma.len(), mb.len()));
+            return Err(trf!("numero di pezzi diverso ({a} e {b})", a = ma.len(), b = mb.len()));
         }
         let mut total = 0usize;
         for (&a, &b) in ma.iter().zip(&mb) {
             let (va, vb) = (&self.shapes_data[a as usize].world_vertices, &self.shapes_data[b as usize].world_vertices);
             if va.len() != vb.len() {
-                return Err("i pezzi hanno un numero di vertici diverso".to_string());
+                return Err(crate::i18n::tr("i pezzi hanno un numero di vertici diverso").to_string());
             }
             total += va.len();
         }
@@ -157,7 +157,7 @@ impl SceneGraph {
         // f32 ha circa 7 cifre: tolleranza sulle coordinate più grandi e sull'ingombro
         let tolerance = (size * 2e-6).max(diagonal * 1e-5);
         if max_error > tolerance {
-            return Err(format!("la geometria non è la stessa (scarto fino a {max_error:.3e})"));
+            return Err(trf!("la geometria non è la stessa (scarto fino a {err})", err = format!("{max_error:.3e}")));
         }
         let matrix = DMat4::from_rotation_translation(rotation, translation);
         Ok(RigidFit { matrix: matrix.as_mat4(), max_error, pairs: from.len() })

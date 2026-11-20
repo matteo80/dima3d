@@ -186,14 +186,14 @@ impl SceneGraph {
     pub fn motion_between(&self, first: &[u32], second: &[u32]) -> Result<Motion, String> {
         let (a, b) = (self.meshes_of(first), self.meshes_of(second));
         if a.is_empty() || b.is_empty() {
-            return Err("Scegli le due posizioni".to_string());
+            return Err(crate::i18n::tr("Scegli le due posizioni").to_string());
         }
         if a.iter().any(|m| b.contains(m)) {
-            return Err("Le due posizioni devono essere oggetti diversi".to_string());
+            return Err(crate::i18n::tr("Le due posizioni devono essere oggetti diversi").to_string());
         }
         let (pairs, unmatched) = pair_meshes(self, &a, &b);
         if pairs.is_empty() {
-            return Err("Nessun pezzo corrisponde tra le due posizioni (servono la stessa matematica e gli stessi pezzi)".to_string());
+            return Err(crate::i18n::tr("Nessun pezzo corrisponde tra le due posizioni (servono la stessa matematica e gli stessi pezzi)").to_string());
         }
         let size = pairs
             .iter()
@@ -230,9 +230,9 @@ impl SceneGraph {
         }
         let Some(best) = groups.iter().enumerate().max_by_key(|(_, g)| g.2).map(|(i, _)| i) else {
             return Err(if fixed > 0 && deformed == 0 {
-                "I pezzi sono nella stessa posizione nei due oggetti".to_string()
+                crate::i18n::tr("I pezzi sono nella stessa posizione nei due oggetti").to_string()
             } else {
-                "I pezzi non si muovono come un corpo rigido tra le due posizioni".to_string()
+                crate::i18n::tr("I pezzi non si muovono come un corpo rigido tra le due posizioni").to_string()
             });
         };
         let other = groups.len() - 1 + deformed;

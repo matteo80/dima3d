@@ -18,6 +18,7 @@
 //!   per tutti i fissi ogni punto mobile è fissato come la punta di un treppiede e con tre punti
 //!   l'oggetto non può più girare. Nessun massimo.
 
+use crate::i18n::tr;
 use glam::{DMat4, DQuat, DVec3, Mat4, Vec3};
 
 use super::measure::MeasurePoint;
@@ -59,14 +60,14 @@ pub enum Kind {
 
 impl Kind {
     pub const ALL: [(Kind, &'static str, &'static str); 4] = [
-        (Kind::Distance, "Distanza", "Distanza diretta tra i due punti (metro teso da punto a punto)"),
-        (Kind::X, "ΔX", "Solo la distanza lungo X della cabina"),
-        (Kind::Y, "ΔY", "Solo la distanza lungo Y della cabina"),
-        (Kind::Z, "ΔZ", "Solo la distanza lungo Z della cabina (es. altezza con la livella)"),
+        (Kind::Distance, tn!("Distanza"), tn!("Distanza diretta tra i due punti (metro teso da punto a punto)")),
+        (Kind::X, "ΔX", tn!("Solo la distanza lungo X della cabina")),
+        (Kind::Y, "ΔY", tn!("Solo la distanza lungo Y della cabina")),
+        (Kind::Z, "ΔZ", tn!("Solo la distanza lungo Z della cabina (es. altezza con la livella)")),
     ];
 
     pub fn name(self) -> &'static str {
-        Self::ALL.iter().find(|(k, ..)| *k == self).map_or("", |(_, n, _)| n)
+        Self::ALL.iter().find(|(k, ..)| *k == self).map_or("", |(_, n, _)| tr(n))
     }
 
     /// Parola usata nel progetto salvato.
@@ -131,9 +132,9 @@ pub enum RowState {
 impl RowState {
     pub fn problem(self) -> Option<&'static str> {
         match self {
-            RowState::Incomplete => Some("Mancano i punti"),
-            RowState::NoMoving => Some("Nessun punto sul pezzo da spostare (l'Oggetto in cima alla finestra)"),
-            RowState::BothMoving => Some("Tutti e due i punti sono sul pezzo da spostare: uno va preso sul riferimento fermo"),
+            RowState::Incomplete => Some(tr("Mancano i punti")),
+            RowState::NoMoving => Some(tr("Nessun punto sul pezzo da spostare (l'Oggetto in cima alla finestra)")),
+            RowState::BothMoving => Some(tr("Tutti e due i punti sono sul pezzo da spostare: uno va preso sul riferimento fermo")),
             RowState::Ready(_) => None,
         }
     }
@@ -301,13 +302,14 @@ impl DistanceAlign {
         let labels = self.labels();
         let fixed_count = labels.iter().filter_map(|l| l[0].strip_prefix('F')?.parse::<usize>().ok()).max().unwrap_or(0);
         Some(match k {
-            0 => format!("F{}: clicca il punto fisso sul riferimento fermo", fixed_count + 1),
-            _ if self.chain => format!(
-                "{}: clicca il punto {} di {EXACT_PER_FIXED} sul pezzo da spostare (M)",
-                labels[i][0],
-                self.group_size(i) + 1
+            0 => trf!("F{n}: clicca il punto fisso sul riferimento fermo", n = fixed_count + 1),
+            _ if self.chain => trf!(
+                "{fixed}: clicca il punto {n} di {total} sul pezzo da spostare (M)",
+                fixed = labels[i][0],
+                n = self.group_size(i) + 1,
+                total = EXACT_PER_FIXED
             ),
-            _ => format!("{}: clicca il punto sul pezzo da spostare (M)", labels[i][0]),
+            _ => trf!("{fixed}: clicca il punto sul pezzo da spostare (M)", fixed = labels[i][0]),
         })
     }
 
@@ -401,14 +403,17 @@ impl DistanceAlign {
             .collect();
         let min = self.minimum();
         if used.len() < min {
-            return Err(format!("Servono almeno {min} misure pronte e accese (ora {})", used.len()));
+            return Err(trf!("Servono almeno {min} misure pronte e accese (ora {n})", min = min, n = used.len()));
         }
         if self.mode == Mode::Precise {
             let complete = self.complete_fixed(moving);
             if complete < EXACT_FIXED {
-                return Err(format!(
-                    "Precisa: servono almeno {EXACT_FIXED} punti fissi, ognuno misurato verso {EXACT_PER_FIXED} punti \
-                     dell'oggetto (ora {complete} completi)"
+                return Err(trf!(
+                    "Precisa: servono almeno {fixed} punti fissi, ognuno misurato verso {per} punti \
+                     dell'oggetto (ora {complete} completi)",
+                    fixed = EXACT_FIXED,
+                    per = EXACT_PER_FIXED,
+                    complete = complete
                 ));
             }
         }
@@ -606,7 +611,7 @@ pub fn draw_overlay(ui: &egui::Ui, rect: egui::Rect, align: &DistanceAlign, to_s
         painter.text(
             rect.center_bottom() - egui::vec2(0.0, 40.0),
             egui::Align2::CENTER_CENTER,
-            format!("{text}  ·  Esc per smettere"),
+            format!("{text}  ·  {}", tr("Esc per smettere")),
             egui::FontId::proportional(15.0),
             color,
         );

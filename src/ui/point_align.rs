@@ -7,6 +7,7 @@
 //! I punti presi sul 3D seguono il pezzo: dopo «Allinea» la distanza di ogni coppia è lo scarto
 //! che resta.
 
+use crate::i18n::tr;
 use glam::{DVec3, Mat4, Vec3};
 
 use super::measure::MeasurePoint;
@@ -89,7 +90,7 @@ impl PointAlign {
     pub fn prompt(&self) -> Option<String> {
         let i = self.picking?;
         let p = self.pairs.get(i)?;
-        Some(format!("Clicca sul 3D il punto {} ({} di {})", p.name, i + 1, self.pairs.len()))
+        Some(trf!("Clicca sul 3D il punto {name} ({n} di {total})", name = p.name, n = i + 1, total = self.pairs.len()))
     }
 
     /// I punti presi sul 3D seguono il pezzo su cui sono stati presi; se il pezzo non c'è più
@@ -110,14 +111,14 @@ impl PointAlign {
     pub fn fit(&self) -> Result<PointFit, String> {
         let used: Vec<&PointPair> = self.pairs.iter().filter(|p| p.on && p.cad.is_some()).collect();
         if used.len() < MIN_POINTS {
-            return Err(format!("Servono almeno {MIN_POINTS} punti presi sul 3D e accesi (ora {})", used.len()));
+            return Err(trf!("Servono almeno {min} punti presi sul 3D e accesi (ora {n})", min = MIN_POINTS, n = used.len()));
         }
         let cad = |p: &PointPair| p.cad.as_ref().map(|c| c.pos);
         let a: Vec<DVec3> = used.iter().map(|p| cad(p).unwrap().as_dvec3()).collect();
         let b: Vec<DVec3> = used.iter().map(|p| p.target.as_dvec3()).collect();
-        let (m, rms) = fit_rigid(&a, &b).ok_or("Calcolo non riuscito")?;
+        let (m, rms) = fit_rigid(&a, &b).ok_or(tr("Calcolo non riuscito"))?;
         if in_a_row(&a) {
-            return Err("I punti sul 3D sono tutti in fila: prendine qualcuno fuori dalla linea".to_string());
+            return Err(tr("I punti sul 3D sono tutti in fila: prendine qualcuno fuori dalla linea").to_string());
         }
         let matrix = m.as_mat4();
         let residuals: Vec<Option<f32>> =
@@ -181,7 +182,7 @@ pub fn draw_overlay(ui: &egui::Ui, rect: egui::Rect, align: &PointAlign, to_scre
         painter.text(
             rect.center_bottom() - egui::vec2(0.0, 40.0),
             egui::Align2::CENTER_CENTER,
-            format!("{text}  ·  Esc per smettere"),
+            format!("{text}  ·  {}", tr("Esc per smettere")),
             egui::FontId::proportional(15.0),
             cad_color,
         );

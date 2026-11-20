@@ -1680,7 +1680,7 @@ pub fn draw(ctx: &egui::Context, app: &mut GestoreApp, pass: super::dock::Pass) 
                                         .selected_text(kind.name())
                                         .show_ui(ui, |ui| {
                                             for (k, n, h) in super::distance_align::Kind::ALL {
-                                                ui.selectable_value(&mut kind, k, n).on_hover_text(h);
+                                                ui.selectable_value(&mut kind, k, tr(n)).on_hover_text(tr(h));
                                             }
                                         });
                                     if kind != r.kind {
@@ -1928,8 +1928,8 @@ World  X {:.3}  Y {:.3}  Z {:.3}",
                             ];
                             egui::Grid::new("posizione_misura_statistica").num_columns(2).spacing([10.0, 2.0]).show(ui, |ui| {
                                 for ((name, help), v) in super::object_measure::STATS_HELP.iter().zip(values) {
-                                    ui.label(*name).on_hover_text(*help);
-                                    ui.label(egui::RichText::new(v).monospace()).on_hover_text(*help);
+                                    ui.label(tr(name)).on_hover_text(tr(help));
+                                    ui.label(egui::RichText::new(v).monospace()).on_hover_text(tr(help));
                                     ui.end_row();
                                 }
                             });

@@ -11,6 +11,8 @@ use std::path::{Path, PathBuf};
 
 use glam::{DMat4, DVec3, Vec3};
 
+use crate::i18n::tr;
+
 use super::point_align::{in_a_row, MIN_POINTS};
 use crate::robot_program::{decode, parse_point_line, Frame};
 use crate::scene_graph::motion::fit_rigid;
@@ -46,7 +48,7 @@ pub fn parse_point_file(path: PathBuf, text: &str) -> Result<PointFile, String> 
         }
     }
     if points.is_empty() {
-        return Err(format!("Nessun punto Object in {}", path.display()));
+        return Err(trf!("Nessun punto Object in {path}", path = path.display()));
     }
     Ok(PointFile { path, points })
 }
@@ -175,17 +177,23 @@ impl Verdict {
     pub fn text(self) -> &'static str {
         match self {
             Verdict::Ok => "OK",
-            Verdict::Acceptable => "Accettabile",
-            Verdict::NotOk => "Non OK",
+            Verdict::Acceptable => tr("Accettabile"),
+            Verdict::NotOk => tr("Non OK"),
         }
     }
 
     pub fn hint(self) -> String {
         match self {
-            Verdict::Ok => format!("Tutti gli scostamenti entro {TOL_OK} mm"),
-            Verdict::Acceptable => format!("Scostamento massimo tra {TOL_OK} e {TOL_ACCEPTABLE} mm: si può usare, meglio ricontrollare il punto peggiore"),
-            Verdict::NotOk => format!(
-                "Scostamento oltre {TOL_ACCEPTABLE} mm: riprendere il punto peggiore o escluderlo (servono almeno {MIN_POINTS} punti)"
+            Verdict::Ok => trf!("Tutti gli scostamenti entro {ok} mm", ok = TOL_OK),
+            Verdict::Acceptable => trf!(
+                "Scostamento massimo tra {ok} e {acceptable} mm: si può usare, meglio ricontrollare il punto peggiore",
+                ok = TOL_OK,
+                acceptable = TOL_ACCEPTABLE
+            ),
+            Verdict::NotOk => trf!(
+                "Scostamento oltre {acceptable} mm: riprendere il punto peggiore o escluderlo (servono almeno {min} punti)",
+                acceptable = TOL_ACCEPTABLE,
+                min = MIN_POINTS
             ),
         }
     }
@@ -203,15 +211,15 @@ impl Verdict {
 /// Spiegazione dei valori della statistica (finestra e report).
 pub const STATS_HELP: [(&str, &str); 4] = [
     (
-        "Valore atteso",
-        "Media degli scostamenti dx dy dz con il loro segno. Con il calcolo ai minimi quadrati viene sempre circa 0:          è solo un controllo che il calcolo sia centrato.",
+        tn!("Valore atteso"),
+        tn!("Media degli scostamenti dx dy dz con il loro segno. Con il calcolo ai minimi quadrati viene sempre circa 0: è solo un controllo che il calcolo sia centrato."),
     ),
-    ("Media degli errori", "Media dei valori assoluti di dx dy dz di tutti i punti usati: di quanto sbaglia in media ogni coordinata."),
+    (tn!("Media degli errori"), tn!("Media dei valori assoluti di dx dy dz di tutti i punti usati: di quanto sbaglia in media ogni coordinata.")),
     (
-        "Dispersione degli errori",
-        "Media dei quadrati di dx dy dz (varianza, in mm²). Pesa di più gli scostamenti grandi; la sua radice è lo scarto tipico in mm.",
+        tn!("Dispersione degli errori"),
+        tn!("Media dei quadrati di dx dy dz (varianza, in mm²). Pesa di più gli scostamenti grandi; la sua radice è lo scarto tipico in mm."),
     ),
-    ("Errore massimo", "Il dx, dy o dz più grande in valore assoluto: indica il punto peggiore (in rosso)."),
+    (tn!("Errore massimo"), tn!("Il dx, dy o dz più grande in valore assoluto: indica il punto peggiore (in rosso).")),
 ];
 
 #[derive(Debug, Clone, PartialEq, Default)]
@@ -306,17 +314,17 @@ impl ObjectMeasure {
     pub fn compute(&self) -> (Vec<Row>, Result<ObjectResult, String>) {
         let mut rows = self.rows();
         if self.local.is_none() || self.world.is_none() {
-            return (rows, Err("Apri il file local e il file world".to_string()));
+            return (rows, Err(tr("Apri il file local e il file world").to_string()));
         }
         let a: Vec<DVec3> = rows.iter().filter(|r| r.on).map(|r| r.local).collect();
         let b: Vec<DVec3> = rows.iter().filter(|r| r.on).map(|r| r.world).collect();
         if a.len() < MIN_POINTS {
-            return (rows, Err(format!("Servono almeno {MIN_POINTS} punti presenti in tutti e due i file e accesi (ora {})", a.len())));
+            return (rows, Err(trf!("Servono almeno {min} punti presenti in tutti e due i file e accesi (ora {n})", min = MIN_POINTS, n = a.len())));
         }
         if in_a_row(&a) {
-            return (rows, Err("I punti sono tutti in fila: l'oggetto non si può calcolare".to_string()));
+            return (rows, Err(tr("I punti sono tutti in fila: l'oggetto non si può calcolare").to_string()));
         }
-        let Some((matrix, _)) = fit_rigid(&a, &b) else { return (rows, Err("Calcolo non riuscito".to_string())) };
+        let Some((matrix, _)) = fit_rigid(&a, &b) else { return (rows, Err(tr("Calcolo non riuscito").to_string())) };
         let back = matrix.inverse();
         let (mut sum, mut abs, mut sq, mut max, mut worst, mut n) = (0.0f64, 0.0f64, 0.0f64, 0.0f64, None, 0usize);
         for r in &mut rows {
@@ -372,8 +380,8 @@ impl ObjectMeasure {
         let (r, g, b) = res.verdict.rgb();
         let p = &res.pose;
         let mut h = String::new();
-        h += "<!DOCTYPE html>\n<html lang=\"it\">\n<head>\n<meta charset=\"utf-8\">\n";
-        h += &format!("<title>Misura dell'oggetto {}</title>\n", esc(&title));
+        h += &format!("<!DOCTYPE html>\n<html lang=\"{}\">\n<head>\n<meta charset=\"utf-8\">\n", crate::i18n::current().code());
+        h += &format!("<title>{} {}</title>\n", tr("Misura dell'oggetto"), esc(&title));
         h += "<style>\nbody{font-family:Segoe UI,Arial,sans-serif;margin:24px;color:#222}\n\
               h1{font-size:22px}h2{font-size:18px;margin-top:28px}\n\
               table{border-collapse:collapse;margin:8px 0}td,th{border:1px solid #999;padding:4px 10px}\n\
@@ -381,31 +389,38 @@ impl ObjectMeasure {
               tr.worst td{color:#c62828;font-weight:bold}tr.off td{color:#999}\n\
               .esito{display:inline-block;padding:6px 14px;border-radius:4px;color:#fff;font-weight:bold}\n\
               .nota{color:#555;font-size:13px}\n</style>\n</head>\n<body>\n";
-        h += "<h1>Misura dell'oggetto</h1>\n<h2>Dati</h2>\n<table>\n";
-        h += &format!("<tr><th>Data</th><td>{}</td></tr>\n", esc(date));
-        h += &format!("<tr><th>File coordinate world</th><td>{}</td></tr>\n", path(&self.world));
-        h += &format!("<tr><th>File coordinate locali</th><td>{}</td></tr>\n", path(&self.local));
+        h += &format!("<h1>{}</h1>\n<h2>{}</h2>\n<table>\n", tr("Misura dell'oggetto"), tr("Dati"));
+        h += &format!("<tr><th>{}</th><td>{}</td></tr>\n", tr("Data"), esc(date));
+        h += &format!("<tr><th>{}</th><td>{}</td></tr>\n", tr("File coordinate world"), path(&self.world));
+        h += &format!("<tr><th>{}</th><td>{}</td></tr>\n", tr("File coordinate locali"), path(&self.local));
         let used = rows.iter().filter(|r| r.on).count();
-        h += &format!("<tr><th>Punti usati</th><td>{used} di {}</td></tr>\n</table>\n", rows.len());
-        h += "<h2>Oggetto calcolato</h2>\n<p class=\"nota\">world = oggetto · local; rotazione secondo Eulero Z-Y-X (A attorno a X, B attorno a Y, C attorno a Z)</p>\n<table>\n";
+        h += &format!("<tr><th>{}</th><td>{}</td></tr>\n</table>\n", tr("Punti usati"), trf!("{used} di {n}", used = used, n = rows.len()));
+        h += &format!(
+            "<h2>{}</h2>\n<p class=\"nota\">{}</p>\n<table>\n",
+            tr("Oggetto calcolato"),
+            tr("world = oggetto · local; rotazione secondo Eulero Z-Y-X (A attorno a X, B attorno a Y, C attorno a Z)")
+        );
         for (k, (t, a)) in ["X", "Y", "Z"].iter().zip(["A", "B", "C"]).enumerate() {
             h += &format!(
-                "<tr><th>Traslazione {t} [mm]</th><td class=\"n\">{:.3}</td><th>Rotazione {a} ({t}) [°]</th><td class=\"n\">{:.3}</td></tr>\n",
-                p.xyz[k], p.abc[k]
+                "<tr><th>{} [mm]</th><td class=\"n\">{:.3}</td><th>{} [°]</th><td class=\"n\">{:.3}</td></tr>\n",
+                trf!("Traslazione {t}", t = t),
+                p.xyz[k],
+                trf!("Rotazione {a} ({t})", a = a, t = t),
+                p.abc[k]
             );
         }
         h += "</table>\n";
         h += &format!("<p><code>{}</code></p>\n", esc(&self.robot_line(*p)));
         if let Some(base) = self.current_base() {
             let d = difference(p, &base.pose);
-            h += &format!("<p>Differenza dall'oggetto attuale {}: X {:+.3}  Y {:+.3}  Z {:+.3} mm, A {:+.3}  B {:+.3}  C {:+.3}°</p>\n",
-                esc(&base.name), d.xyz.x, d.xyz.y, d.xyz.z, d.abc.x, d.abc.y, d.abc.z);
+            h += &format!("<p>{}: X {:+.3}  Y {:+.3}  Z {:+.3} mm, A {:+.3}  B {:+.3}  C {:+.3}°</p>\n",
+                trf!("Differenza dall'oggetto attuale {name}", name = esc(&base.name)), d.xyz.x, d.xyz.y, d.xyz.z, d.abc.x, d.abc.y, d.abc.z);
         }
-        h += "<h2>Qualità della trasformazione</h2>\n<table>\n";
+        h += &format!("<h2>{}</h2>\n<table>\n", tr("Qualità della trasformazione"));
         let values = [format!("{:.2}", res.expected), format!("{:.2}", res.mean), format!("{:.2}", res.variance), format!("{:.2}", res.max)];
         let units = ["mm", "mm", "mm²", "mm"];
         for (((name, help), v), u) in STATS_HELP.iter().zip(&values).zip(units) {
-            h += &format!("<tr><th>{name} [{u}]</th><td class=\"n\">{v}</td><td class=\"nota\">{}</td></tr>\n", esc(help));
+            h += &format!("<tr><th>{} [{u}]</th><td class=\"n\">{v}</td><td class=\"nota\">{}</td></tr>\n", tr(name), esc(tr(help)));
         }
         h += "</table>\n";
         h += &format!(
@@ -413,8 +428,17 @@ impl ObjectMeasure {
             res.verdict.text(),
             esc(&res.verdict.hint())
         );
-        h += "<h2>Scostamenti dei punti</h2>\n<p class=\"nota\">dx dy dz = punto world − oggetto · punto local [mm]</p>\n";
-        h += "<table>\n<tr><th>Punto</th><th>dx</th><th>dy</th><th>dz</th><th>Distanza</th><th>Valido</th></tr>\n";
+        h += &format!(
+            "<h2>{}</h2>\n<p class=\"nota\">{}</p>\n",
+            tr("Scostamenti dei punti"),
+            tr("dx dy dz = punto world − oggetto · punto local [mm]")
+        );
+        h += &format!(
+            "<table>\n<tr><th>{}</th><th>dx</th><th>dy</th><th>dz</th><th>{}</th><th>{}</th></tr>\n",
+            tr("Punto"),
+            tr("Distanza"),
+            tr("Valido")
+        );
         for row in rows {
             let class = if !row.on { " class=\"off\"" } else if res.worst.as_ref() == Some(&row.name) { " class=\"worst\"" } else { "" };
             let d = row.delta.unwrap_or(DVec3::ZERO);
@@ -424,13 +448,18 @@ impl ObjectMeasure {
                 d.y,
                 d.z,
                 row.deviation.unwrap_or(0.0),
-                if row.on { "sì" } else { "no" },
+                if row.on { tr("sì") } else { tr("no") },
                 n = esc(&row.name)
             );
         }
         h += "</table>\n";
         h += &format!(
-            "<p class=\"nota\">Esito: OK fino a {TOL_OK} mm di errore massimo, accettabile fino a {TOL_ACCEPTABLE} mm. I punti non validi non entrano nel calcolo né nella statistica.</p>\n"
+            "<p class=\"nota\">{}</p>\n",
+            trf!(
+                "Esito: OK fino a {ok} mm di errore massimo, accettabile fino a {acceptable} mm. I punti non validi non entrano nel calcolo né nella statistica.",
+                ok = TOL_OK,
+                acceptable = TOL_ACCEPTABLE
+            )
         );
         h += &format!("<p class=\"nota\">{} {}</p>\n</body>\n</html>\n", crate::APP_NAME, env!("CARGO_PKG_VERSION"));
         h

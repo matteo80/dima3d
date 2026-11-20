@@ -96,13 +96,13 @@ impl SceneGraph {
         let source = self.source_of_node(target).ok_or("gruppo di destinazione non valido")?;
         for &n in nodes {
             if self.info[n as usize].parent == NO_PARENT {
-                return Err("un file intero non si sposta in un gruppo".to_string());
+                return Err(crate::i18n::tr("un file intero non si sposta in un gruppo").to_string());
             }
             if self.source_of_node(n) != Some(source) {
-                return Err("si sposta solo dentro lo stesso file (per un altro file: Copia e Incolla)".to_string());
+                return Err(crate::i18n::tr("si sposta solo dentro lo stesso file (per un altro file: Copia e Incolla)").to_string());
             }
             if n == target || self.ancestors(target).contains(&n) {
-                return Err(format!("«{}» non può andare dentro sé stesso", self.display_name(n)));
+                return Err(trf!("«{name}» non può andare dentro sé stesso", name = self.display_name(n)));
             }
         }
         Ok(())
@@ -130,7 +130,7 @@ impl SceneGraph {
     pub fn move_into(&mut self, nodes: &[u32], target: u32) -> Result<usize, String> {
         let info = self.info.get(target as usize).copied().ok_or("destinazione inesistente")?;
         if info.deleted {
-            return Err("destinazione eliminata".to_string());
+            return Err(crate::i18n::tr("destinazione eliminata").to_string());
         }
         let target = match self.nodes[target as usize] {
             SceneNode::Shape { .. } => self.parent_of(target).ok_or("destinazione non valida")?,
@@ -162,10 +162,10 @@ impl SceneGraph {
         let source = self.source_of_node(parent).ok_or("file non trovato")?;
         for &n in &tops {
             if self.source_of_node(n) != Some(source) {
-                return Err("si raggruppa solo dentro lo stesso file".to_string());
+                return Err(crate::i18n::tr("si raggruppa solo dentro lo stesso file").to_string());
             }
             if self.info[n as usize].parent == NO_PARENT {
-                return Err("un file intero non si raggruppa".to_string());
+                return Err(crate::i18n::tr("un file intero non si raggruppa").to_string());
             }
         }
 
@@ -187,7 +187,7 @@ impl SceneGraph {
     pub fn new_empty_group(&mut self, target: u32, name: &str) -> Result<u32, String> {
         let info = self.info.get(target as usize).copied().ok_or("elemento inesistente")?;
         if info.deleted {
-            return Err("elemento eliminato".to_string());
+            return Err(crate::i18n::tr("elemento eliminato").to_string());
         }
         let parent = match self.nodes[target as usize] {
             SceneNode::Shape { .. } => self.parent_of(target).ok_or("pezzo senza gruppo")?,

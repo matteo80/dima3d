@@ -13,6 +13,7 @@
 //! «Salva» mette la misura nella scena: va nel gruppo «Misure» sotto l'albero e nel progetto, e
 //! resta disegnata anche a strumento spento. I suoi punti seguono sempre i pezzi su cui sono presi.
 
+use crate::i18n::tr;
 use glam::{Mat4, Vec3};
 
 /// Distanza massima sullo schermo, in punti, per agganciare un vertice.
@@ -264,13 +265,13 @@ pub fn draw(
     let fmt = |v: f32| format_length(v, scene_size);
     let (title, detail) = match (measure.result(), measure.points.len()) {
         (Some((d, delta)), _) => (
-            format!("Distanza  {} {UNIT}", fmt(d)),
+            format!("{}  {} {UNIT}", tr("Distanza"), fmt(d)),
             format!("ΔX {}   ΔY {}   ΔZ {}  ({UNIT})", fmt(delta.x), fmt(delta.y), fmt(delta.z)),
         ),
-        (None, 1) => ("Clic sul secondo punto".to_string(), point_text(&measure.points[0], &fmt)),
+        (None, 1) => (tr("Clic sul secondo punto").to_string(), point_text(&measure.points[0], &fmt)),
         _ => (
-            "Misura: clic sul primo punto".to_string(),
-            "Vicino a un vertice il punto si aggancia al vertice  ·  Esc o M per uscire".to_string(),
+            tr("Misura: clic sul primo punto").to_string(),
+            tr("Vicino a un vertice il punto si aggancia al vertice  ·  Esc o M per uscire").to_string(),
         ),
     };
     // Quota a metà del segmento
@@ -293,14 +294,14 @@ pub fn draw(
         ui.horizontal(|ui| {
             ui.label(egui::RichText::new(title).strong().size(15.0));
             ui.add_space(12.0);
-            ui.toggle_value(&mut measure.magnet, super::theme::icon_text(ui, super::theme::icon::MAGNET, "Calamita")).on_hover_text(
-                "I punti restano incollati ai pezzi: spostando o ruotando un pezzo (finestra Posizione, \
-                 cerniera) il suo punto lo segue e la distanza si aggiorna",
+            ui.toggle_value(&mut measure.magnet, super::theme::icon_text(ui, super::theme::icon::MAGNET, tr("Calamita"))).on_hover_text(
+                tr("I punti restano incollati ai pezzi: spostando o ruotando un pezzo (finestra Posizione, \
+                 cerniera) il suo punto lo segue e la distanza si aggiorna"),
             );
             save = ui
-                .add_enabled(complete, egui::Button::new(super::theme::icon_text(ui, super::theme::icon::FLOPPY_DISK, "Salva")))
-                .on_hover_text("Salva la misura nella scena: va nel gruppo «Misure» sotto l'albero e nel progetto")
-                .on_disabled_hover_text("Prendi prima i due punti")
+                .add_enabled(complete, egui::Button::new(super::theme::icon_text(ui, super::theme::icon::FLOPPY_DISK, tr("Salva"))))
+                .on_hover_text(tr("Salva la misura nella scena: va nel gruppo «Misure» sotto l'albero e nel progetto"))
+                .on_disabled_hover_text(tr("Prendi prima i due punti"))
                 .clicked();
         });
         ui.label(egui::RichText::new(detail).small());
@@ -309,7 +310,7 @@ pub fn draw(
 }
 
 fn point_text(p: &MeasurePoint, fmt: &impl Fn(f32) -> String) -> String {
-    let what = if p.vertex { "Vertice" } else { "Punto" };
+    let what = if p.vertex { tr("Vertice") } else { tr("Punto") };
     format!("{what}  X {}   Y {}   Z {}  ({UNIT})", fmt(p.pos.x), fmt(p.pos.y), fmt(p.pos.z))
 }
 
