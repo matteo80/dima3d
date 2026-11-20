@@ -78,10 +78,10 @@ impl RobotParams {
     pub fn problems(&self) -> Vec<String> {
         let mut out = Vec::new();
         if self.xyz.iter().chain(&self.abc).any(|v| !v.is_finite()) {
-            out.push(format!("{}: coordinate non valide", self.name));
+            out.push(trf!("{name}: coordinate non valide", name = self.name));
         }
         if self.plate && !(self.plate_x > 0.0 && self.plate_y > 0.0) {
-            out.push(format!("{}: il pannello deve avere misure maggiori di zero", self.name));
+            out.push(trf!("{name}: il pannello deve avere misure maggiori di zero", name = self.name));
         }
         out
     }
@@ -136,10 +136,10 @@ impl RobotCell {
     pub fn problems(&self) -> Vec<String> {
         let mut out: Vec<String> = self.robots.iter().flat_map(|r| r.problems()).collect();
         if self.center.iter().any(|v| !v.is_finite()) {
-            out.push("centro cabina: coordinate non valide".into());
+            out.push(crate::i18n::tr("centro cabina: coordinate non valide").to_string());
         }
         if self.marker && !(self.marker_size > 0.0) {
-            out.push("simbolo del centro: la misura deve essere maggiore di zero".into());
+            out.push(crate::i18n::tr("simbolo del centro: la misura deve essere maggiore di zero").to_string());
         }
         out
     }

@@ -36,13 +36,13 @@ enum Wall {
 
 impl LabelWall {
     pub const ALL: [(LabelWall, &'static str); 7] = [
-        (LabelWall::Sides, "Pareti laterali"),
-        (LabelWall::Left, "Parete sinistra"),
-        (LabelWall::Right, "Parete destra"),
-        (LabelWall::Entry, "Testata di ingresso"),
-        (LabelWall::Exit, "Testata di uscita"),
-        (LabelWall::Ends, "Testate di ingresso e uscita"),
-        (LabelWall::All, "Tutte le pareti"),
+        (LabelWall::Sides, tn!("Pareti laterali")),
+        (LabelWall::Left, tn!("Parete sinistra")),
+        (LabelWall::Right, tn!("Parete destra")),
+        (LabelWall::Entry, tn!("Testata di ingresso")),
+        (LabelWall::Exit, tn!("Testata di uscita")),
+        (LabelWall::Ends, tn!("Testate di ingresso e uscita")),
+        (LabelWall::All, tn!("Tutte le pareti")),
     ];
 
     fn code(self) -> &'static str {
@@ -104,12 +104,12 @@ pub fn fonts_dir() -> std::path::PathBuf {
 pub fn common_fonts() -> Vec<(&'static str, std::path::PathBuf)> {
     const LIST: [(&str, &str); 12] = [
         ("Arial", "arial.ttf"),
-        ("Arial grassetto", "arialbd.ttf"),
+        (tn!("Arial grassetto"), "arialbd.ttf"),
         ("Arial Narrow", "ARIALN.TTF"),
         ("Calibri", "calibri.ttf"),
-        ("Calibri grassetto", "calibrib.ttf"),
+        (tn!("Calibri grassetto"), "calibrib.ttf"),
         ("Segoe UI", "segoeui.ttf"),
-        ("Segoe UI grassetto", "segoeuib.ttf"),
+        (tn!("Segoe UI grassetto"), "segoeuib.ttf"),
         ("Consolas", "consola.ttf"),
         ("Tahoma", "tahoma.ttf"),
         ("Verdana", "verdana.ttf"),
@@ -117,7 +117,7 @@ pub fn common_fonts() -> Vec<(&'static str, std::path::PathBuf)> {
         ("Impact", "impact.ttf"),
     ];
     let dir = fonts_dir();
-    LIST.iter().map(|(name, file)| (*name, dir.join(file))).filter(|(_, p)| p.is_file()).collect()
+    LIST.iter().map(|(name, file)| (crate::i18n::tr(*name), dir.join(file))).filter(|(_, p)| p.is_file()).collect()
 }
 
 impl Default for CabinLabel {
@@ -398,90 +398,90 @@ impl CabinParams {
     pub fn problems(&self) -> Vec<String> {
         let mut out = Vec::new();
         let positive = [
-            (self.length, "lunghezza"),
-            (self.width, "larghezza"),
-            (self.height, "altezza"),
-            (self.module, "passo dei montanti"),
-            (self.post, "montanti"),
-            (self.panel, "spessore dei pannelli"),
-            (self.bar_pitch, "passo delle barre"),
-            (self.bar_width, "larghezza delle barre"),
-            (self.bar_thickness, "spessore delle barre"),
-            (self.grid_module_x, "moduli del grigliato"),
-            (self.grid_module_y, "moduli del grigliato"),
+            (self.length, tn!("lunghezza")),
+            (self.width, tn!("larghezza")),
+            (self.height, tn!("altezza")),
+            (self.module, tn!("passo dei montanti")),
+            (self.post, tn!("montanti")),
+            (self.panel, tn!("spessore dei pannelli")),
+            (self.bar_pitch, tn!("passo delle barre")),
+            (self.bar_width, tn!("larghezza delle barre")),
+            (self.bar_thickness, tn!("spessore delle barre")),
+            (self.grid_module_x, tn!("moduli del grigliato")),
+            (self.grid_module_y, tn!("moduli del grigliato")),
         ];
         for (v, name) in positive {
             if v.is_nan() || v <= 0.0 {
-                out.push(format!("{name}: deve essere maggiore di zero"));
+                out.push(trf!("{name}: deve essere maggiore di zero", name = crate::i18n::tr(name)));
             }
         }
         if self.depth < 0.0 {
-            out.push("fondo sotto il grigliato: non può essere negativo".into());
+            out.push(crate::i18n::tr("fondo sotto il grigliato: non può essere negativo").to_string());
         }
         if self.grid_z.is_nan() || self.grid_z > 0.0 || self.grid_bottom(self.grid_z) < -self.depth {
-            out.push("quota del grigliato: da 0 (a livello) in giù, sopra il fondo della cabina".into());
+            out.push(crate::i18n::tr("quota del grigliato: da 0 (a livello) in giù, sopra il fondo della cabina").to_string());
         }
         if self.channel {
             let w = self.channel_width;
             if w.is_nan() || w <= 2.0 * self.channel_wall || self.channel_depth <= 0.0 || self.channel_wall <= 0.0 {
-                out.push("canalina: larghezza, profondità e spessore devono essere maggiori di zero (larghezza più di due spessori)".into());
+                out.push(crate::i18n::tr("canalina: larghezza, profondità e spessore devono essere maggiori di zero (larghezza più di due spessori)").to_string());
             }
             if self.channel_y.abs() + w / 2.0 > self.width / 2.0 {
-                out.push("canalina: deve stare tra le pareti".into());
+                out.push(crate::i18n::tr("canalina: deve stare tra le pareti").to_string());
             }
             if self.channel_lip < 0.0 {
-                out.push("canalina: il bordo non può essere negativo".into());
+                out.push(crate::i18n::tr("canalina: il bordo non può essere negativo").to_string());
             }
         }
         if self.conveyor {
             let positive = [
-                (self.conveyor_width, "larghezza"),
-                (self.wheel_gauge, "scartamento"),
-                (self.wheel_diameter, "diametro delle ruote"),
-                (self.wheel_pitch, "passo delle ruote"),
-                (self.leg_pitch, "passo delle gambe"),
+                (self.conveyor_width, tn!("larghezza")),
+                (self.wheel_gauge, tn!("scartamento")),
+                (self.wheel_diameter, tn!("diametro delle ruote")),
+                (self.wheel_pitch, tn!("passo delle ruote")),
+                (self.leg_pitch, tn!("passo delle gambe")),
             ];
             for (v, name) in positive {
                 if v.is_nan() || v <= 0.0 {
-                    out.push(format!("tavola: {name} deve essere maggiore di zero"));
+                    out.push(trf!("tavola: {name} deve essere maggiore di zero", name = crate::i18n::tr(name)));
                 }
             }
             if self.conveyor_width > self.width {
-                out.push("tavola: più larga della cabina".into());
+                out.push(crate::i18n::tr("tavola: più larga della cabina").to_string());
             }
             if self.wheel_gauge + 0.4 * self.wheel_diameter + 100.0 > self.conveyor_width {
-                out.push("tavola: le ruote non stanno nella larghezza (scartamento troppo grande)".into());
+                out.push(crate::i18n::tr("tavola: le ruote non stanno nella larghezza (scartamento troppo grande)").to_string());
             }
             if self.wheel_above < 0.0 || self.wheel_above >= self.wheel_diameter {
-                out.push("tavola: la sporgenza delle ruote va da 0 al diametro".into());
+                out.push(crate::i18n::tr("tavola: la sporgenza delle ruote va da 0 al diametro").to_string());
             }
             if self.wheel_pitch < self.wheel_diameter + 30.0 {
-                out.push("tavola: il passo delle ruote deve superare il diametro".into());
+                out.push(crate::i18n::tr("tavola: il passo delle ruote deve superare il diametro").to_string());
             }
         }
         if self.glass && !(0.0 <= self.glass_from && self.glass_from < self.glass_to && self.glass_to <= self.height) {
-            out.push("fascia vetrata: deve stare tra il grigliato e il soffitto, dal basso verso l'alto".into());
+            out.push(crate::i18n::tr("fascia vetrata: deve stare tra il grigliato e il soffitto, dal basso verso l'alto").to_string());
         }
-        for (w, h, name) in [(self.entry_width, self.entry_height, "ingresso"), (self.exit_width, self.exit_height, "uscita")] {
+        for (w, h, name) in [(self.entry_width, self.entry_height, tn!("ingresso")), (self.exit_width, self.exit_height, tn!("uscita"))] {
             if w < 0.0 || h < 0.0 || w > self.width || h > self.height {
-                out.push(format!("apertura di {name}: deve stare nella testata (larghezza e altezza della cabina)"));
+                out.push(trf!("apertura di {name}: deve stare nella testata (larghezza e altezza della cabina)", name = crate::i18n::tr(name)));
             }
         }
         // Troppi pezzi: misure probabilmente sbagliate (es. metri invece di millimetri)
         let bars = (self.length / self.bar_pitch.max(1.0)) * (self.width / self.bar_pitch.max(1.0));
         if bars > 1.0e6 || self.length / self.module.max(1.0) > 1000.0 {
-            out.push("troppi elementi: controlla che le misure siano in millimetri".into());
+            out.push(crate::i18n::tr("troppi elementi: controlla che le misure siano in millimetri").to_string());
         }
         let label = &self.label;
         if !label.text.trim().is_empty() {
             if label.height.is_nan() || label.height <= 0.0 {
-                out.push("scritta: l'altezza delle lettere deve essere maggiore di zero".into());
+                out.push(crate::i18n::tr("scritta: l'altezza delle lettere deve essere maggiore di zero").to_string());
             }
             if label.depth.is_nan() || label.depth < 0.0 {
-                out.push("scritta: il rilievo non può essere negativo".into());
+                out.push(crate::i18n::tr("scritta: il rilievo non può essere negativo").to_string());
             }
             if !std::path::Path::new(&label.font).is_file() {
-                out.push(format!("scritta: font non trovato ({})", label.font));
+                out.push(trf!("scritta: font non trovato ({font})", font = label.font));
             }
         }
         out
@@ -868,8 +868,8 @@ fn label_shapes(p: &CabinParams, out: &mut String) -> Result<(), String> {
         let (normal, outside, inside, name) = match wall {
             Wall::Left => (Vec3::Y, Vec3::new(l / 2.0, outer, 0.0), Vec3::new(l / 2.0, half, 0.0), "sinistra"),
             Wall::Right => (-Vec3::Y, Vec3::new(l / 2.0, -outer, 0.0), Vec3::new(l / 2.0, -half, 0.0), "destra"),
-            Wall::Entry => (-Vec3::X, Vec3::new(-p.panel, 0.0, 0.0), Vec3::ZERO, "ingresso"),
-            Wall::Exit => (Vec3::X, Vec3::new(l + p.panel, 0.0, 0.0), Vec3::new(l, 0.0, 0.0), "uscita"),
+            Wall::Entry => (-Vec3::X, Vec3::new(-p.panel, 0.0, 0.0), Vec3::ZERO, tn!("ingresso")),
+            Wall::Exit => (Vec3::X, Vec3::new(l + p.panel, 0.0, 0.0), Vec3::new(l, 0.0, 0.0), tn!("uscita")),
         };
         let (w, origin) = if label.inside { (-normal, inside) } else { (normal, outside) };
         // Destra di chi guarda la faccia: (direzione dello sguardo) × alto

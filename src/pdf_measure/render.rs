@@ -129,8 +129,8 @@ pub fn bind_pdfium(dirs: &[PathBuf]) -> Result<Box<dyn PdfiumLibraryBindings>, S
         }
     }
     Pdfium::bind_to_system_library().map_err(|e| {
-        errors.push(format!("libreria di sistema: {e}"));
-        format!("pdfium.dll non trovata o non caricabile.\n{}", errors.join("\n"))
+        errors.push(trf!("libreria di sistema: {e}", e = e));
+        trf!("pdfium.dll non trovata o non caricabile.\n{errors}", errors = errors.join("\n"))
     })
 }
 
@@ -201,7 +201,7 @@ fn worker(
                         }
                         match &page {
                             Some((_, p)) => Some(run_job(p, &job)),
-                            None => Some(RenderEvent::Failed { job: job.clone(), error: "pagina non leggibile".into() }),
+                            None => Some(RenderEvent::Failed { job: job.clone(), error: crate::i18n::tr("pagina non leggibile").into() }),
                         }
                     }
                     _ => None, // documento già sostituito: lavoro superato
@@ -219,7 +219,7 @@ fn open_document<'a>(pdfium: &'a Pdfium, path: &Path) -> Result<(PdfDocument<'a>
     let d = pdfium.load_pdf_from_file(path, None).map_err(|e| e.to_string())?;
     let n = d.pages().len();
     if n == 0 {
-        return Err("Il PDF non contiene pagine.".into());
+        return Err(crate::i18n::tr("Il PDF non contiene pagine.").into());
     }
     // Dimensioni già ruotate secondo /Rotate, senza caricare (e analizzare) le pagine.
     let sizes = (0..n)
@@ -248,7 +248,7 @@ fn run_job(page: &PdfPage, job: &Job) -> RenderEvent {
         Job::Tile(key) => {
             let [x, y, w, h] = key.px_rect(size);
             if w == 0 || h == 0 {
-                return RenderEvent::Failed { job: job.clone(), error: "tile fuori pagina".into() };
+                return RenderEvent::Failed { job: job.clone(), error: crate::i18n::tr("tile fuori pagina").into() };
             }
             match render_region(page, key.scale(), x, y, w, h) {
                 Ok(image) => RenderEvent::Tile {

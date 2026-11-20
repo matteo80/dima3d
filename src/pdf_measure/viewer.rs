@@ -11,6 +11,7 @@ use egui::{
     StrokeKind, TextureHandle, TextureOptions, Ui, Vec2,
 };
 
+use crate::i18n::tr;
 use crate::pdf_measure::measure::{distance, format_mm, format_number, parse_number, Calibration, Measurement, PdfPoint};
 use crate::pdf_measure::render::{Job, RenderEvent, Renderer};
 use crate::pdf_measure::tiles::{self, TileKey};
@@ -130,7 +131,7 @@ impl PdfMeasure {
             measurement: None,
             prompt: None,
             error_message: None,
-            status: "Nessun PDF caricato".into(),
+            status: tr("Nessun PDF caricato").into(),
         }
     }
 
@@ -143,7 +144,7 @@ impl PdfMeasure {
         self.overview = None;
         self.fallback_scale = None;
         self.reset_all();
-        self.status = format!("Apertura di {}…", file_name(&path));
+        self.status = trf!("Apertura di {name}…", name = file_name(&path));
         self.renderer.open(id, path.clone());
         self.loading = Some((id, path));
     }
@@ -228,9 +229,9 @@ impl PdfMeasure {
                 }
                 RenderEvent::OpenFailed { doc, error } => {
                     if let Some((_, path)) = self.loading.take_if(|(id, _)| *id == doc) {
-                        self.status = "Nessun PDF caricato".into();
+                        self.status = tr("Nessun PDF caricato").into();
                         self.error_message =
-                            Some(format!("Impossibile aprire il PDF.\n{}\n\n{error}", path.display()));
+                            Some(trf!("Impossibile aprire il PDF.\n{path}\n\n{error}", path = path.display(), error = error));
                     }
                 }
                 RenderEvent::Overview { doc, page, image, .. } => {
@@ -246,7 +247,7 @@ impl PdfMeasure {
                         self.last_tile_ms = Some(millis);
                     }
                 }
-                RenderEvent::Failed { error, .. } => self.status = format!("Errore di rendering: {error}"),
+                RenderEvent::Failed { error, .. } => self.status = trf!("Errore di rendering: {error}", error = error),
             }
         }
         self.evict_tiles();
@@ -274,37 +275,37 @@ impl PdfMeasure {
 
         ui.add_space(4.0);
         ui.horizontal_wrapped(|ui| {
-            if ui.add_enabled(self.library_error.is_none(), egui::Button::new("Apri PDF")).clicked() {
+            if ui.add_enabled(self.library_error.is_none(), egui::Button::new(tr("Apri PDF"))).clicked() {
                 if let Some(path) = rfd::FileDialog::new()
-                    .set_title("Seleziona layout PDF")
-                    .add_filter("File PDF", &["pdf"])
-                    .add_filter("Tutti i file", &["*"])
+                    .set_title(tr("Seleziona layout PDF"))
+                    .add_filter(tr("File PDF"), &["pdf"])
+                    .add_filter(tr("Tutti i file"), &["*"])
                     .pick_file()
                 {
                     self.open(path);
                 }
             }
             ui.separator();
-            if ui.add_enabled(loaded && self.page > 0, egui::Button::new("◀ Pagina")).clicked() {
+            if ui.add_enabled(loaded && self.page > 0, egui::Button::new(tr("◀ Pagina"))).clicked() {
                 self.set_page(self.page - 1);
             }
-            if ui.add_enabled(loaded && self.page + 1 < page_count, egui::Button::new("Pagina ▶")).clicked() {
+            if ui.add_enabled(loaded && self.page + 1 < page_count, egui::Button::new(tr("Pagina ▶"))).clicked() {
                 self.set_page(self.page + 1);
             }
             ui.label(if loaded {
-                format!("Pagina: {} / {}", self.page + 1, page_count)
+                trf!("Pagina: {n} / {total}", n = self.page + 1, total = page_count)
             } else {
-                "Pagina: - / -".into()
+                tr("Pagina: - / -").into()
             });
             ui.separator();
             let center = self.canvas_size * 0.5;
-            if ui.add_enabled(loaded, egui::Button::new("Zoom −")).clicked() {
+            if ui.add_enabled(loaded, egui::Button::new(tr("Zoom −"))).clicked() {
                 self.zoom_at(center, 1.0 / ZOOM_STEP);
             }
-            if ui.add_enabled(loaded, egui::Button::new("Zoom +")).clicked() {
+            if ui.add_enabled(loaded, egui::Button::new(tr("Zoom +"))).clicked() {
                 self.zoom_at(center, ZOOM_STEP);
             }
-            if ui.add_enabled(loaded, egui::Button::new("Adatta")).clicked() {
+            if ui.add_enabled(loaded, egui::Button::new(tr("Adatta"))).clicked() {
                 self.fit_requested = true;
             }
             ui.label(format!("Zoom: {}%", (self.zoom * 100.0).round()));
@@ -312,33 +313,33 @@ impl PdfMeasure {
             extra(ui);
         });
         ui.horizontal_wrapped(|ui| {
-            if ui.add_enabled(loaded && !active, egui::Button::new("Calibra scala")).clicked() {
+            if ui.add_enabled(loaded && !active, egui::Button::new(tr("Calibra scala"))).clicked() {
                 self.start_calibration();
             }
-            if ui.add_enabled(calibrated && !active, egui::Button::new("Misura")).clicked() {
+            if ui.add_enabled(calibrated && !active, egui::Button::new(tr("Misura"))).clicked() {
                 self.start_measurement();
             }
             if ui
-                .add_enabled(self.measurement.is_some() && !active, egui::Button::new("Cancella misura"))
+                .add_enabled(self.measurement.is_some() && !active, egui::Button::new(tr("Cancella misura")))
                 .clicked()
             {
                 self.cancel_operation();
                 self.measurement = None;
             }
-            if ui.add_enabled(calibrated && !active, egui::Button::new("Reset scala")).clicked() {
+            if ui.add_enabled(calibrated && !active, egui::Button::new(tr("Reset scala"))).clicked() {
                 self.reset_all();
             }
-            if ui.add_enabled(active, egui::Button::new("Annulla selezione")).clicked() {
+            if ui.add_enabled(active, egui::Button::new(tr("Annulla selezione"))).clicked() {
                 self.cancel_operation();
             }
             ui.add_space(10.0);
             match self.calibration() {
                 Some(c) => ui.label(
-                    RichText::new(format!("Scala: calibrata ({:.6} mm/unità PDF)", c.mm_per_unit))
+                    RichText::new(trf!("Scala: calibrata ({scale} mm/unità PDF)", scale = format!("{:.6}", c.mm_per_unit)))
                         .color(COLOR_OK)
                         .strong(),
                 ),
-                None => ui.label(RichText::new("Scala: non calibrata").color(COLOR_WARN).strong()),
+                None => ui.label(RichText::new(tr("Scala: non calibrata")).color(COLOR_WARN).strong()),
             };
         });
         ui.add_space(2.0);
@@ -348,15 +349,15 @@ impl PdfMeasure {
 
     fn side_panel(&mut self, ui: &mut Ui) {
         ui.add_space(14.0);
-        ui.label(RichText::new("RISULTATO MISURA").size(15.0).strong());
+        ui.label(RichText::new(tr("RISULTATO MISURA")).size(15.0).strong());
         ui.add_space(8.0);
 
         let live = self.live_measure(ui.ctx());
         let shown = live.as_ref().or(self.measurement.as_ref());
         let rows = [
-            ("Delta X", shown.map(|m| m.dx_mm), false),
-            ("Delta Y", shown.map(|m| m.dy_mm), false),
-            ("Distanza", shown.map(|m| m.d_mm), true),
+            (tr("Delta X"), shown.map(|m| m.dx_mm), false),
+            (tr("Delta Y"), shown.map(|m| m.dy_mm), false),
+            (tr("Distanza"), shown.map(|m| m.d_mm), true),
         ];
         for (title, value, highlight) in rows {
             ui.label(RichText::new(title).weak());
@@ -386,8 +387,8 @@ impl PdfMeasure {
         ui.add_space(16.0);
         ui.label(
             RichText::new(
-                "Rotella: scroll verticale\nShift + rotella: orizzontale\nCtrl + rotella: zoom\n\
-                 Trascina (qualsiasi tasto): pan\nEsc: annulla selezione\nTrascina qui un PDF per aprirlo",
+                tr("Rotella: scroll verticale\nShift + rotella: orizzontale\nCtrl + rotella: zoom\n\
+                 Trascina (qualsiasi tasto): pan\nEsc: annulla selezione\nTrascina qui un PDF per aprirlo"),
             )
             .weak(),
         );
@@ -395,7 +396,7 @@ impl PdfMeasure {
         ui.with_layout(egui::Layout::bottom_up(egui::Align::Min), |ui| {
             ui.add_space(6.0);
             if let Some(ms) = self.last_tile_ms {
-                ui.label(RichText::new(format!("Ultima tile: {ms:.0} ms · in coda: {}", self.queued)).small().weak());
+                ui.label(RichText::new(trf!("Ultima tile: {ms} ms · in coda: {n}", ms = format!("{ms:.0}"), n = self.queued)).small().weak());
             }
             ui.add(egui::Label::new(RichText::new(&self.status).small().weak()).wrap());
         });
@@ -420,7 +421,7 @@ impl PdfMeasure {
             ui.label(RichText::new(value(shown.map(|m| m.dx_mm))).strong());
             ui.label(RichText::new("ΔY").weak());
             ui.label(RichText::new(value(shown.map(|m| m.dy_mm))).strong());
-            ui.label(RichText::new("Distanza").weak());
+            ui.label(RichText::new(tr("Distanza")).weak());
             let mut d = RichText::new(value(shown.map(|m| m.d_mm))).strong().size(16.0).color(COLOR_MEASURE);
             if live.is_some() {
                 d = d.italics();
@@ -433,16 +434,18 @@ impl PdfMeasure {
     }
 
     fn mode_text(&self) -> (String, Color32) {
-        let step = if self.picks.is_empty() { "il primo" } else { "il secondo" };
+        let first = self.picks.is_empty();
         match self.tool {
-            Tool::Calibrate => (format!("CALIBRAZIONE\nSeleziona {step} punto"), COLOR_CALIBRATION),
-            Tool::Measure => (format!("MISURA\nSeleziona {step} punto"), COLOR_MEASURE),
+            Tool::Calibrate if first => (tr("CALIBRAZIONE\nSeleziona il primo punto").into(), COLOR_CALIBRATION),
+            Tool::Calibrate => (tr("CALIBRAZIONE\nSeleziona il secondo punto").into(), COLOR_CALIBRATION),
+            Tool::Measure if first => (tr("MISURA\nSeleziona il primo punto").into(), COLOR_MEASURE),
+            Tool::Measure => (tr("MISURA\nSeleziona il secondo punto").into(), COLOR_MEASURE),
             Tool::None if self.measurement.is_some() => {
-                ("Misura completata\nPremi Misura per una nuova misura".into(), COLOR_OK)
+                (tr("Misura completata\nPremi Misura per una nuova misura").into(), COLOR_OK)
             }
-            Tool::None if self.calibration().is_some() => ("Scala calibrata\nPremi Misura per iniziare".into(), COLOR_OK),
+            Tool::None if self.calibration().is_some() => (tr("Scala calibrata\nPremi Misura per iniziare").into(), COLOR_OK),
             Tool::None => (
-                "Nessuna operazione\nPrima calibra la scala".into(),
+                tr("Nessuna operazione\nPrima calibra la scala").into(),
                 Color32::from_gray(160),
             ),
         }
@@ -460,11 +463,11 @@ impl PdfMeasure {
         let Some(doc) = &self.doc else {
             self.queued = 0;
             let message = if let Some(e) = &self.library_error {
-                format!("Libreria PDF non disponibile.\n\n{e}\n\nMetti pdfium.dll accanto all'eseguibile.")
+                trf!("Libreria PDF non disponibile.\n\n{e}\n\nMetti pdfium.dll accanto all'eseguibile.", e = e)
             } else if self.loading.is_some() {
-                "Apertura del PDF…".into()
+                tr("Apertura del PDF…").into()
             } else {
-                "Apri un PDF o trascinalo qui".into()
+                tr("Apri un PDF o trascinalo qui").into()
             };
             painter.text(rect.center(), Align2::CENTER_CENTER, message, FontId::proportional(16.0), Color32::from_gray(200));
             return;
@@ -634,10 +637,10 @@ impl PdfMeasure {
     fn draw_overlays(&self, painter: &egui::Painter, origin: Pos2, ctx: &egui::Context) {
         let to_screen = |p: PdfPoint| origin + vec2(p[0] as f32, p[1] as f32) * self.zoom;
         if let Some(c) = self.calibration() {
-            segment(painter, to_screen(c.p1), to_screen(c.p2), COLOR_CALIBRATION, "CALIBRAZIONE", true);
+            segment(painter, to_screen(c.p1), to_screen(c.p2), COLOR_CALIBRATION, tr("CALIBRAZIONE"), true);
         }
         if let Some(m) = &self.measurement {
-            let label = format!("MISURA  {}", format_mm(m.d_mm));
+            let label = format!("{}  {}", tr("MISURA"), format_mm(m.d_mm));
             segment(painter, to_screen(m.p1), to_screen(m.p2), COLOR_MEASURE, &label, false);
         }
         for (i, p) in self.picks.iter().enumerate() {
@@ -663,7 +666,7 @@ impl PdfMeasure {
 
     pub fn start_measurement(&mut self) {
         if self.calibration().is_none() {
-            self.error_message = Some("Prima calibra la scala con una distanza conosciuta.".into());
+            self.error_message = Some(tr("Prima calibra la scala con una distanza conosciuta.").into());
             return;
         }
         self.cancel_operation();
@@ -686,7 +689,7 @@ impl PdfMeasure {
             Tool::Calibrate => {
                 if distance(p1, p2) <= 0.0 {
                     self.picks.clear();
-                    self.error_message = Some("Calibrazione non valida: i due punti coincidono.".into());
+                    self.error_message = Some(tr("Calibrazione non valida: i due punti coincidono.").into());
                 } else {
                     self.prompt = Some(CalibrationPrompt { p1, p2, text: String::new(), error: None, focus: true });
                 }
@@ -706,12 +709,12 @@ impl PdfMeasure {
         let Some(prompt) = &mut self.prompt else { return };
         let mut confirm = false;
         let mut cancel = false;
-        egui::Window::new("Distanza reale")
+        egui::Window::new(tr("Distanza reale"))
             .collapsible(false)
             .resizable(false)
             .anchor(Align2::CENTER_CENTER, Vec2::ZERO)
             .show(ctx, |ui| {
-                ui.label("Inserisci la distanza reale tra i due punti [mm]:");
+                ui.label(tr("Inserisci la distanza reale tra i due punti [mm]:"));
                 let edit = ui.add(egui::TextEdit::singleline(&mut prompt.text).desired_width(220.0));
                 if prompt.focus {
                     edit.request_focus();
@@ -724,8 +727,8 @@ impl PdfMeasure {
                     ui.colored_label(COLOR_WARN, e);
                 }
                 ui.horizontal(|ui| {
-                    confirm |= ui.button("OK").clicked();
-                    cancel |= ui.button("Annulla").clicked();
+                    confirm |= ui.button(tr("OK")).clicked();
+                    cancel |= ui.button(tr("Annulla")).clicked();
                 });
                 cancel |= ui.input(|i| i.key_pressed(Key::Escape));
             });
@@ -742,7 +745,7 @@ impl PdfMeasure {
                     self.picks.clear();
                 }
                 None => {
-                    prompt.error = Some("Scrivi un numero maggiore di zero (es. 5000 o 5.000,5).".into());
+                    prompt.error = Some(tr("Scrivi un numero maggiore di zero (es. 5000 o 5.000,5).").into());
                     prompt.focus = true;
                 }
             }
@@ -752,14 +755,14 @@ impl PdfMeasure {
     fn error_window(&mut self, ctx: &egui::Context) {
         let Some(message) = &self.error_message else { return };
         let mut close = false;
-        egui::Window::new("Attenzione")
+        egui::Window::new(tr("Attenzione"))
             .collapsible(false)
             .resizable(false)
             .anchor(Align2::CENTER_CENTER, Vec2::ZERO)
             .show(ctx, |ui| {
                 ui.label(message);
                 ui.add_space(6.0);
-                close = ui.button("OK").clicked() || ui.input(|i| i.key_pressed(Key::Enter));
+                close = ui.button(tr("OK")).clicked() || ui.input(|i| i.key_pressed(Key::Enter));
             });
         if close {
             self.error_message = None;

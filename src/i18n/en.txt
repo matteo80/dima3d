@@ -965,3 +965,681 @@ sì
 = "New fixed point": click point F on the reference, then {per} points M on the object. Repeat for at least {fixed} fixed points and type the distances.
 «Stesso pezzo»: un solo oggetto da spostare e un solo riferimento
 = "Same part": only one object to move and only one reference
+
+# ── Albero della scena (ui/scene_tree.rs) ───────────────────────────────────
+
+Aggiunge un gruppo vuoto nel gruppo di questo pezzo: poi ci si trascinano dentro le righe
+= Adds an empty group in this part's group: then drag rows into it
+Aggiunge un gruppo vuoto qui dentro: poi ci si trascinano dentro le righe
+= Adds an empty group inside this one: then drag rows into it
+Cancella ricerca
+= Clear search
+Cerca per nome…
+= Search by name…
+Cerniera: {names}
+= Hinge: {names}
+Chiudi file
+= Close file
+Colore impostato manualmente
+= Color set manually
+Comprimi tutto
+= Collapse all
+Contiene la cerniera: {names}
+= Contains the hinge: {names}
+Converti in mesh…
+= Convert to mesh…
+Copia    Ctrl+C
+= Copy    Ctrl+C
+Espandi i macro-oggetti principali
+= Expand the top-level objects
+Esporta questo file…
+= Export this file…
+Incolla    Ctrl+V
+= Paste    Ctrl+V
+Inquadra
+= Frame
+Mostra    Spazio
+= Show    Space
+Nascondi    Spazio
+= Hide    Space
+Nessun elemento trovato
+= No items found
+Nessun file caricato.
+= No file loaded.
+Nuovo gruppo con la selezione
+= New group from selection
+Nuovo gruppo vuoto
+= New empty group
+Raccoglie gli elementi in un gruppo nuovo, nello stesso file. Si possono anche trascinare le righe dentro un gruppo.
+= Collects the items into a new group, in the same file. You can also drag rows into a group.
+Rinomina    F2
+= Rename    F2
+Scala applicata: {scale}
+= Applied scale: {scale}
+Scena
+= Scene
+Sposta {n} elementi in un gruppo
+= Move {n} items into a group
+Sposta «{name}» in un gruppo
+= Move "{name}" into a group
+Unità di misura
+= Units
+{n} elementi trovati
+= {n} items found
+{n} macro-oggetti principali
+= {n} top-level objects
+
+# ── Cabina, robot, programmi, riduzione, PDF ────────────────────────────────
+
+Arial grassetto
+= Arial Bold
+Calibri grassetto
+= Calibri Bold
+Parete destra
+= Right wall
+Parete sinistra
+= Left wall
+Pareti laterali
+= Side walls
+Segoe UI grassetto
+= Segoe UI Bold
+Testata di ingresso
+= Entry end wall
+Testata di uscita
+= Exit end wall
+Testate di ingresso e uscita
+= Entry and exit end walls
+Tutte le pareti
+= All walls
+altezza
+= height
+apertura di {name}: deve stare nella testata (larghezza e altezza della cabina)
+= {name} opening: must fit in the end wall (booth width and height)
+canalina: deve stare tra le pareti
+= floor channel: must fit between the walls
+canalina: il bordo non può essere negativo
+= floor channel: the edge cannot be negative
+canalina: larghezza, profondità e spessore devono essere maggiori di zero (larghezza più di due spessori)
+= floor channel: width, depth and thickness must be greater than zero (width more than two thicknesses)
+diametro delle ruote
+= wheel diameter
+fascia vetrata: deve stare tra il grigliato e il soffitto, dal basso verso l'alto
+= glazing band: must lie between the grating and the ceiling, from bottom to top
+fondo sotto il grigliato: non può essere negativo
+= bottom below the grating: cannot be negative
+ingresso
+= entry
+larghezza
+= width
+larghezza delle barre
+= bar width
+lunghezza
+= length
+moduli del grigliato
+= grating modules
+montanti
+= posts
+passo dei montanti
+= post spacing
+passo delle barre
+= bar pitch
+passo delle gambe
+= leg pitch
+passo delle ruote
+= wheel pitch
+quota del grigliato: da 0 (a livello) in giù, sopra il fondo della cabina
+= grating height: from 0 (level) downward, above the booth bottom
+scartamento
+= gauge
+scritta: font non trovato ({font})
+= lettering: font not found ({font})
+scritta: il rilievo non può essere negativo
+= lettering: the relief cannot be negative
+scritta: l'altezza delle lettere deve essere maggiore di zero
+= lettering: the letter height must be greater than zero
+spessore dei pannelli
+= panel thickness
+spessore delle barre
+= bar thickness
+tavola: il passo delle ruote deve superare il diametro
+= table: the wheel pitch must exceed the diameter
+tavola: la sporgenza delle ruote va da 0 al diametro
+= table: the wheel protrusion goes from 0 to the diameter
+tavola: le ruote non stanno nella larghezza (scartamento troppo grande)
+= table: the wheels do not fit in the width (gauge too large)
+tavola: più larga della cabina
+= table: wider than the booth
+tavola: {name} deve essere maggiore di zero
+= table: {name} must be greater than zero
+troppi elementi: controlla che le misure siano in millimetri
+= too many items: check that the dimensions are in millimeters
+uscita
+= exit
+{name}: deve essere maggiore di zero
+= {name}: must be greater than zero
+Aggiorna la cabina
+= Update the booth
+Aggiunge la cabina alla scena come file «Cabina»
+= Adds the booth to the scene as the file "Booth"
+Altezza
+= Height
+Altezza della base delle lettere dal grigliato
+= Height of the letters' baseline above the grating
+Altezza delle maiuscole
+= Height of the capital letters
+Altezza lettere
+= Letter height
+Altro file…
+= Other file…
+Apertura nella testata di ingresso, centrata sull'asse
+= Opening in the entry end wall, centered on the axis
+Apertura nella testata di uscita, centrata sull'asse
+= Opening in the exit end wall, centered on the axis
+Aperture
+= Openings
+Applica centro
+= Apply center
+Asse della canalina rispetto all'asse della cabina
+= Floor channel axis relative to the booth axis
+Bordo
+= Edge
+Cabina su cui lavorano misure, «Aggiorna» e centro: scegliendola le misure diventano le sue (anche selezionandola nell'albero)
+= Booth that dimensions, "Update" and center work on: choosing it loads its dimensions (also when selected in the tree)
+Canale lungo tutta la cabina: sul grigliato, o sul piano della tavola se ci passa dentro
+= Channel along the whole booth: on the grating, or on the table plane if it runs inside it
+Canalina
+= Floor channel
+Canalina nel pavimento
+= Floor channel
+Centro a X 0 Y 0 Z 0 (inizio della cabina) e cabina dove è stata costruita
+= Center at X 0 Y 0 Z 0 (start of the booth) and booth where it was built
+Centro adesso nella cabina: X {x} Y {y} Z {z}
+= Center now in the booth: X {x} Y {y} Z {z}
+Centro cabina
+= Booth center
+Centro non applicato
+= Center not applied
+Costruisci la cabina
+= Build the booth
+Costruisci la cabina per spostarla sul centro.
+= Build the booth to move it onto the center.
+Da che parte del piano del grigliato stanno le barre
+= Which side of the grating plane the bars are on
+Dal centro della parete, verso destra per chi legge (0 = centrata)
+= From the center of the wall, to the right as read (0 = centered)
+Dal grigliato
+= From the grating
+Dal grigliato al soffitto
+= From the grating to the ceiling
+Dal pavimento al fondo
+= From the floor to the bottom
+Diametro delle ruote
+= Wheel diameter
+Diametro ruote
+= Wheel diameter
+Dimensioni
+= Dimensions
+Distanza tra i montanti delle pareti laterali
+= Distance between the posts of the side walls
+Distanza tra le barre, nei due versi
+= Distance between the bars, both ways
+Distanza tra le due file di ruote (come i pattini dello skid)
+= Distance between the two rows of wheels (like the skid runners)
+Distanza tra le gambe del telaio
+= Distance between the frame legs
+Distanza tra le ruote lungo la cabina
+= Distance between the wheels along the booth
+Esterno
+= Outside
+Fascia vetrata
+= Glazing band
+Fin dove scendono le pareti sotto il grigliato
+= How far the walls go down below the grating
+Fondo sotto il grigliato
+= Bottom below the grating
+Font
+= Font
+Font (TTF, OTF)
+= Font (TTF, OTF)
+Grigliato
+= Grating
+Grigliato ribassato
+= Lowered grating
+Grigliato sotto il piano della tavola, per far lavorare il robot sulle parti basse
+= Grating below the table plane, so the robot can work on the low parts
+Ingombro della tavola (carter), centrata sull'asse
+= Width of the table (covers), centered on the axis
+Ingresso: altezza
+= Entry: height
+Ingresso: larghezza
+= Entry: width
+Interno
+= Inside
+Larghezza
+= Width
+Larghezza barre
+= Bar width
+Larghezza dei moduli del grigliato
+= Width of the grating modules
+Larghezza delle barre piatte
+= Width of the flat bars
+Larghezza esterna
+= Outer width
+Larghezza interna tra le pareti (Y)
+= Inner width between the walls (Y)
+Lato
+= Side
+Lato della sezione quadrata dei montanti
+= Side of the square section of the posts
+Le barre stanno sopra il piano del grigliato: il piano è il fondo delle barre
+= The bars are above the grating plane: the plane is the bottom of the bars
+Le barre stanno sotto il piano del grigliato: il piano è la loro faccia superiore
+= The bars are below the grating plane: the plane is their top face
+Lunghezza
+= Length
+Lunghezza degli assi
+= Length of the axes
+Lunghezza dei moduli del grigliato
+= Length of the grating modules
+Lunghezza interna, dall'ingresso all'uscita (X)
+= Inner length, from entry to exit (X)
+Misura del simbolo
+= Symbol size
+Misure predefinite
+= Default dimensions
+Misure tipiche di una cabina (la scritta resta)
+= Typical booth dimensions (the lettering stays)
+Moduli lungo X
+= Modules along X
+Moduli lungo Y
+= Modules along Y
+Montanti
+= Posts
+Nuova cabina
+= New booth
+Parete
+= Wall
+Pareti
+= Walls
+Passo dei montanti
+= Post spacing
+Passo delle barre
+= Bar pitch
+Passo gambe
+= Leg pitch
+Passo ruote
+= Wheel pitch
+Piano del grigliato rispetto allo zero della cabina (piano della tavola): negativa = più in basso
+= Grating plane relative to the booth zero (table plane): negative = lower
+Posizione Y
+= Y position
+Profondità
+= Depth
+Punto della cabina (dall'ingresso, sull'asse, al piano del grigliato) che diventa lo zero della scena e delle coordinate dei robot. «Applica centro» sposta la cabina, il centro resta lì.\nSi vede con «Centro» sopra la vista.
+= Point of the booth (from the entry, on the axis, at the grating plane) that becomes the zero of the scene and of the robot coordinates. "Apply center" moves the booth, the center stays put.\nShown with "Center" above the view.
+Quanto le ruote escono sopra il piano della tavola
+= How far the wheels stick out above the table plane
+Quanto le sponde escono sopra il pavimento
+= How far the side plates stick out above the floor
+Quota
+= Height
+Quota grigliato
+= Grating height
+Quota inferiore della fascia vetrata, dal grigliato
+= Lower height of the glazing band, from the grating
+Quota superiore della fascia vetrata, dal grigliato
+= Upper height of the glazing band, from the grating
+Reset
+= Reset
+Rilievo
+= Relief
+Rulliera dello skid per tutta la lunghezza: ruote che escono dal piano della tavola (Z = 0), carter con le asole, grigliato in mezzo, telaio con le gambe fino al fondo
+= Skid roller conveyor along the whole length: wheels sticking out of the table plane (Z = 0), covers with slots, grating in the middle, frame with legs down to the bottom
+Scartamento ruote
+= Wheel gauge
+Scritta
+= Lettering
+Sfera gialla con gli assi X (rosso), Y (verde) e Z (blu), nel file «Centro cabina» («Centro e robot» con i robot): si vede, si seleziona e si esporta. Si applica con «Applica centro»
+= Yellow sphere with the X (red), Y (green) and Z (blue) axes, in the file "Booth center" ("Center and robots" with the robots): visible, selectable and exported. Applied with "Apply center"
+Simbolo nel centro (si esporta)
+= Symbol at the center (exported)
+Sostituisce la cabina costruita prima con queste misure
+= Replaces the booth built before with these dimensions
+Spessore
+= Thickness
+Spessore barre
+= Bar thickness
+Spessore delle barre piatte (il grigliato ne ha due strati)
+= Thickness of the flat bars (the grating has two layers)
+Spessore delle lamiere
+= Sheet metal thickness
+Spessore delle lettere, fuori dalla parete
+= Thickness of the letters, out of the wall
+Spessore di pannelli, testate e soffitto
+= Thickness of panels, end walls and ceiling
+Spessore pannelli
+= Panel thickness
+Spessore verso
+= Thickness direction
+Sporgenza ruote
+= Wheel protrusion
+Sposta la cabina di meno il centro (dalla posizione in cui è stata costruita, come l'offset degli script): il centro e i robot restano nello zero della scena, sul punto scelto della cabina. Premuto di nuovo non si somma (Ctrl+Z per tornare indietro). I robot si cambiano nella finestra Robot
+= Moves the booth by minus the center (from the position where it was built, like the script offset): the center and the robots stay at the scene zero, on the chosen point of the booth. Pressed again it does not add up (Ctrl+Z to go back). Robots are changed in the Robot window
+Tavola sull'asse della cabina
+= Table on the booth axis
+Tavola trasportatore
+= Conveyor table
+Testo
+= Text
+Uscita: altezza
+= Exit: height
+Uscita: larghezza
+= Exit: width
+Vetrata a
+= Glazing to
+Vetrata da
+= Glazing from
+Zero all'ingresso della cabina, sull'asse, al piano del grigliato (della tavola, se il grigliato è ribassato). X verso l'uscita, Z in alto.
+= Zero at the booth entry, on the axis, at the grating plane (of the table, if the grating is lowered). X toward the exit, Z up.
+es. il nome della cabina
+= e.g. the booth name
+«Costruisci» aggiunge un'altra cabina senza toccare quelle che ci sono
+= "Build" adds another booth without touching the existing ones
+La finestra copre la vista e i pannelli
+= The window covers the view and the panels
+Torna una finestra normale, spostabile e agganciabile ai bordi
+= Back to a normal window, movable and dockable to the edges
+Tutto schermo
+= Full screen
+ (gli altri sono in World, Axis o senza punto)
+=  (the others are in World, Axis or have no point)
+Annulla  [Ctrl+Z]
+= Undo  [Ctrl+Z]
+Apri un programma del robot
+= Open a robot program
+Apri un programma del robot per vedere la traiettoria. I punti in coordinate dell'oggetto si disegnano nella scena così come sono: metti la matematica con il riferimento oggetto nello zero.
+= Open a robot program to see the path. Points in object coordinates are drawn in the scene as they are: put the CAD model with the object reference at the zero.
+Apri…
+= Open…
+Chiudi il programma
+= Close the program
+Chiudi senza salvare
+= Close without saving
+Commenta riga
+= Comment line
+Copia le righe scelte  [Ctrl+C]
+= Copy the selected lines  [Ctrl+C]
+Elimina le righe scelte  [Canc]
+= Delete the selected lines  [Del]
+Incolla
+= Paste
+Incolla sotto la riga scelta  [Ctrl+V, anche testo copiato da un editor]
+= Paste below the selected line  [Ctrl+V, also text copied from an editor]
+Inverte l'ordine delle righe scelte (il primo punto diventa l'ultimo)
+= Reverses the order of the selected lines (the first point becomes the last)
+Inverti sequenza
+= Reverse sequence
+Linea dei movimenti LIN (piena) e PTP (tratteggiata), con i punti; le righe scelte mostrano il nome del punto. I programmi non attivi si vedono più tenui
+= Line of the LIN (solid) and PTP (dashed) motions, with the points; selected lines show the point name. Inactive programs look fainter
+Logica
+= Logic
+Modifica riga {n}
+= Edit line {n}
+Modifica…
+= Edit…
+Modifiche non salvate:
+= Unsaved changes:
+Mostra la traiettoria
+= Show the path
+Nascondi la traiettoria
+= Hide the path
+OK
+= OK
+Programma (.{ext})
+= Program (.{ext})
+Programma .TIS o .tip: i punti si leggono dal .tid con lo stesso nome e dai .tid globali della cartella (che iniziano con _). Si possono sceglierne più di uno: si aggiungono a quelli aperti
+= .TIS or .tip program: points are read from the .tid with the same name and from the global .tid files in the folder (starting with _). You can pick more than one: they are added to the open ones
+Programma non aperto: {e}
+= Program not opened: {e}
+Programma non salvato: {e}
+= Program not saved: {e}
+Programma salvato in {path}
+= Program saved to {path}
+Programma salvato in {path}, punti copiati in {data}
+= Program saved to {path}, points copied to {data}
+Programma {path}: {n} movimenti, {drawn} con le coordinate dell'oggetto
+= Program {path}: {n} motions, {drawn} with object coordinates
+Programmi del robot (TIS, TIP)
+= Robot programs (TIS, TIP)
+Punti
+= Points
+Punti con le coordinate
+= Points with coordinates
+Righe del programma
+= Program lines
+Ripeti  [Ctrl+Y]
+= Redo  [Ctrl+Y]
+Salva con nome…
+= Save as…
+Salva il programma con nome
+= Save the program as
+Salva in un altro file: il file dei punti si copia accanto con lo stesso nome
+= Save to another file: the points file is copied next to it with the same name
+Salva sopra il programma  [Ctrl+S con il mouse sulla finestra]
+= Save over the program  [Ctrl+S with the mouse on the window]
+Taglia
+= Cut
+Taglia le righe scelte  [Ctrl+X]
+= Cut the selected lines  [Ctrl+X]
+Togli commento
+= Uncomment
+Traiettorie nella vista
+= Paths in the view
+manca
+= missing
+{n} movimenti, {drawn} nella vista
+= {n} motions, {drawn} in the view
+ (unità del file)
+=  (file units)
+1 milione
+= 1 million
+Blocca i bordi aperti
+= Lock open edges
+Calcola anteprima
+= Compute preview
+Con le normali gli spigoli vivi sono esattamente quelli calcolati qui. Senza, il visualizzatore le ricalcola (creaseAngle 0,5) e il file è circa la metà.
+= With normals, sharp edges are exactly the ones computed here. Without them, the viewer recomputes them (creaseAngle 0.5) and the file is about half the size.
+Contorni delle lamiere, fori e confini tra pezzi restano identici. Senza, si spostano al più dell'errore massimo e i pezzi si riducono molto di più.
+= Sheet outlines, holes and boundaries between parts stay identical. Without it, they move by up to the maximum error and parts are reduced much more.
+Di quanto la superficie ridotta può scostarsi da quella originale: i piani perdono molte facce, i raccordi poche
+= How far the reduced surface may deviate from the original: flat areas lose many faces, fillets few
+Errore massimo
+= Maximum error
+Esporta…
+= Export…
+Facce
+= Faces
+Facce ora
+= Faces now
+Facce originali dei pezzi scelti
+= Original faces of the chosen parts
+File previsto
+= Expected file
+La scena è cambiata dopo il calcolo: la dimensione prevista è indicativa.
+= The scene changed after the computation: the expected size is approximate.
+Nessuna faccia da togliere con questo obiettivo: la geometria resta quella originale.
+= No faces to remove with this target: the geometry stays the original.
+Niente rientri e numeri con la precisione che serve (un milionesimo dell'ingombro). Senza, i pezzi non ridotti copiano il testo del file originale.
+= No indentation and numbers with just the precision needed (one millionth of the size). Without it, parts not reduced copy the text of the original file.
+Normali e dimensione del file
+= Normals and file size
+Numero di facce
+= Number of faces
+Obiettivo
+= Target
+Originale
+= Original
+Pezzi
+= Parts
+Pezzi ridotti
+= Reduced parts
+Ricerca dell'errore che dà le facce richieste
+= Searching for the error that gives the requested faces
+Riduce i pezzi partendo sempre dalla geometria originale e mostra il risultato nella vista
+= Reduces the parts always starting from the original geometry and shows the result in the view
+Riduci facce
+= Reduce faces
+Riduzione delle facce
+= Reducing faces
+Rimette la geometria originale di tutti i pezzi ridotti
+= Restores the original geometry of all reduced parts
+STL binario {size}
+= Binary STL {size}
+Salva le parti visibili, con le facce ridotte, in un nuovo file WRL, STL o IV
+= Saves the visible parts, with reduced faces, to a new WRL, STL or IV file
+Scrivi le normali nel file
+= Write normals to the file
+Selezione
+= Selection
+Trascina, oppure fai doppio clic e scrivi il numero
+= Drag, or double-click and type the number
+Tutti i visibili
+= All visible
+WRL {a} senza normali  ·  {b} con normali
+= WRL {a} without normals  ·  {b} with normals
+{v} (unità del file)
+= {v} (file units)
+Il PDF non contiene pagine.
+= The PDF has no pages.
+libreria di sistema: {e}
+= system library: {e}
+pagina non leggibile
+= unreadable page
+pdfium.dll non trovata o non caricabile.\n{errors}
+= pdfium.dll not found or cannot be loaded.\n{errors}
+tile fuori pagina
+= tile outside the page
+centro cabina: coordinate non valide
+= booth center: invalid coordinates
+simbolo del centro: la misura deve essere maggiore di zero
+= center symbol: the size must be greater than zero
+{name}: coordinate non valide
+= {name}: invalid coordinates
+{name}: il pannello deve avere misure maggiori di zero
+= {name}: the panel must have dimensions greater than zero
+Aggiungi robot
+= Add robot
+Applica alla scena
+= Apply to scene
+Coordinate dal centro cabina ({cx} {cy} {cz}), come nei CONST BASE: A attorno a X, B a Y, C a Z. Il centro si cambia nella finestra Cabina.
+= Coordinates from the booth center ({cx} {cy} {cz}), as in CONST BASE: A around X, B around Y, C around Z. The center is changed in the Booth window.
+Incolla CONST BASE … = X Y Z A B C
+= Paste CONST BASE … = X Y Z A B C
+Lastra sotto il robot a Z 0 del centro, girata come il robot: per controllare l'allineamento con la simulazione
+= Plate under the robot at Z 0 of the center, rotated like the robot: to check the alignment with the simulation
+Lungo X del robot
+= Along the robot X
+Lungo Y del robot
+= Along the robot Y
+Mette nella scena i robot (e il simbolo del centro) come file «Centro e robot», al posto di quelli di prima
+= Puts the robots (and the center symbol) in the scene as the file "Center and robots", replacing the previous ones
+Misure
+= Dimensions
+Modifiche non applicate
+= Changes not applied
+Nessun robot: «Aggiungi robot» per inserirne uno.
+= No robots: "Add robot" to insert one.
+Nome del robot
+= Robot name
+Pannello sotto, a quota 0
+= Plate below, at height 0
+Togli questo robot
+= Remove this robot
+Togli tutti
+= Remove all
+Adatta
+= Fit
+Annulla selezione
+= Clear selection
+Apertura del PDF…
+= Opening the PDF…
+Apertura di {name}…
+= Opening {name}…
+Apri PDF
+= Open PDF
+Apri un PDF o trascinalo qui
+= Open a PDF or drag it here
+Attenzione
+= Warning
+CALIBRAZIONE
+= CALIBRATION
+CALIBRAZIONE\nSeleziona il primo punto
+= CALIBRATION\nSelect the first point
+CALIBRAZIONE\nSeleziona il secondo punto
+= CALIBRATION\nSelect the second point
+Calibra scala
+= Calibrate scale
+Calibrazione non valida: i due punti coincidono.
+= Invalid calibration: the two points coincide.
+Cancella misura
+= Clear measurement
+Delta X
+= Delta X
+Delta Y
+= Delta Y
+Distanza reale
+= Real distance
+Errore di rendering: {error}
+= Rendering error: {error}
+File PDF
+= PDF file
+Impossibile aprire il PDF.\n{path}\n\n{error}
+= Cannot open the PDF.\n{path}\n\n{error}
+Inserisci la distanza reale tra i due punti [mm]:
+= Enter the real distance between the two points [mm]:
+Libreria PDF non disponibile.\n\n{e}\n\nMetti pdfium.dll accanto all'eseguibile.
+= PDF library not available.\n\n{e}\n\nPut pdfium.dll next to the executable.
+MISURA
+= MEASUREMENT
+MISURA\nSeleziona il primo punto
+= MEASUREMENT\nSelect the first point
+MISURA\nSeleziona il secondo punto
+= MEASUREMENT\nSelect the second point
+Misura completata\nPremi Misura per una nuova misura
+= Measurement done\nPress "Measurement" for a new one
+Nessun PDF caricato
+= No PDF loaded
+Nessuna operazione\nPrima calibra la scala
+= No operation\nCalibrate the scale first
+Pagina ▶
+= Page ▶
+Pagina: - / -
+= Page: - / -
+Pagina: {n} / {total}
+= Page: {n} / {total}
+Prima calibra la scala con una distanza conosciuta.
+= Calibrate the scale first with a known distance.
+RISULTATO MISURA
+= MEASUREMENT RESULT
+Reset scala
+= Reset scale
+Rotella: scroll verticale\nShift + rotella: orizzontale\nCtrl + rotella: zoom\nTrascina (qualsiasi tasto): pan\nEsc: annulla selezione\nTrascina qui un PDF per aprirlo
+= Wheel: vertical scroll\nShift + wheel: horizontal\nCtrl + wheel: zoom\nDrag (any button): pan\nEsc: cancel selection\nDrag a PDF here to open it
+Scala calibrata\nPremi Misura per iniziare
+= Scale calibrated\nPress "Measurement" to start
+Scala: calibrata ({scale} mm/unità PDF)
+= Scale: calibrated ({scale} mm/PDF unit)
+Scala: non calibrata
+= Scale: not calibrated
+Scrivi un numero maggiore di zero (es. 5000 o 5.000,5).
+= Enter a number greater than zero (e.g. 5000 or 5.000,5).
+Seleziona layout PDF
+= Select PDF layout
+Ultima tile: {ms} ms · in coda: {n}
+= Last tile: {ms} ms · queued: {n}
+Zoom +
+= Zoom +
+Zoom −
+= Zoom −
+◀ Pagina
+= ◀ Page

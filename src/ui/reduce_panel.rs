@@ -2,6 +2,7 @@
 //! export. Durante il calcolo un riquadro di avanzamento blocca i comandi.
 
 use super::theme::{icon, icon_text};
+use crate::i18n::tr;
 use crate::app::GestoreApp;
 use crate::reduction::{group_thousands, megabytes, unit_to_mm, Mode};
 
@@ -19,7 +20,7 @@ fn suggested_triangles(current: u64) -> u64 {
 fn error_text(error: f32, to_mm: Option<f32>) -> String {
     match to_mm {
         Some(f) => format!("{} mm", trim(error * f)),
-        None => format!("{} (unità del file)", trim(error)),
+        None => trf!("{v} (unità del file)", v = trim(error)),
     }
 }
 
@@ -40,10 +41,10 @@ pub fn draw(ctx: &egui::Context, app: &mut GestoreApp, pass: super::dock::Pass) 
             ui.set_width(380.0);
             ui.horizontal(|ui| {
                 ui.spinner();
-                ui.heading("Riduzione delle facce");
+                ui.heading(tr("Riduzione delle facce"));
             });
             ui.add_space(6.0);
-            let step = if progress < 0.9 { "Ricerca dell'errore che dà le facce richieste" } else { "Normali e dimensione del file" };
+            let step = if progress < 0.9 { tr("Ricerca dell'errore che dà le facce richieste") } else { tr("Normali e dimensione del file") };
             ui.add(egui::ProgressBar::new(progress).text(format!("{step}  ·  {seconds:.0} s")));
         });
         return;
@@ -86,7 +87,7 @@ pub fn draw(ctx: &egui::Context, app: &mut GestoreApp, pass: super::dock::Pass) 
 
     let window = super::dock::Dockable {
         id: "riduci_facce",
-        title: format!("{}  Riduci facce", icon::TRIANGLE_DASHED),
+        title: format!("{}  {}", icon::TRIANGLE_DASHED, tr("Riduci facce")),
         state: &mut dock,
         open: &mut open,
         default_width: 390.0,
@@ -98,27 +99,27 @@ pub fn draw(ctx: &egui::Context, app: &mut GestoreApp, pass: super::dock::Pass) 
     super::dock::show(ctx, pass, window, |ui| {
             ui.set_min_width(370.0);
             egui::Grid::new("riduci_parametri").num_columns(2).spacing([12.0, 8.0]).show(ui, |ui| {
-                ui.label("Pezzi");
+                ui.label(tr("Pezzi"));
                 ui.horizontal(|ui| {
-                    ui.radio_value(&mut panel.selection_only, false, "Tutti i visibili");
+                    ui.radio_value(&mut panel.selection_only, false, tr("Tutti i visibili"));
                     ui.add_enabled_ui(has_selection, |ui| {
-                        ui.radio_value(&mut panel.selection_only, true, "Selezione")
-                            .on_disabled_hover_text("Seleziona prima uno o più elementi nell'albero o nella vista");
+                        ui.radio_value(&mut panel.selection_only, true, tr("Selezione"))
+                            .on_disabled_hover_text(tr("Seleziona prima uno o più elementi nell'albero o nella vista"));
                     });
                 });
                 ui.end_row();
 
-                ui.label("Facce ora");
+                ui.label(tr("Facce ora"));
                 ui.label(egui::RichText::new(group_thousands(current)).strong())
-                    .on_hover_text("Facce originali dei pezzi scelti");
+                    .on_hover_text(tr("Facce originali dei pezzi scelti"));
                 ui.end_row();
 
-                ui.label("Obiettivo");
+                ui.label(tr("Obiettivo"));
                 ui.horizontal(|ui| {
-                    ui.selectable_value(&mut panel.mode, Mode::Triangles, "Numero di facce");
-                    ui.selectable_value(&mut panel.mode, Mode::MaxError, "Errore massimo").on_hover_text(
-                        "Di quanto la superficie ridotta può scostarsi da quella originale: \
-                         i piani perdono molte facce, i raccordi poche",
+                    ui.selectable_value(&mut panel.mode, Mode::Triangles, tr("Numero di facce"));
+                    ui.selectable_value(&mut panel.mode, Mode::MaxError, tr("Errore massimo")).on_hover_text(
+                        tr("Di quanto la superficie ridotta può scostarsi da quella originale: \
+                         i piani perdono molte facce, i raccordi poche"),
                     );
                 });
                 ui.end_row();
@@ -134,14 +135,14 @@ pub fn draw(ctx: &egui::Context, app: &mut GestoreApp, pass: super::dock::Pass) 
                                     .custom_formatter(|v, _| group_thousands(v as u64))
                                     .custom_parser(|s| s.replace(['.', ' ', '\''], "").parse::<f64>().ok()),
                             )
-                            .on_hover_text("Trascina, oppure fai doppio clic e scrivi il numero");
+                            .on_hover_text(tr("Trascina, oppure fai doppio clic e scrivi il numero"));
                             ui.horizontal(|ui| {
                                 for (label, fraction) in [("50%", 0.5), ("25%", 0.25), ("10%", 0.1)] {
                                     if ui.small_button(label).clicked() {
                                         panel.triangles = ((current as f64 * fraction) as u64).max(1);
                                     }
                                 }
-                                if current > 1_000_000 && ui.small_button("1 milione").clicked() {
+                                if current > 1_000_000 && ui.small_button(tr("1 milione")).clicked() {
                                     panel.triangles = 1_000_000;
                                 }
                             });
@@ -150,7 +151,7 @@ pub fn draw(ctx: &egui::Context, app: &mut GestoreApp, pass: super::dock::Pass) 
                     Mode::MaxError => {
                         let factor = to_mm.unwrap_or(1.0);
                         let mut shown = panel.max_error * factor;
-                        let unit = if to_mm.is_some() { " mm" } else { " (unità del file)" };
+                        let unit = if to_mm.is_some() { " mm" } else { tr(" (unità del file)") };
                         let response = ui.add(
                             egui::DragValue::new(&mut shown)
                                 .range(0.0001..=1000.0)
@@ -165,23 +166,23 @@ pub fn draw(ctx: &egui::Context, app: &mut GestoreApp, pass: super::dock::Pass) 
                 }
                 ui.end_row();
             });
-            ui.checkbox(&mut panel.lock_border, "Blocca i bordi aperti").on_hover_text(
-                "Contorni delle lamiere, fori e confini tra pezzi restano identici. Senza, si spostano al più \
-                 dell'errore massimo e i pezzi si riducono molto di più.",
+            ui.checkbox(&mut panel.lock_border, tr("Blocca i bordi aperti")).on_hover_text(
+                tr("Contorni delle lamiere, fori e confini tra pezzi restano identici. Senza, si spostano al più \
+                 dell'errore massimo e i pezzi si riducono molto di più."),
             );
 
             ui.add_space(6.0);
             ui.horizontal(|ui| {
                 if ui
-                    .button(icon_text(ui, icon::TRIANGLE_DASHED, "Calcola anteprima"))
-                    .on_hover_text("Riduce i pezzi partendo sempre dalla geometria originale e mostra il risultato nella vista")
+                    .button(icon_text(ui, icon::TRIANGLE_DASHED, tr("Calcola anteprima")))
+                    .on_hover_text(tr("Riduce i pezzi partendo sempre dalla geometria originale e mostra il risultato nella vista"))
                     .clicked()
                 {
                     start = true;
                 }
                 if ui
-                    .add_enabled(active, egui::Button::new(icon_text(ui, icon::ARROW_COUNTER_CLOCKWISE, "Originale")))
-                    .on_hover_text("Rimette la geometria originale di tutti i pezzi ridotti")
+                    .add_enabled(active, egui::Button::new(icon_text(ui, icon::ARROW_COUNTER_CLOCKWISE, tr("Originale"))))
+                    .on_hover_text(tr("Rimette la geometria originale di tutti i pezzi ridotti"))
                     .clicked()
                 {
                     restore = true;
@@ -191,40 +192,40 @@ pub fn draw(ctx: &egui::Context, app: &mut GestoreApp, pass: super::dock::Pass) 
             if let Some(s) = summary.as_ref() {
                 ui.separator();
                 if s.pieces == 0 {
-                    ui.label("Nessuna faccia da togliere con questo obiettivo: la geometria resta quella originale.");
+                    ui.label(tr("Nessuna faccia da togliere con questo obiettivo: la geometria resta quella originale."));
                 }
                 let percent = if s.before > 0 { s.after as f64 * 100.0 / s.before as f64 } else { 100.0 };
                 egui::Grid::new("riduci_risultato").num_columns(2).spacing([12.0, 4.0]).show(ui, |ui| {
-                    ui.label("Facce");
+                    ui.label(tr("Facce"));
                     ui.label(format!(
                         "{} → {}  ({percent:.0}%)",
                         group_thousands(s.before),
                         group_thousands(s.after)
                     ));
                     ui.end_row();
-                    ui.label("Pezzi ridotti");
+                    ui.label(tr("Pezzi ridotti"));
                     ui.label(s.pieces.to_string());
                     ui.end_row();
-                    ui.label("Errore massimo");
+                    ui.label(tr("Errore massimo"));
                     ui.label(error_text(s.max_error, to_mm));
                     ui.end_row();
-                    ui.label("File previsto");
+                    ui.label(tr("File previsto"));
                     ui.label(
-                        egui::RichText::new(format!(
-                            "WRL {} senza normali  ·  {} con normali",
-                            megabytes(s.size_without_normals),
-                            megabytes(s.size_with_normals)
+                        egui::RichText::new(trf!(
+                            "WRL {a} senza normali  ·  {b} con normali",
+                            a = megabytes(s.size_without_normals),
+                            b = megabytes(s.size_with_normals)
                         ))
                         .strong(),
                     );
                     ui.end_row();
                     ui.label("");
-                    ui.label(format!("STL binario {}", megabytes(s.size_stl)));
+                    ui.label(trf!("STL binario {size}", size = megabytes(s.size_stl)));
                     ui.end_row();
                 });
                 if s.revision != revision || s.compact != settings.export_compact {
                     ui.label(
-                        egui::RichText::new("La scena è cambiata dopo il calcolo: la dimensione prevista è indicativa.")
+                        egui::RichText::new(tr("La scena è cambiata dopo il calcolo: la dimensione prevista è indicativa."))
                             .small()
                             .weak(),
                     );
@@ -232,18 +233,18 @@ pub fn draw(ctx: &egui::Context, app: &mut GestoreApp, pass: super::dock::Pass) 
             }
 
             ui.separator();
-            ui.checkbox(&mut settings.export_normals, "Scrivi le normali nel file").on_hover_text(
-                "Con le normali gli spigoli vivi sono esattamente quelli calcolati qui. Senza, il visualizzatore \
-                 le ricalcola (creaseAngle 0,5) e il file è circa la metà.",
+            ui.checkbox(&mut settings.export_normals, tr("Scrivi le normali nel file")).on_hover_text(
+                tr("Con le normali gli spigoli vivi sono esattamente quelli calcolati qui. Senza, il visualizzatore \
+                 le ricalcola (creaseAngle 0,5) e il file è circa la metà."),
             );
-            ui.checkbox(&mut settings.export_compact, "Formato compatto").on_hover_text(
-                "Niente rientri e numeri con la precisione che serve (un milionesimo dell'ingombro). Senza, i pezzi \
-                 non ridotti copiano il testo del file originale.",
+            ui.checkbox(&mut settings.export_compact, tr("Formato compatto")).on_hover_text(
+                tr("Niente rientri e numeri con la precisione che serve (un milionesimo dell'ingombro). Senza, i pezzi \
+                 non ridotti copiano il testo del file originale."),
             );
             ui.add_space(4.0);
             if ui
-                .add_enabled(can_export, egui::Button::new(icon_text(ui, icon::EXPORT, "Esporta…")))
-                .on_hover_text("Salva le parti visibili, con le facce ridotte, in un nuovo file WRL, STL o IV")
+                .add_enabled(can_export, egui::Button::new(icon_text(ui, icon::EXPORT, tr("Esporta…"))))
+                .on_hover_text(tr("Salva le parti visibili, con le facce ridotte, in un nuovo file WRL, STL o IV"))
                 .clicked()
             {
                 export = true;

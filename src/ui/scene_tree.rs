@@ -1,4 +1,5 @@
 use super::theme::{icon, icon_text};
+use crate::i18n::tr;
 use crate::app::Action;
 use crate::scene_graph::{NodeKind, SceneGraph};
 
@@ -16,21 +17,21 @@ pub fn draw_scene_tree(ui: &mut egui::Ui, app: &mut crate::app::GestoreApp) {
 
     {
         let Some(scene) = &app.scene_graph else {
-            ui.heading("Scena");
+            ui.heading(tr("Scena"));
             ui.separator();
-            ui.label(egui::RichText::new("Nessun file caricato.").weak());
+            ui.label(egui::RichText::new(tr("Nessun file caricato.")).weak());
             return;
         };
 
         // ── Intestazione ────────────────────────────────────────────────────
         ui.horizontal(|ui| {
-            ui.heading("Scena");
+            ui.heading(tr("Scena"));
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 super::theme::flat_buttons(ui);
-                if ui.button(icon_text(ui, icon::ARROWS_IN_LINE_VERTICAL, "")).on_hover_text("Comprimi tutto").clicked() {
+                if ui.button(icon_text(ui, icon::ARROWS_IN_LINE_VERTICAL, "")).on_hover_text(tr("Comprimi tutto")).clicked() {
                     app.ui_state.expanded.clear();
                 }
-                if ui.button(icon_text(ui, icon::ARROWS_OUT_LINE_VERTICAL, "")).on_hover_text("Espandi i macro-oggetti principali").clicked() {
+                if ui.button(icon_text(ui, icon::ARROWS_OUT_LINE_VERTICAL, "")).on_hover_text(tr("Espandi i macro-oggetti principali")).clicked() {
                     for &r in &scene.roots {
                         app.ui_state.expanded.insert(r);
                     }
@@ -38,7 +39,7 @@ pub fn draw_scene_tree(ui: &mut egui::Ui, app: &mut crate::app::GestoreApp) {
             });
         });
         ui.label(
-            egui::RichText::new(format!("{} macro-oggetti principali", scene.top_level_count()))
+            egui::RichText::new(trf!("{n} macro-oggetti principali", n = scene.top_level_count()))
                 .small()
                 .weak(),
         );
@@ -52,11 +53,11 @@ pub fn draw_scene_tree(ui: &mut egui::Ui, app: &mut crate::app::GestoreApp) {
         ui.allocate_ui_with_layout(row, egui::Layout::right_to_left(egui::Align::Center), |ui| {
             let clear = ui
                 .add_enabled(!app.ui_state.search.is_empty(), egui::Button::new(icon::X))
-                .on_hover_text("Cancella ricerca")
+                .on_hover_text(tr("Cancella ricerca"))
                 .clicked();
             let resp = ui.add(
                 egui::TextEdit::singleline(&mut app.ui_state.search)
-                    .hint_text(format!("{} Cerca per nome…  (Ctrl+F)", icon::MAGNIFYING_GLASS))
+                    .hint_text(format!("{} {}  (Ctrl+F)", icon::MAGNIFYING_GLASS, tr("Cerca per nome…")))
                     .desired_width(f32::INFINITY),
             );
             if ui.input(|i| i.modifiers.command && i.key_pressed(egui::Key::F)) {
@@ -78,9 +79,9 @@ pub fn draw_scene_tree(ui: &mut egui::Ui, app: &mut crate::app::GestoreApp) {
             let n = app.ui_state.search_cache.as_ref().map_or(0, |c| c.3);
             ui.label(
                 egui::RichText::new(if n == 0 {
-                    "Nessun elemento trovato".to_string()
+                    tr("Nessun elemento trovato").to_string()
                 } else {
-                    format!("{n} elementi trovati")
+                    trf!("{n} elementi trovati", n = n)
                 })
                 .small()
                 .weak(),
@@ -219,8 +220,8 @@ pub fn draw_scene_tree(ui: &mut egui::Ui, app: &mut crate::app::GestoreApp) {
             (egui::DragAndDrop::payload::<DraggedNodes>(ui.ctx()), ui.ctx().pointer_latest_pos())
         {
             let text = match dragged.0.as_slice() {
-                [one] => format!("{} Sposta «{}» in un gruppo", icon::ARROW_BEND_DOWN_RIGHT, scene.display_name(*one)),
-                many => format!("{} Sposta {} elementi in un gruppo", icon::ARROW_BEND_DOWN_RIGHT, many.len()),
+                [one] => format!("{} {}", icon::ARROW_BEND_DOWN_RIGHT, trf!("Sposta «{name}» in un gruppo", name = scene.display_name(*one))),
+                many => format!("{} {}", icon::ARROW_BEND_DOWN_RIGHT, trf!("Sposta {n} elementi in un gruppo", n = many.len())),
             };
             egui::Area::new(egui::Id::new("albero_trascina"))
                 .fixed_pos(pos + egui::vec2(16.0, 12.0))
@@ -696,7 +697,7 @@ fn draw_row(ui: &mut egui::Ui, ctx: &mut RowCtx, node_idx: u32, depth: u16) {
         let eye = if is_visible { icon::EYE } else { icon::EYE_SLASH };
         if ui
             .add(egui::Button::new(eye).frame(false))
-            .on_hover_text(if is_visible { "Nascondi" } else { "Mostra" })
+            .on_hover_text(if is_visible { tr("Nascondi") } else { tr("Mostra") })
             .clicked()
         {
             ctx.actions.push(Action::ToggleVisible(node_idx));
@@ -719,7 +720,7 @@ fn draw_row(ui: &mut egui::Ui, ctx: &mut RowCtx, node_idx: u32, depth: u16) {
                     egui::Stroke::new(1.0_f32, ui.visuals().strong_text_color()),
                     egui::StrokeKind::Outside,
                 );
-                r.on_hover_text("Colore impostato manualmente");
+                r.on_hover_text(tr("Colore impostato manualmente"));
             }
         }
 
@@ -788,11 +789,11 @@ fn draw_row(ui: &mut egui::Ui, ctx: &mut RowCtx, node_idx: u32, depth: u16) {
         // un altro gruppo; da una riga non selezionata si selezionano le righe su cui si passa
         let mut resp = ui.add(egui::SelectableLabel::new(is_selected, text)).interact(egui::Sense::click_and_drag());
         if !hinges.is_empty() {
-            resp = resp.on_hover_text(format!("Cerniera: {}", hinges.join(", ")));
+            resp = resp.on_hover_text(trf!("Cerniera: {names}", names = hinges.join(", ")));
         }
         if !inner_hinges.is_empty() {
             ui.label(egui::RichText::new(icon::DOOR_OPEN).weak())
-                .on_hover_text(format!("Contiene la cerniera: {}", inner_hinges.join(", ")));
+                .on_hover_text(trf!("Contiene la cerniera: {names}", names = inner_hinges.join(", ")));
         }
         let movable = is_selected && info.kind != NodeKind::File;
         if movable && ctx.sweep.is_none() {
@@ -864,7 +865,7 @@ fn draw_row(ui: &mut egui::Ui, ctx: &mut RowCtx, node_idx: u32, depth: u16) {
 
         // Menu contestuale (tasto destro)
         resp.context_menu(|ui| {
-            if ui.button(icon_text(ui, icon::CUBE_FOCUS, "Isola")).clicked() {
+            if ui.button(icon_text(ui, icon::CUBE_FOCUS, tr("Isola"))).clicked() {
                 match group {
                     Some(nodes) => actions.push(Action::IsolateMany(nodes.to_vec())),
                     None => {
@@ -875,15 +876,15 @@ fn draw_row(ui: &mut egui::Ui, ctx: &mut RowCtx, node_idx: u32, depth: u16) {
                 ui.close_menu();
             }
             let (eye, label, action) = if is_visible {
-                (icon::EYE_SLASH, "Nascondi    Spazio", on_targets(Action::Hide))
+                (icon::EYE_SLASH, tr("Nascondi    Spazio"), on_targets(Action::Hide))
             } else {
-                (icon::EYE, "Mostra    Spazio", on_targets(Action::Show))
+                (icon::EYE, tr("Mostra    Spazio"), on_targets(Action::Show))
             };
             if ui.button(icon_text(ui, eye, label)).clicked() {
                 actions.push(action);
                 ui.close_menu();
             }
-            if ui.button(icon_text(ui, icon::CORNERS_OUT, "Inquadra")).clicked() {
+            if ui.button(icon_text(ui, icon::CORNERS_OUT, tr("Inquadra"))).clicked() {
                 actions.push(match group {
                     Some(nodes) => Action::FocusMany(nodes.to_vec()),
                     None => Action::Focus(Some(node_idx)),
@@ -891,18 +892,18 @@ fn draw_row(ui: &mut egui::Ui, ctx: &mut RowCtx, node_idx: u32, depth: u16) {
                 ui.close_menu();
             }
             ui.separator();
-            if ui.button(icon_text(ui, icon::COPY, "Copia    Ctrl+C")).clicked() {
+            if ui.button(icon_text(ui, icon::COPY, tr("Copia    Ctrl+C"))).clicked() {
                 actions.push(Action::Copy(group.map_or_else(|| vec![node_idx], <[u32]>::to_vec)));
                 ui.close_menu();
             }
-            if ui.add_enabled(can_paste, egui::Button::new(icon_text(ui, icon::CLIPBOARD, "Incolla    Ctrl+V"))).clicked() {
+            if ui.add_enabled(can_paste, egui::Button::new(icon_text(ui, icon::CLIPBOARD, tr("Incolla    Ctrl+V")))).clicked() {
                 actions.push(Action::Paste);
                 ui.close_menu();
             }
             if info.kind != NodeKind::File
                 && ui
-                    .button(icon_text(ui, icon::FOLDER_SIMPLE_PLUS, "Nuovo gruppo con la selezione"))
-                    .on_hover_text("Raccoglie gli elementi in un gruppo nuovo, nello stesso file. Si possono anche trascinare le righe dentro un gruppo.")
+                    .button(icon_text(ui, icon::FOLDER_SIMPLE_PLUS, tr("Nuovo gruppo con la selezione")))
+                    .on_hover_text(tr("Raccoglie gli elementi in un gruppo nuovo, nello stesso file. Si possono anche trascinare le righe dentro un gruppo."))
                     .clicked()
             {
                 actions.push(Action::NewGroup(group.map_or_else(|| vec![node_idx], <[u32]>::to_vec)));
@@ -910,11 +911,11 @@ fn draw_row(ui: &mut egui::Ui, ctx: &mut RowCtx, node_idx: u32, depth: u16) {
             }
             if group.is_none()
                 && ui
-                    .button(icon_text(ui, icon::FOLDER_SIMPLE_PLUS, "Nuovo gruppo vuoto"))
+                    .button(icon_text(ui, icon::FOLDER_SIMPLE_PLUS, tr("Nuovo gruppo vuoto")))
                     .on_hover_text(if info.kind == NodeKind::Shape {
-                        "Aggiunge un gruppo vuoto nel gruppo di questo pezzo: poi ci si trascinano dentro le righe"
+                        tr("Aggiunge un gruppo vuoto nel gruppo di questo pezzo: poi ci si trascinano dentro le righe")
                     } else {
-                        "Aggiunge un gruppo vuoto qui dentro: poi ci si trascinano dentro le righe"
+                        tr("Aggiunge un gruppo vuoto qui dentro: poi ci si trascinano dentro le righe")
                     })
                     .clicked()
             {
@@ -922,19 +923,19 @@ fn draw_row(ui: &mut egui::Ui, ctx: &mut RowCtx, node_idx: u32, depth: u16) {
                 ui.close_menu();
             }
             ui.separator();
-            if ui.button(icon_text(ui, icon::PENCIL_SIMPLE, "Rinomina    F2")).clicked() {
+            if ui.button(icon_text(ui, icon::PENCIL_SIMPLE, tr("Rinomina    F2"))).clicked() {
                 actions.push(Action::StartRename(node_idx));
                 ui.close_menu();
             }
-            ui.menu_button(icon_text(ui, icon::PALETTE, "Colore"), |ui| {
+            ui.menu_button(icon_text(ui, icon::PALETTE, tr("Colore")), |ui| {
                 let mut chosen = Vec::new();
                 crate::ui::color_menu::color_menu(ui, scene, node_idx, default_color, saved_colors, &mut chosen);
                 actions.extend(crate::ui::color_menu::spread_colors(chosen, group.unwrap_or(&[])));
             });
             ui.separator();
             if ui
-                .button(icon_text(ui, icon::EXPORT, "Esporta selezionati…    Ctrl+Maiusc+E"))
-                .on_hover_text("Salva solo le parti visibili degli elementi selezionati, con i gruppi che li contengono")
+                .button(icon_text(ui, icon::EXPORT, tr("Esporta selezionati…    Ctrl+Maiusc+E")))
+                .on_hover_text(tr("Salva solo le parti visibili degli elementi selezionati, con i gruppi che li contengono"))
                 .clicked()
             {
                 actions.push(Action::ExportSelected(group.map_or_else(|| vec![node_idx], <[u32]>::to_vec)));
@@ -942,20 +943,20 @@ fn draw_row(ui: &mut egui::Ui, ctx: &mut RowCtx, node_idx: u32, depth: u16) {
             }
             let is_file = info.kind == NodeKind::File;
             if is_file && group.is_none() {
-                if ui.button(icon_text(ui, icon::EXPORT, "Esporta questo file…")).clicked() {
+                if ui.button(icon_text(ui, icon::EXPORT, tr("Esporta questo file…"))).clicked() {
                     actions.push(Action::ExportNode(node_idx));
                     ui.close_menu();
                 }
                 if scene.sources.iter().any(|s| s.node == node_idx && s.step.is_some()) {
-                    if ui.button(icon_text(ui, icon::CUBE, "Converti in mesh…")).clicked() {
+                    if ui.button(icon_text(ui, icon::CUBE, tr("Converti in mesh…"))).clicked() {
                         actions.push(Action::RemeshStep(node_idx));
                         ui.close_menu();
                     }
                 }
-                ui.menu_button(icon_text(ui, icon::RULER, "Unità di misura"), |ui| {
+                ui.menu_button(icon_text(ui, icon::RULER, tr("Unità di misura")), |ui| {
                     let scale = scene.sources.iter().find(|s| s.node == node_idx).map_or(1.0, |s| s.scale);
                     if scale != 1.0 {
-                        ui.label(egui::RichText::new(format!("Scala applicata: {scale}")).weak());
+                        ui.label(egui::RichText::new(trf!("Scala applicata: {scale}", scale = scale)).weak());
                     }
                     for factor in [0.001, 1000.0] {
                         if ui.button(crate::project::unit_label(factor)).clicked() {
@@ -966,7 +967,7 @@ fn draw_row(ui: &mut egui::Ui, ctx: &mut RowCtx, node_idx: u32, depth: u16) {
                 });
             }
             let (delete_icon, delete_label) =
-                if is_file && group.is_none() { (icon::X, "Chiudi file") } else { (icon::TRASH, "Elimina") };
+                if is_file && group.is_none() { (icon::X, tr("Chiudi file")) } else { (icon::TRASH, tr("Elimina")) };
             if ui.button(icon_text(ui, delete_icon, delete_label)).clicked() {
                 actions.push(on_targets(Action::Delete));
                 ui.close_menu();

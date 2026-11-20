@@ -1,6 +1,7 @@
 //! Finestra «Cabina»: misure della cabina di verniciatura e costruzione (vedi `crate::cabin`).
 
 use super::theme::{icon, icon_text};
+use crate::i18n::tr;
 use crate::app::GestoreApp;
 use crate::cabin::CabinParams;
 
@@ -24,11 +25,11 @@ fn mm_signed(ui: &mut egui::Ui, label: &str, help: &str, value: &mut f32) {
 fn label_section(ui: &mut egui::Ui, label: &mut crate::cabin::CabinLabel) {
     use crate::cabin::LabelWall;
     egui::Grid::new("cabina_scritta").num_columns(2).show(ui, |ui| {
-        ui.label("Testo");
-        ui.add(egui::TextEdit::singleline(&mut label.text).hint_text("es. il nome della cabina").desired_width(200.0));
+        ui.label(tr("Testo"));
+        ui.add(egui::TextEdit::singleline(&mut label.text).hint_text(tr("es. il nome della cabina")).desired_width(200.0));
         ui.end_row();
 
-        ui.label("Font");
+        ui.label(tr("Font"));
         let fonts = crate::cabin::common_fonts();
         let current = std::path::Path::new(&label.font);
         let shown = fonts
@@ -42,9 +43,9 @@ fn label_section(ui: &mut egui::Ui, label: &mut crate::cabin::CabinLabel) {
                 ui.selectable_value(&mut label.font, text, *name);
             }
             ui.separator();
-            if ui.button("Altro file…").clicked() {
+            if ui.button(tr("Altro file…")).clicked() {
                 let picked = rfd::FileDialog::new()
-                    .add_filter("Font (TTF, OTF)", &["ttf", "TTF", "otf", "OTF", "ttc", "TTC"])
+                    .add_filter(tr("Font (TTF, OTF)"), &["ttf", "TTF", "otf", "OTF", "ttc", "TTC"])
                     .set_directory(crate::cabin::fonts_dir())
                     .pick_file();
                 if let Some(path) = picked {
@@ -55,36 +56,36 @@ fn label_section(ui: &mut egui::Ui, label: &mut crate::cabin::CabinLabel) {
         });
         ui.end_row();
 
-        mm(ui, "Altezza lettere", "Altezza delle maiuscole", &mut label.height);
-        mm(ui, "Rilievo", "Spessore delle lettere, fuori dalla parete", &mut label.depth);
+        mm(ui, tr("Altezza lettere"), tr("Altezza delle maiuscole"), &mut label.height);
+        mm(ui, tr("Rilievo"), tr("Spessore delle lettere, fuori dalla parete"), &mut label.depth);
 
-        ui.label("Colore");
+        ui.label(tr("Colore"));
         ui.color_edit_button_rgb(&mut label.color);
         ui.end_row();
 
-        ui.label("Parete");
-        let wall_name = LabelWall::ALL.iter().find(|(w, _)| *w == label.wall).map_or("", |(_, n)| *n);
+        ui.label(tr("Parete"));
+        let wall_name = LabelWall::ALL.iter().find(|(w, _)| *w == label.wall).map_or("", |(_, n)| tr(n));
         egui::ComboBox::from_id_salt("cabina_parete").selected_text(wall_name).width(200.0).show_ui(ui, |ui| {
             for (wall, name) in LabelWall::ALL {
-                ui.selectable_value(&mut label.wall, wall, name);
+                ui.selectable_value(&mut label.wall, wall, tr(name));
             }
         });
         ui.end_row();
 
-        ui.label("Lato");
+        ui.label(tr("Lato"));
         ui.horizontal(|ui| {
-            ui.selectable_value(&mut label.inside, false, "Esterno");
-            ui.selectable_value(&mut label.inside, true, "Interno");
+            ui.selectable_value(&mut label.inside, false, tr("Esterno"));
+            ui.selectable_value(&mut label.inside, true, tr("Interno"));
         });
         ui.end_row();
 
         mm_signed(
             ui,
-            "Spostamento",
-            "Dal centro della parete, verso destra per chi legge (0 = centrata)",
+            tr("Spostamento"),
+            tr("Dal centro della parete, verso destra per chi legge (0 = centrata)"),
             &mut label.offset,
         );
-        mm(ui, "Quota", "Altezza della base delle lettere dal grigliato", &mut label.z);
+        mm(ui, tr("Quota"), tr("Altezza della base delle lettere dal grigliato"), &mut label.z);
     });
 }
 
@@ -163,7 +164,7 @@ pub fn draw(ctx: &egui::Context, app: &mut GestoreApp, pass: super::dock::Pass) 
     let mut apply_cell = false;
     let window = super::dock::Dockable {
         id: "finestra_cabina",
-        title: format!("{}  Cabina", icon::CUBE_TRANSPARENT),
+        title: format!("{}  {}", icon::CUBE_TRANSPARENT, tr("Cabina")),
         state: &mut dock,
         open: &mut open,
         default_width: 360.0,
@@ -175,11 +176,11 @@ pub fn draw(ctx: &egui::Context, app: &mut GestoreApp, pass: super::dock::Pass) 
     super::dock::show(ctx, pass, window, |ui| {
             // ── Cabina da modificare ──────────────────────────────────────────
             ui.horizontal(|ui| {
-                ui.label(egui::RichText::new("Cabina").strong());
+                ui.label(egui::RichText::new(tr("Cabina")).strong());
                 let label = |(_, name, c): &(u32, String, CabinParams)| format!("{name}  ({} × {} mm)", c.length, c.width);
                 let current = match target {
                     Some(n) => cabins.iter().find(|c| c.0 == n).map(label).unwrap_or_default(),
-                    None => "Nuova cabina".to_string(),
+                    None => tr("Nuova cabina").to_string(),
                 };
                 egui::ComboBox::from_id_salt("cabina_oggetto")
                     .width((ui.available_width() - 8.0).max(120.0))
@@ -190,66 +191,66 @@ pub fn draw(ctx: &egui::Context, app: &mut GestoreApp, pass: super::dock::Pass) 
                                 choice = Some(crate::cabin::CabinChoice::Node(c.0));
                             }
                         }
-                        if ui.selectable_label(target.is_none(), "Nuova cabina").on_hover_text("«Costruisci» aggiunge un'altra cabina senza toccare quelle che ci sono").clicked() {
+                        if ui.selectable_label(target.is_none(), tr("Nuova cabina")).on_hover_text(tr("«Costruisci» aggiunge un'altra cabina senza toccare quelle che ci sono")).clicked() {
                             choice = Some(crate::cabin::CabinChoice::New);
                         }
                     })
                     .response
-                    .on_hover_text("Cabina su cui lavorano misure, «Aggiorna» e centro: scegliendola le misure diventano le sue (anche selezionandola nell'albero)");
+                    .on_hover_text(tr("Cabina su cui lavorano misure, «Aggiorna» e centro: scegliendola le misure diventano le sue (anche selezionandola nell'albero)"));
             });
             ui.separator();
             ui.label(
                 egui::RichText::new(
-                    "Zero all'ingresso della cabina, sull'asse, al piano del grigliato (della tavola, se il grigliato è \
-                     ribassato). X verso l'uscita, Z in alto.",
+                    tr("Zero all'ingresso della cabina, sull'asse, al piano del grigliato (della tavola, se il grigliato è \
+                     ribassato). X verso l'uscita, Z in alto."),
                 )
                 .weak(),
             );
             let force = super::expand_collapse(ui);
             egui::ScrollArea::vertical().max_height(520.0).show(ui, |ui| {
-                fold(ui, force, "Dimensioni", |ui| {
+                fold(ui, force, tr("Dimensioni"), |ui| {
                     egui::Grid::new("cabina_dimensioni").num_columns(2).show(ui, |ui| {
-                        mm(ui, "Lunghezza", "Lunghezza interna, dall'ingresso all'uscita (X)", &mut p.length);
-                        mm(ui, "Larghezza", "Larghezza interna tra le pareti (Y)", &mut p.width);
-                        mm(ui, "Altezza", "Dal grigliato al soffitto", &mut p.height);
-                        mm(ui, "Fondo sotto il grigliato", "Fin dove scendono le pareti sotto il grigliato", &mut p.depth);
+                        mm(ui, tr("Lunghezza"), tr("Lunghezza interna, dall'ingresso all'uscita (X)"), &mut p.length);
+                        mm(ui, tr("Larghezza"), tr("Larghezza interna tra le pareti (Y)"), &mut p.width);
+                        mm(ui, tr("Altezza"), tr("Dal grigliato al soffitto"), &mut p.height);
+                        mm(ui, tr("Fondo sotto il grigliato"), tr("Fin dove scendono le pareti sotto il grigliato"), &mut p.depth);
                     });
                 })
                 .fully_open();
-                fold(ui, force, "Pareti", |ui| {
+                fold(ui, force, tr("Pareti"), |ui| {
                     egui::Grid::new("cabina_pareti").num_columns(2).show(ui, |ui| {
-                        mm(ui, "Passo dei montanti", "Distanza tra i montanti delle pareti laterali", &mut p.module);
-                        mm(ui, "Montanti", "Lato della sezione quadrata dei montanti", &mut p.post);
-                        mm(ui, "Spessore pannelli", "Spessore di pannelli, testate e soffitto", &mut p.panel);
-                        ui.label("Fascia vetrata");
+                        mm(ui, tr("Passo dei montanti"), tr("Distanza tra i montanti delle pareti laterali"), &mut p.module);
+                        mm(ui, tr("Montanti"), tr("Lato della sezione quadrata dei montanti"), &mut p.post);
+                        mm(ui, tr("Spessore pannelli"), tr("Spessore di pannelli, testate e soffitto"), &mut p.panel);
+                        ui.label(tr("Fascia vetrata"));
                         ui.checkbox(&mut p.glass, "");
                         ui.end_row();
                         if p.glass {
-                            mm(ui, "Vetrata da", "Quota inferiore della fascia vetrata, dal grigliato", &mut p.glass_from);
-                            mm(ui, "Vetrata a", "Quota superiore della fascia vetrata, dal grigliato", &mut p.glass_to);
+                            mm(ui, tr("Vetrata da"), tr("Quota inferiore della fascia vetrata, dal grigliato"), &mut p.glass_from);
+                            mm(ui, tr("Vetrata a"), tr("Quota superiore della fascia vetrata, dal grigliato"), &mut p.glass_to);
                         }
                     });
                 });
-                fold(ui, force, "Grigliato", |ui| {
+                fold(ui, force, tr("Grigliato"), |ui| {
                     egui::Grid::new("cabina_grigliato").num_columns(2).show(ui, |ui| {
-                        mm(ui, "Passo delle barre", "Distanza tra le barre, nei due versi", &mut p.bar_pitch);
-                        mm(ui, "Larghezza barre", "Larghezza delle barre piatte", &mut p.bar_width);
-                        mm(ui, "Spessore barre", "Spessore delle barre piatte (il grigliato ne ha due strati)", &mut p.bar_thickness);
-                        ui.label("Spessore verso").on_hover_text("Da che parte del piano del grigliato stanno le barre");
+                        mm(ui, tr("Passo delle barre"), tr("Distanza tra le barre, nei due versi"), &mut p.bar_pitch);
+                        mm(ui, tr("Larghezza barre"), tr("Larghezza delle barre piatte"), &mut p.bar_width);
+                        mm(ui, tr("Spessore barre"), tr("Spessore delle barre piatte (il grigliato ne ha due strati)"), &mut p.bar_thickness);
+                        ui.label(tr("Spessore verso")).on_hover_text(tr("Da che parte del piano del grigliato stanno le barre"));
                         ui.horizontal(|ui| {
-                            ui.selectable_value(&mut p.grid_up, true, "Alto")
-                                .on_hover_text("Le barre stanno sopra il piano del grigliato: il piano è il fondo delle barre");
-                            ui.selectable_value(&mut p.grid_up, false, "Basso")
-                                .on_hover_text("Le barre stanno sotto il piano del grigliato: il piano è la loro faccia superiore");
+                            ui.selectable_value(&mut p.grid_up, true, tr("Alto"))
+                                .on_hover_text(tr("Le barre stanno sopra il piano del grigliato: il piano è il fondo delle barre"));
+                            ui.selectable_value(&mut p.grid_up, false, tr("Basso"))
+                                .on_hover_text(tr("Le barre stanno sotto il piano del grigliato: il piano è la loro faccia superiore"));
                         });
                         ui.end_row();
-                        mm(ui, "Moduli lungo X", "Lunghezza dei moduli del grigliato", &mut p.grid_module_x);
-                        mm(ui, "Moduli lungo Y", "Larghezza dei moduli del grigliato", &mut p.grid_module_y);
-                        ui.label("Grigliato ribassato");
+                        mm(ui, tr("Moduli lungo X"), tr("Lunghezza dei moduli del grigliato"), &mut p.grid_module_x);
+                        mm(ui, tr("Moduli lungo Y"), tr("Larghezza dei moduli del grigliato"), &mut p.grid_module_y);
+                        ui.label(tr("Grigliato ribassato"));
                         let mut lowered = p.grid_z < 0.0;
                         if ui
                             .checkbox(&mut lowered, "")
-                            .on_hover_text("Grigliato sotto il piano della tavola, per far lavorare il robot sulle parti basse")
+                            .on_hover_text(tr("Grigliato sotto il piano della tavola, per far lavorare il robot sulle parti basse"))
                             .changed()
                         {
                             p.grid_z = if lowered { -500.0 } else { 0.0 };
@@ -258,57 +259,57 @@ pub fn draw(ctx: &egui::Context, app: &mut GestoreApp, pass: super::dock::Pass) 
                         if lowered {
                             mm_signed(
                                 ui,
-                                "Quota grigliato",
-                                "Piano del grigliato rispetto allo zero della cabina (piano della tavola): negativa = più in basso",
+                                tr("Quota grigliato"),
+                                tr("Piano del grigliato rispetto allo zero della cabina (piano della tavola): negativa = più in basso"),
                                 &mut p.grid_z,
                             );
                         }
                     });
                 });
-                fold(ui, force, "Tavola trasportatore", |ui| {
-                    ui.checkbox(&mut p.conveyor, "Tavola sull'asse della cabina").on_hover_text(
-                        "Rulliera dello skid per tutta la lunghezza: ruote che escono dal piano della tavola (Z = 0), \
-                         carter con le asole, grigliato in mezzo, telaio con le gambe fino al fondo",
+                fold(ui, force, tr("Tavola trasportatore"), |ui| {
+                    ui.checkbox(&mut p.conveyor, tr("Tavola sull'asse della cabina")).on_hover_text(
+                        tr("Rulliera dello skid per tutta la lunghezza: ruote che escono dal piano della tavola (Z = 0), \
+                         carter con le asole, grigliato in mezzo, telaio con le gambe fino al fondo"),
                     );
                     if p.conveyor {
                         egui::Grid::new("cabina_tavola").num_columns(2).show(ui, |ui| {
-                            mm(ui, "Larghezza", "Ingombro della tavola (carter), centrata sull'asse", &mut p.conveyor_width);
-                            mm(ui, "Scartamento ruote", "Distanza tra le due file di ruote (come i pattini dello skid)", &mut p.wheel_gauge);
-                            mm(ui, "Diametro ruote", "Diametro delle ruote", &mut p.wheel_diameter);
-                            mm(ui, "Passo ruote", "Distanza tra le ruote lungo la cabina", &mut p.wheel_pitch);
-                            mm(ui, "Sporgenza ruote", "Quanto le ruote escono sopra il piano della tavola", &mut p.wheel_above);
-                            mm(ui, "Passo gambe", "Distanza tra le gambe del telaio", &mut p.leg_pitch);
+                            mm(ui, tr("Larghezza"), tr("Ingombro della tavola (carter), centrata sull'asse"), &mut p.conveyor_width);
+                            mm(ui, tr("Scartamento ruote"), tr("Distanza tra le due file di ruote (come i pattini dello skid)"), &mut p.wheel_gauge);
+                            mm(ui, tr("Diametro ruote"), tr("Diametro delle ruote"), &mut p.wheel_diameter);
+                            mm(ui, tr("Passo ruote"), tr("Distanza tra le ruote lungo la cabina"), &mut p.wheel_pitch);
+                            mm(ui, tr("Sporgenza ruote"), tr("Quanto le ruote escono sopra il piano della tavola"), &mut p.wheel_above);
+                            mm(ui, tr("Passo gambe"), tr("Distanza tra le gambe del telaio"), &mut p.leg_pitch);
                         });
                     }
                 });
-                fold(ui, force, "Canalina", |ui| {
-                    ui.checkbox(&mut p.channel, "Canalina nel pavimento").on_hover_text(
-                        "Canale lungo tutta la cabina: sul grigliato, o sul piano della tavola se ci passa dentro",
+                fold(ui, force, tr("Canalina"), |ui| {
+                    ui.checkbox(&mut p.channel, tr("Canalina nel pavimento")).on_hover_text(
+                        tr("Canale lungo tutta la cabina: sul grigliato, o sul piano della tavola se ci passa dentro"),
                     );
                     if p.channel {
                         egui::Grid::new("cabina_canalina").num_columns(2).show(ui, |ui| {
-                            mm_signed(ui, "Posizione Y", "Asse della canalina rispetto all'asse della cabina", &mut p.channel_y);
-                            mm(ui, "Larghezza", "Larghezza esterna", &mut p.channel_width);
-                            mm(ui, "Profondità", "Dal pavimento al fondo", &mut p.channel_depth);
-                            mm(ui, "Spessore", "Spessore delle lamiere", &mut p.channel_wall);
-                            mm(ui, "Bordo", "Quanto le sponde escono sopra il pavimento", &mut p.channel_lip);
+                            mm_signed(ui, tr("Posizione Y"), tr("Asse della canalina rispetto all'asse della cabina"), &mut p.channel_y);
+                            mm(ui, tr("Larghezza"), tr("Larghezza esterna"), &mut p.channel_width);
+                            mm(ui, tr("Profondità"), tr("Dal pavimento al fondo"), &mut p.channel_depth);
+                            mm(ui, tr("Spessore"), tr("Spessore delle lamiere"), &mut p.channel_wall);
+                            mm(ui, tr("Bordo"), tr("Quanto le sponde escono sopra il pavimento"), &mut p.channel_lip);
                         });
                     }
                 });
-                fold(ui, force, "Aperture", |ui| {
+                fold(ui, force, tr("Aperture"), |ui| {
                     egui::Grid::new("cabina_aperture").num_columns(2).show(ui, |ui| {
-                        mm(ui, "Ingresso: larghezza", "Apertura nella testata di ingresso, centrata sull'asse", &mut p.entry_width);
-                        mm(ui, "Ingresso: altezza", "Dal grigliato", &mut p.entry_height);
-                        mm(ui, "Uscita: larghezza", "Apertura nella testata di uscita, centrata sull'asse", &mut p.exit_width);
-                        mm(ui, "Uscita: altezza", "Dal grigliato", &mut p.exit_height);
+                        mm(ui, tr("Ingresso: larghezza"), tr("Apertura nella testata di ingresso, centrata sull'asse"), &mut p.entry_width);
+                        mm(ui, tr("Ingresso: altezza"), tr("Dal grigliato"), &mut p.entry_height);
+                        mm(ui, tr("Uscita: larghezza"), tr("Apertura nella testata di uscita, centrata sull'asse"), &mut p.exit_width);
+                        mm(ui, tr("Uscita: altezza"), tr("Dal grigliato"), &mut p.exit_height);
                     });
                 });
-                fold(ui, force, "Scritta", |ui| label_section(ui, &mut p.label));
-                fold(ui, force, "Centro cabina", |ui| {
+                fold(ui, force, tr("Scritta"), |ui| label_section(ui, &mut p.label));
+                fold(ui, force, tr("Centro cabina"), |ui| {
                     ui.label(
                         egui::RichText::new(
-                            "Punto della cabina (dall'ingresso, sull'asse, al piano del grigliato) che diventa lo zero della scena \
-                             e delle coordinate dei robot. «Applica centro» sposta la cabina, il centro resta lì. \n                             Si vede con «Centro» sopra la vista.",
+                            tr("Punto della cabina (dall'ingresso, sull'asse, al piano del grigliato) che diventa lo zero della scena \
+                             e delle coordinate dei robot. «Applica centro» sposta la cabina, il centro resta lì.\nSi vede con «Centro» sopra la vista."),
                         )
                         .weak(),
                     );
@@ -318,30 +319,30 @@ pub fn draw(ctx: &egui::Context, app: &mut GestoreApp, pass: super::dock::Pass) 
                             ui.add(egui::DragValue::new(v).speed(10.0).suffix(" mm").max_decimals(1));
                         }
                     });
-                    ui.checkbox(&mut cell.marker, "Simbolo nel centro (si esporta)").on_hover_text(
-                        "Sfera gialla con gli assi X (rosso), Y (verde) e Z (blu), nel file «Centro cabina» («Centro e robot» con i robot): \
-                         si vede, si seleziona e si esporta. Si applica con «Applica centro»",
+                    ui.checkbox(&mut cell.marker, tr("Simbolo nel centro (si esporta)")).on_hover_text(
+                        tr("Sfera gialla con gli assi X (rosso), Y (verde) e Z (blu), nel file «Centro cabina» («Centro e robot» con i robot): \
+                         si vede, si seleziona e si esporta. Si applica con «Applica centro»"),
                     );
                     if cell.marker {
                         egui::Grid::new("cabina_simbolo").num_columns(2).show(ui, |ui| {
-                            mm(ui, "Misura del simbolo", "Lunghezza degli assi", &mut cell.marker_size);
+                            mm(ui, tr("Misura del simbolo"), tr("Lunghezza degli assi"), &mut cell.marker_size);
                         });
                     }
                     ui.horizontal(|ui| {
                         if ui
-                            .add_enabled(!busy, egui::Button::new(icon_text(ui, icon::HAMMER, "Applica centro")))
+                            .add_enabled(!busy, egui::Button::new(icon_text(ui, icon::HAMMER, tr("Applica centro"))))
                             .on_hover_text(
-                                "Sposta la cabina di meno il centro (dalla posizione in cui è stata costruita, come l'offset \
+                                tr("Sposta la cabina di meno il centro (dalla posizione in cui è stata costruita, come l'offset \
                                  degli script): il centro e i robot restano nello zero della scena, sul punto scelto della cabina. \
-                                 Premuto di nuovo non si somma (Ctrl+Z per tornare indietro). I robot si cambiano nella finestra Robot",
+                                 Premuto di nuovo non si somma (Ctrl+Z per tornare indietro). I robot si cambiano nella finestra Robot"),
                             )
                             .clicked()
                         {
                             apply_cell = true;
                         }
                         if ui
-                            .add_enabled(!busy, egui::Button::new("Reset"))
-                            .on_hover_text("Centro a X 0 Y 0 Z 0 (inizio della cabina) e cabina dove è stata costruita")
+                            .add_enabled(!busy, egui::Button::new(tr("Reset")))
+                            .on_hover_text(tr("Centro a X 0 Y 0 Z 0 (inizio della cabina) e cabina dove è stata costruita"))
                             .clicked()
                         {
                             cell.center = [0.0; 3];
@@ -350,16 +351,18 @@ pub fn draw(ctx: &egui::Context, app: &mut GestoreApp, pass: super::dock::Pass) 
                     });
                     match current_center {
                         Some(now) => {
-                            ui.label(egui::RichText::new(format!(
-                                "Centro adesso nella cabina: X {:.1} Y {:.1} Z {:.1}",
-                                now.x, now.y, now.z
+                            ui.label(egui::RichText::new(trf!(
+                                "Centro adesso nella cabina: X {x} Y {y} Z {z}",
+                                x = format!("{:.1}", now.x),
+                                y = format!("{:.1}", now.y),
+                                z = format!("{:.1}", now.z)
                             )).monospace());
                             if (now - cell.center()).length() > 0.05 {
-                                ui.colored_label(ui.visuals().warn_fg_color, "Centro non applicato");
+                                ui.colored_label(ui.visuals().warn_fg_color, tr("Centro non applicato"));
                             }
                         }
                         None => {
-                            ui.label(egui::RichText::new("Costruisci la cabina per spostarla sul centro.").weak());
+                            ui.label(egui::RichText::new(tr("Costruisci la cabina per spostarla sul centro.")).weak());
                         }
                     }
                 });
@@ -370,19 +373,19 @@ pub fn draw(ctx: &egui::Context, app: &mut GestoreApp, pass: super::dock::Pass) 
             }
             ui.separator();
             ui.horizontal(|ui| {
-                let label = if exists { "Aggiorna la cabina" } else { "Costruisci la cabina" };
+                let label = if exists { tr("Aggiorna la cabina") } else { tr("Costruisci la cabina") };
                 if ui
                     .add_enabled(problems.is_empty() && !busy, egui::Button::new(icon_text(ui, icon::HAMMER, label)))
                     .on_hover_text(if exists {
-                        "Sostituisce la cabina costruita prima con queste misure"
+                        tr("Sostituisce la cabina costruita prima con queste misure")
                     } else {
-                        "Aggiunge la cabina alla scena come file «Cabina»"
+                        tr("Aggiunge la cabina alla scena come file «Cabina»")
                     })
                     .clicked()
                 {
                     build = true;
                 }
-                if ui.button("Misure predefinite").on_hover_text("Misure tipiche di una cabina (la scritta resta)").clicked() {
+                if ui.button(tr("Misure predefinite")).on_hover_text(tr("Misure tipiche di una cabina (la scritta resta)")).clicked() {
                     p = CabinParams { label: p.label.clone(), ..CabinParams::default() };
                 }
             });

@@ -8,6 +8,7 @@
 //! le modifiche e l'annulla, e tornano attivi con un clic.
 
 use super::theme::{icon, icon_text};
+use crate::i18n::tr;
 use crate::app::GestoreApp;
 use crate::robot_program::{self as rp, Line, Motion, Program};
 
@@ -450,9 +451,9 @@ pub fn shortcuts(ctx: &egui::Context, app: &mut GestoreApp) -> bool {
 
 fn open_dialog(app: &mut GestoreApp) {
     let mut dialog = rfd::FileDialog::new()
-        .set_title("Apri un programma del robot")
-        .add_filter("Programmi del robot (TIS, TIP)", &["tis", "TIS", "tip", "TIP"])
-        .add_filter("Tutti i file", &["*"]);
+        .set_title(tr("Apri un programma del robot"))
+        .add_filter(tr("Programmi del robot (TIS, TIP)"), &["tis", "TIS", "tip", "TIP"])
+        .add_filter(tr("Tutti i file"), &["*"]);
     if let Some(dir) = app.settings.last_program.as_ref().and_then(|p| p.parent()) {
         dialog = dialog.set_directory(dir);
     }
@@ -467,10 +468,11 @@ pub fn open_program(app: &mut GestoreApp, path: &std::path::Path) {
         Ok(program) => {
             let moves = program.path();
             let drawn = moves.iter().filter(|m| m.position.is_some()).count();
-            app.ui_state.status_message = format!(
-                "Programma {}: {} movimenti, {drawn} con le coordinate dell'oggetto",
-                program.program_path.display(),
-                moves.len()
+            app.ui_state.status_message = trf!(
+                "Programma {path}: {n} movimenti, {drawn} con le coordinate dell'oggetto",
+                path = program.program_path.display(),
+                n = moves.len(),
+                drawn = drawn
             );
             let mut settings = app.settings.clone();
             settings.last_program = Some(program.program_path.clone());
@@ -481,7 +483,7 @@ pub fn open_program(app: &mut GestoreApp, path: &std::path::Path) {
                 fit_to_programs(app);
             }
         }
-        Err(e) => app.ui_state.status_message = format!("Programma non aperto: {e}"),
+        Err(e) => app.ui_state.status_message = trf!("Programma non aperto: {e}", e = e),
     }
 }
 
@@ -498,9 +500,9 @@ fn save_program(app: &mut GestoreApp, ask: bool) {
     let panel = &mut app.ui_state.program;
     let Some(program) = &mut panel.program else { return };
     let target = if ask {
-        let mut dialog = rfd::FileDialog::new().set_title("Salva il programma con nome");
+        let mut dialog = rfd::FileDialog::new().set_title(tr("Salva il programma con nome"));
         if let Some(ext) = program.program_path.extension().and_then(|e| e.to_str()) {
-            dialog = dialog.add_filter(format!("Programma (.{ext})"), &[ext]);
+            dialog = dialog.add_filter(trf!("Programma (.{ext})", ext = ext), &[ext]);
         }
         if let Some(dir) = program.program_path.parent() {
             dialog = dialog.set_directory(dir);
@@ -525,11 +527,11 @@ fn save_program(app: &mut GestoreApp, ask: bool) {
             }
             panel.modified = false;
             match copied {
-                Some(c) => format!("Programma salvato in {}, punti copiati in {}", target.display(), c.display()),
-                None => format!("Programma salvato in {}", target.display()),
+                Some(c) => trf!("Programma salvato in {path}, punti copiati in {data}", path = target.display(), data = c.display()),
+                None => trf!("Programma salvato in {path}", path = target.display()),
             }
         }
-        Err(e) => format!("Programma non salvato: {e}"),
+        Err(e) => trf!("Programma non salvato: {e}", e = e),
     };
 }
 
@@ -551,19 +553,19 @@ fn menu_items(panel: &ProgramPanel) -> [(Option<MenuAction>, &'static str, &'sta
     let lines = panel.lines();
     let any = |f: &dyn Fn(&Line) -> bool| panel.selected.iter().any(|&i| lines.get(i).is_some_and(f));
     [
-        (Some(MenuAction::Undo), icon::ARROW_U_UP_LEFT, "Annulla", !panel.undo.is_empty()),
-        (Some(MenuAction::Redo), icon::ARROW_U_UP_RIGHT, "Ripeti", !panel.redo.is_empty()),
+        (Some(MenuAction::Undo), icon::ARROW_U_UP_LEFT, tr("Annulla"), !panel.undo.is_empty()),
+        (Some(MenuAction::Redo), icon::ARROW_U_UP_RIGHT, tr("Ripeti"), !panel.redo.is_empty()),
         (None, "", "", false),
-        (Some(MenuAction::Cut), icon::SCISSORS, "Taglia", some),
-        (Some(MenuAction::Copy), icon::COPY, "Copia", some),
-        (Some(MenuAction::Paste), icon::CLIPBOARD, "Incolla", !panel.clipboard.is_empty()),
-        (Some(MenuAction::Delete), icon::X, "Elimina", some),
-        (Some(MenuAction::Change), icon::PENCIL_SIMPLE, "Modifica…", some),
+        (Some(MenuAction::Cut), icon::SCISSORS, tr("Taglia"), some),
+        (Some(MenuAction::Copy), icon::COPY, tr("Copia"), some),
+        (Some(MenuAction::Paste), icon::CLIPBOARD, tr("Incolla"), !panel.clipboard.is_empty()),
+        (Some(MenuAction::Delete), icon::X, tr("Elimina"), some),
+        (Some(MenuAction::Change), icon::PENCIL_SIMPLE, tr("Modifica…"), some),
         (None, "", "", false),
-        (Some(MenuAction::Comment), icon::CHAT_TEXT, "Commenta riga", any(&|l| !l.is_comment())),
-        (Some(MenuAction::Uncomment), icon::CHAT_SLASH, "Togli commento", any(&|l| l.is_comment())),
+        (Some(MenuAction::Comment), icon::CHAT_TEXT, tr("Commenta riga"), any(&|l| !l.is_comment())),
+        (Some(MenuAction::Uncomment), icon::CHAT_SLASH, tr("Togli commento"), any(&|l| l.is_comment())),
         (None, "", "", false),
-        (Some(MenuAction::Reverse), icon::ARROWS_DOWN_UP, "Inverti sequenza", panel.selected.len() > 1),
+        (Some(MenuAction::Reverse), icon::ARROWS_DOWN_UP, tr("Inverti sequenza"), panel.selected.len() > 1),
     ]
 }
 
@@ -704,7 +706,7 @@ fn points_ui(ui: &mut egui::Ui, panel: &mut ProgramPanel) {
                 let head = |ui: &mut egui::Ui, t: &str| {
                     ui.label(egui::RichText::new(t).strong());
                 };
-                for h in ["Nome", "Coord", "X", "Y", "Z", "A", "B", "C"] {
+                for h in [tr("Nome"), "Coord", "X", "Y", "Z", "A", "B", "C"] {
                     head(ui, h);
                 }
                 for k in 0..extra {
@@ -731,7 +733,7 @@ fn points_ui(ui: &mut egui::Ui, panel: &mut ProgramPanel) {
                             }
                         }
                         None => {
-                            ui.label(egui::RichText::new("manca").color(warn).small());
+                            ui.label(egui::RichText::new(tr("manca")).color(warn).small());
                         }
                     }
                     ui.end_row();
@@ -760,7 +762,7 @@ pub fn draw(ctx: &egui::Context, app: &mut GestoreApp, pass: super::dock::Pass) 
     let panel = &mut app.ui_state.program;
     let window = super::dock::Dockable {
         id: "finestra_programma",
-        title: format!("{}  Programma", icon::PATH),
+        title: format!("{}  {}", icon::PATH, tr("Programma")),
         state: &mut dock,
         open: &mut open,
         default_width: 300.0,
@@ -772,19 +774,19 @@ pub fn draw(ctx: &egui::Context, app: &mut GestoreApp, pass: super::dock::Pass) 
     let pointer = super::dock::show(ctx, pass, window, |ui| {
         ui.horizontal_wrapped(|ui| {
             ui.spacing_mut().item_spacing.x = 8.0;
-            if ui.button(icon_text(ui, icon::FOLDER_OPEN, "Apri…")).on_hover_text("Programma .TIS o .tip: i punti si leggono dal .tid con lo stesso nome e dai .tid globali della cartella (che iniziano con _). Si possono sceglierne più di uno: si aggiungono a quelli aperti").clicked() {
+            if ui.button(icon_text(ui, icon::FOLDER_OPEN, tr("Apri…"))).on_hover_text(tr("Programma .TIS o .tip: i punti si leggono dal .tid con lo stesso nome e dai .tid globali della cartella (che iniziano con _). Si possono sceglierne più di uno: si aggiungono a quelli aperti")).clicked() {
                 choose = true;
             }
             let has = panel.program.is_some();
-            if ui.add_enabled(has && panel.modified, egui::Button::new(icon_text(ui, icon::FLOPPY_DISK, ""))).on_hover_text("Salva sopra il programma  [Ctrl+S con il mouse sulla finestra]").clicked() {
+            if ui.add_enabled(has && panel.modified, egui::Button::new(icon_text(ui, icon::FLOPPY_DISK, ""))).on_hover_text(tr("Salva sopra il programma  [Ctrl+S con il mouse sulla finestra]")).clicked() {
                 save = true;
             }
-            if ui.add_enabled(has, egui::Button::new("Salva con nome…")).on_hover_text("Salva in un altro file: il file dei punti si copia accanto con lo stesso nome").clicked() {
+            if ui.add_enabled(has, egui::Button::new(tr("Salva con nome…"))).on_hover_text(tr("Salva in un altro file: il file dei punti si copia accanto con lo stesso nome")).clicked() {
                 save_as = true;
             }
         });
         if panel.program.is_none() {
-            ui.label(egui::RichText::new("Apri un programma del robot per vedere la traiettoria. I punti in coordinate dell'oggetto si disegnano nella scena così come sono: metti la matematica con il riferimento oggetto nello zero.").weak());
+            ui.label(egui::RichText::new(tr("Apri un programma del robot per vedere la traiettoria. I punti in coordinate dell'oggetto si disegnano nella scena così come sono: metti la matematica con il riferimento oggetto nello zero.")).weak());
             return ui.ui_contains_pointer();
         }
         // Programmi aperti: clic per renderlo attivo, occhio per la traiettoria, X per chiudere
@@ -798,10 +800,10 @@ pub fn draw(ctx: &egui::Context, app: &mut GestoreApp, pass: super::dock::Pass) 
                 ui.horizontal(|ui| {
                     ui.spacing_mut().item_spacing.x = 2.0;
                     let eye = if hidden { icon::EYE_SLASH } else { icon::EYE };
-                    if ui.small_button(eye).on_hover_text(if hidden { "Mostra la traiettoria" } else { "Nascondi la traiettoria" }).clicked() {
+                    if ui.small_button(eye).on_hover_text(if hidden { tr("Mostra la traiettoria") } else { tr("Nascondi la traiettoria") }).clicked() {
                         toggle = Some(j);
                     }
-                    if ui.small_button(icon::X).on_hover_text("Chiudi il programma").clicked() {
+                    if ui.small_button(icon::X).on_hover_text(tr("Chiudi il programma")).clicked() {
                         close = Some((j, false));
                     }
                     if ui.selectable_label(j == panel.active, name).on_hover_text(path).clicked() {
@@ -810,11 +812,11 @@ pub fn draw(ctx: &egui::Context, app: &mut GestoreApp, pass: super::dock::Pass) 
                 });
                 if panel.confirm_close == Some(j) {
                     ui.horizontal_wrapped(|ui| {
-                        ui.label(egui::RichText::new("Modifiche non salvate:").color(ui.visuals().warn_fg_color).small());
-                        if ui.small_button("Chiudi senza salvare").clicked() {
+                        ui.label(egui::RichText::new(tr("Modifiche non salvate:")).color(ui.visuals().warn_fg_color).small());
+                        if ui.small_button(tr("Chiudi senza salvare")).clicked() {
                             close = Some((j, true));
                         }
-                        if ui.small_button("Annulla").clicked() {
+                        if ui.small_button(tr("Annulla")).clicked() {
                             panel.confirm_close = None;
                         }
                     });
@@ -840,39 +842,39 @@ pub fn draw(ctx: &egui::Context, app: &mut GestoreApp, pass: super::dock::Pass) 
         ui.horizontal_wrapped(|ui| {
             ui.spacing_mut().item_spacing.x = 2.0;
             let some = !panel.selected.is_empty();
-            if ui.add_enabled(some, egui::Button::new(icon_text(ui, icon::COPY, ""))).on_hover_text("Copia le righe scelte  [Ctrl+C]").clicked() {
+            if ui.add_enabled(some, egui::Button::new(icon_text(ui, icon::COPY, ""))).on_hover_text(tr("Copia le righe scelte  [Ctrl+C]")).clicked() {
                 clipboard_text = panel.copy();
             }
-            if ui.add_enabled(some, egui::Button::new(icon_text(ui, icon::SCISSORS, ""))).on_hover_text("Taglia le righe scelte  [Ctrl+X]").clicked() {
+            if ui.add_enabled(some, egui::Button::new(icon_text(ui, icon::SCISSORS, ""))).on_hover_text(tr("Taglia le righe scelte  [Ctrl+X]")).clicked() {
                 clipboard_text = panel.cut();
             }
-            if ui.add_enabled(!panel.clipboard.is_empty(), egui::Button::new(icon_text(ui, icon::CLIPBOARD, ""))).on_hover_text("Incolla sotto la riga scelta  [Ctrl+V, anche testo copiato da un editor]").clicked() {
+            if ui.add_enabled(!panel.clipboard.is_empty(), egui::Button::new(icon_text(ui, icon::CLIPBOARD, ""))).on_hover_text(tr("Incolla sotto la riga scelta  [Ctrl+V, anche testo copiato da un editor]")).clicked() {
                 let new = panel.clipboard.clone();
                 panel.paste(new);
             }
-            if ui.add_enabled(panel.selected.len() > 1, egui::Button::new(icon_text(ui, icon::ARROWS_DOWN_UP, "Inverti"))).on_hover_text("Inverte l'ordine delle righe scelte (il primo punto diventa l'ultimo)").clicked() {
+            if ui.add_enabled(panel.selected.len() > 1, egui::Button::new(icon_text(ui, icon::ARROWS_DOWN_UP, tr("Inverti")))).on_hover_text(tr("Inverte l'ordine delle righe scelte (il primo punto diventa l'ultimo)")).clicked() {
                 panel.reverse();
             }
-            if ui.add_enabled(some, egui::Button::new(icon_text(ui, icon::TRASH, ""))).on_hover_text("Elimina le righe scelte  [Canc]").clicked() {
+            if ui.add_enabled(some, egui::Button::new(icon_text(ui, icon::TRASH, ""))).on_hover_text(tr("Elimina le righe scelte  [Canc]")).clicked() {
                 panel.delete();
             }
             ui.separator();
-            if ui.add_enabled(!panel.undo.is_empty(), egui::Button::new(icon_text(ui, icon::ARROW_U_UP_LEFT, ""))).on_hover_text("Annulla  [Ctrl+Z]").clicked() {
+            if ui.add_enabled(!panel.undo.is_empty(), egui::Button::new(icon_text(ui, icon::ARROW_U_UP_LEFT, ""))).on_hover_text(tr("Annulla  [Ctrl+Z]")).clicked() {
                 panel.undo();
             }
-            if ui.add_enabled(!panel.redo.is_empty(), egui::Button::new(icon_text(ui, icon::ARROW_U_UP_RIGHT, ""))).on_hover_text("Ripeti  [Ctrl+Y]").clicked() {
+            if ui.add_enabled(!panel.redo.is_empty(), egui::Button::new(icon_text(ui, icon::ARROW_U_UP_RIGHT, ""))).on_hover_text(tr("Ripeti  [Ctrl+Y]")).clicked() {
                 panel.redo();
             }
         });
         let mut show = !panel.hide_path;
-        ui.checkbox(&mut show, "Traiettorie nella vista").on_hover_text("Linea dei movimenti LIN (piena) e PTP (tratteggiata), con i punti; le righe scelte mostrano il nome del punto. I programmi non attivi si vedono più tenui");
+        ui.checkbox(&mut show, tr("Traiettorie nella vista")).on_hover_text(tr("Linea dei movimenti LIN (piena) e PTP (tratteggiata), con i punti; le righe scelte mostrano il nome del punto. I programmi non attivi si vedono più tenui"));
         panel.hide_path = !show;
         if let Some(p) = &panel.program {
             let moves = p.path();
             let drawn = moves.iter().filter(|m| m.position.is_some()).count();
-            let mut info = format!("{} movimenti, {drawn} nella vista", moves.len());
+            let mut info = trf!("{n} movimenti, {drawn} nella vista", n = moves.len(), drawn = drawn);
             if drawn < moves.len() {
-                info.push_str(" (gli altri sono in World, Axis o senza punto)");
+                info.push_str(tr(" (gli altri sono in World, Axis o senza punto)"));
             }
             ui.label(egui::RichText::new(info).weak().small());
         }
@@ -880,10 +882,10 @@ pub fn draw(ctx: &egui::Context, app: &mut GestoreApp, pass: super::dock::Pass) 
         // programma o punti con le coordinate
         ui.horizontal(|ui| {
             ui.spacing_mut().item_spacing.x = 2.0;
-            ui.selectable_value(&mut panel.view, ProgramView::Logic, icon_text(ui, icon::TEXT_ALIGN_LEFT, "Logica"))
-                .on_hover_text("Righe del programma");
-            ui.selectable_value(&mut panel.view, ProgramView::Points, icon_text(ui, icon::TABLE, "Punti"))
-                .on_hover_text("Punti con le coordinate");
+            ui.selectable_value(&mut panel.view, ProgramView::Logic, icon_text(ui, icon::TEXT_ALIGN_LEFT, tr("Logica")))
+                .on_hover_text(tr("Righe del programma"));
+            ui.selectable_value(&mut panel.view, ProgramView::Points, icon_text(ui, icon::TABLE, tr("Punti")))
+                .on_hover_text(tr("Punti con le coordinate"));
         });
         match panel.view {
             ProgramView::Logic => {
@@ -901,7 +903,7 @@ pub fn draw(ctx: &egui::Context, app: &mut GestoreApp, pass: super::dock::Pass) 
     let panel = &mut app.ui_state.program;
     let (mut ok, mut cancel) = (false, false);
     if let Some((i, text)) = &mut panel.editing {
-        egui::Window::new(format!("Modifica riga {}", *i + 1)).collapsible(false).resizable(false).show(ctx, |ui| {
+        egui::Window::new(trf!("Modifica riga {n}", n = *i + 1)).id(egui::Id::new("programma_modifica_riga")).collapsible(false).resizable(false).show(ctx, |ui| {
             let r = ui.add(egui::TextEdit::singleline(text).font(egui::TextStyle::Monospace).desired_width(360.0));
             r.request_focus();
             if r.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
@@ -911,8 +913,8 @@ pub fn draw(ctx: &egui::Context, app: &mut GestoreApp, pass: super::dock::Pass) 
                 cancel = true;
             }
             ui.horizontal(|ui| {
-                ok |= ui.button("OK").clicked();
-                cancel |= ui.button("Annulla").clicked();
+                ok |= ui.button(tr("OK")).clicked();
+                cancel |= ui.button(tr("Annulla")).clicked();
             });
         });
     }

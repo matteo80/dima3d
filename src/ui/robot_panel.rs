@@ -2,6 +2,7 @@
 //! `crate::robot`), ognuno con il suo pannello facoltativo a quota 0.
 
 use super::theme::{icon, icon_text};
+use crate::i18n::tr;
 use crate::app::GestoreApp;
 use crate::robot::{RobotCell, RobotParams};
 
@@ -30,8 +31,8 @@ fn robot_ui(ui: &mut egui::Ui, index: usize, robot: &mut RobotParams, force: Opt
     }
     state
         .show_header(ui, |ui| {
-            ui.add(egui::TextEdit::singleline(&mut robot.name).desired_width(140.0)).on_hover_text("Nome del robot");
-            if ui.small_button(icon::TRASH).on_hover_text("Togli questo robot").clicked() {
+            ui.add(egui::TextEdit::singleline(&mut robot.name).desired_width(140.0)).on_hover_text(tr("Nome del robot"));
+            if ui.small_button(icon::TRASH).on_hover_text(tr("Togli questo robot")).clicked() {
                 remove = true;
             }
         })
@@ -55,7 +56,7 @@ fn robot_ui(ui: &mut egui::Ui, index: usize, robot: &mut RobotParams, force: Opt
             let mut pasted: String = ui.data(|d| d.get_temp(key)).unwrap_or_default();
             let response = ui.add(
                 egui::TextEdit::singleline(&mut pasted)
-                    .hint_text(format!("{}  Incolla CONST BASE … = X Y Z A B C", icon::CLIPBOARD_TEXT))
+                    .hint_text(format!("{}  {}", icon::CLIPBOARD_TEXT, tr("Incolla CONST BASE … = X Y Z A B C")))
                     .desired_width(f32::INFINITY),
             );
             if response.changed() {
@@ -70,15 +71,15 @@ fn robot_ui(ui: &mut egui::Ui, index: usize, robot: &mut RobotParams, force: Opt
             }
             ui.data_mut(|d| d.insert_temp(key, pasted));
             ui.horizontal(|ui| {
-                ui.checkbox(&mut robot.plate, "Pannello sotto, a quota 0")
-                    .on_hover_text("Lastra sotto il robot a Z 0 del centro, girata come il robot: per controllare l'allineamento con la simulazione");
+                ui.checkbox(&mut robot.plate, tr("Pannello sotto, a quota 0"))
+                    .on_hover_text(tr("Lastra sotto il robot a Z 0 del centro, girata come il robot: per controllare l'allineamento con la simulazione"));
             });
             if robot.plate {
                 ui.horizontal(|ui| {
-                    ui.label("Misure");
-                    ui.add(egui::DragValue::new(&mut robot.plate_x).speed(10.0).range(1.0..=1.0e5).suffix(" mm")).on_hover_text("Lungo X del robot");
+                    ui.label(tr("Misure"));
+                    ui.add(egui::DragValue::new(&mut robot.plate_x).speed(10.0).range(1.0..=1.0e5).suffix(" mm")).on_hover_text(tr("Lungo X del robot"));
                     ui.label("×");
-                    ui.add(egui::DragValue::new(&mut robot.plate_y).speed(10.0).range(1.0..=1.0e5).suffix(" mm")).on_hover_text("Lungo Y del robot");
+                    ui.add(egui::DragValue::new(&mut robot.plate_y).speed(10.0).range(1.0..=1.0e5).suffix(" mm")).on_hover_text(tr("Lungo Y del robot"));
                 });
             }
         });
@@ -115,18 +116,21 @@ pub fn draw(ctx: &egui::Context, app: &mut GestoreApp, pass: super::dock::Pass) 
     super::dock::show(ctx, pass, window, |ui| {
         let [cx, cy, cz] = cell.center;
         ui.label(
-            egui::RichText::new(format!(
-                "Coordinate dal centro cabina ({cx:.1} {cy:.1} {cz:.1}), come nei CONST BASE: A attorno a X, B a Y, C a Z. \
-                 Il centro si cambia nella finestra Cabina."
+            egui::RichText::new(trf!(
+                "Coordinate dal centro cabina ({cx} {cy} {cz}), come nei CONST BASE: A attorno a X, B a Y, C a Z. \
+                 Il centro si cambia nella finestra Cabina.",
+                cx = format!("{cx:.1}"),
+                cy = format!("{cy:.1}"),
+                cz = format!("{cz:.1}")
             ))
             .weak(),
         );
         ui.horizontal(|ui| {
-            if ui.button(icon_text(ui, icon::PLUS, "Aggiungi robot")).clicked() {
+            if ui.button(icon_text(ui, icon::PLUS, tr("Aggiungi robot"))).clicked() {
                 let name = cell.next_name();
                 cell.robots.push(RobotParams { name, ..Default::default() });
             }
-            if !cell.robots.is_empty() && ui.button("Togli tutti").clicked() {
+            if !cell.robots.is_empty() && ui.button(tr("Togli tutti")).clicked() {
                 cell.robots.clear();
             }
         });
@@ -134,7 +138,7 @@ pub fn draw(ctx: &egui::Context, app: &mut GestoreApp, pass: super::dock::Pass) 
         ui.separator();
         egui::ScrollArea::vertical().max_height(520.0).auto_shrink([false, true]).show(ui, |ui| {
             if cell.robots.is_empty() {
-                ui.label(egui::RichText::new("Nessun robot: «Aggiungi robot» per inserirne uno.").weak());
+                ui.label(egui::RichText::new(tr("Nessun robot: «Aggiungi robot» per inserirne uno.")).weak());
             }
             let mut remove = None;
             for (i, robot) in cell.robots.iter_mut().enumerate() {
@@ -153,14 +157,14 @@ pub fn draw(ctx: &egui::Context, app: &mut GestoreApp, pass: super::dock::Pass) 
         ui.separator();
         ui.horizontal(|ui| {
             if ui
-                .add_enabled(problems.is_empty() && !busy, egui::Button::new(icon_text(ui, icon::HAMMER, "Applica alla scena")))
-                .on_hover_text("Mette nella scena i robot (e il simbolo del centro) come file «Centro e robot», al posto di quelli di prima")
+                .add_enabled(problems.is_empty() && !busy, egui::Button::new(icon_text(ui, icon::HAMMER, tr("Applica alla scena"))))
+                .on_hover_text(tr("Mette nella scena i robot (e il simbolo del centro) come file «Centro e robot», al posto di quelli di prima"))
                 .clicked()
             {
                 apply = true;
             }
             if applied.as_ref() != Some(&cell) && !(applied.is_none() && cell.is_empty()) {
-                ui.colored_label(ui.visuals().warn_fg_color, "Modifiche non applicate");
+                ui.colored_label(ui.visuals().warn_fg_color, tr("Modifiche non applicate"));
             }
         });
     });

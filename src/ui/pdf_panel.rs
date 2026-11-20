@@ -7,6 +7,7 @@
 use std::path::PathBuf;
 
 use super::theme::icon;
+use crate::i18n::tr;
 use crate::app::GestoreApp;
 use crate::pdf_measure::PdfMeasure;
 
@@ -73,15 +74,15 @@ pub fn draw(ctx: &egui::Context, app: &mut GestoreApp, pass: super::dock::Pass) 
         view.open(path);
     }
     let title = match view.file_name() {
-        Some(name) => format!("{}  Misure PDF — {name}", icon::FILE_PDF),
-        None => format!("{}  Misure PDF", icon::FILE_PDF),
+        Some(name) => format!("{}  {} — {name}", icon::FILE_PDF, tr("Misure PDF")),
+        None => format!("{}  {}", icon::FILE_PDF, tr("Misure PDF")),
     };
     let mut toggle = false;
     let size_button = |ui: &mut egui::Ui, toggle: &mut bool| {
         let (glyph, text, hover) = if full {
-            (icon::CORNERS_IN, "Riduci", "Torna una finestra normale, spostabile e agganciabile ai bordi")
+            (icon::CORNERS_IN, tr("Riduci"), tr("Torna una finestra normale, spostabile e agganciabile ai bordi"))
         } else {
-            (icon::CORNERS_OUT, "Tutto schermo", "La finestra copre la vista e i pannelli")
+            (icon::CORNERS_OUT, tr("Tutto schermo"), tr("La finestra copre la vista e i pannelli"))
         };
         if ui.button(super::theme::icon_text(ui, glyph, text)).on_hover_text(hover).clicked() {
             *toggle = true;
@@ -104,7 +105,7 @@ pub fn draw(ctx: &egui::Context, app: &mut GestoreApp, pass: super::dock::Pass) 
                     ui.horizontal(|ui| {
                         ui.label(egui::RichText::new(&title).strong());
                         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                            if ui.button(super::theme::icon_text(ui, icon::X, "")).on_hover_text("Chiudi").clicked() {
+                            if ui.button(super::theme::icon_text(ui, icon::X, "")).on_hover_text(tr("Chiudi")).clicked() {
                                 open = false;
                             }
                         });
