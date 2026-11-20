@@ -47,7 +47,7 @@ pub(crate) fn shapes(data: &[u8]) -> (Vec<ShapeInfo>, Vec<String>) {
     let mut reader = Reader::new(data);
     let mut warnings = Vec::new();
     if let Err(e) = reader.run() {
-        warnings.push(format!("HSF letto solo in parte: {e}"));
+        warnings.push(trf!("HSF letto solo in parte: {e}", e = e));
     }
     let (shapes, mut w) = reader.finish();
     warnings.append(&mut w);
@@ -74,7 +74,7 @@ impl<'a> Stream<'a> {
         let need = (self.pos + n).saturating_sub(self.out.len());
         if need > 0 {
             if self.raw_pos + need > self.raw.len() {
-                return Err("fine del file inattesa".into());
+                return Err(crate::i18n::tr("fine del file inattesa").to_string());
             }
             self.out.extend_from_slice(&self.raw[self.raw_pos..self.raw_pos + need]);
             self.raw_pos += need;
@@ -125,7 +125,7 @@ impl<'a> Stream<'a> {
     }
     fn len_i32(&mut self, what: &str) -> Res<usize> {
         let n = self.i32()?;
-        usize::try_from(n).map_err(|_| format!("{what}: lunghezza negativa ({n})"))
+        usize::try_from(n).map_err(|_| trf!("{what}: lunghezza negativa ({n})", what = what, n = n))
     }
     fn text(&mut self, n: usize) -> Res<String> {
         let b = self.bytes(n)?;
@@ -135,7 +135,7 @@ impl<'a> Stream<'a> {
     fn start_compression(&mut self) -> Res<()> {
         if self.pos != self.out.len() {
             // `Z` dentro un blocco già espanso: non previsto dal formato
-            return Err("compressione annidata".into());
+            return Err(crate::i18n::tr("compressione annidata").to_string());
         }
         let mut dec = flate2::Decompress::new(true);
         let raw = self.raw;
@@ -150,11 +150,11 @@ impl<'a> Stream<'a> {
             }
             let status = dec
                 .decompress_vec(&input[before_in..], &mut buf, flate2::FlushDecompress::None)
-                .map_err(|e| format!("blocco compresso rovinato: {e}"))?;
+                .map_err(|e| trf!("blocco compresso rovinato: {e}", e = e))?;
             match status {
                 flate2::Status::StreamEnd => break,
                 _ if dec.total_in() as usize >= input.len() && buf.len() < buf.capacity() => {
-                    return Err("blocco compresso troncato".into())
+                    return Err(crate::i18n::tr("blocco compresso troncato").to_string())
                 }
                 _ => {}
             }
@@ -238,11 +238,11 @@ fn mat_from_rows(m: &[f32; 12]) -> Mat4 {
 /// (verificato sui parallelepipedi a 12 bit: tutte le coordinate agli estremi).
 fn unpack_samples(data: &[u8], bits: u8, n: usize) -> Res<Vec<u32>> {
     if !(1..=32).contains(&bits) {
-        return Err(format!("campioni a {bits} bit non validi"));
+        return Err(trf!("campioni a {bits} bit non validi", bits = bits));
     }
     let bits = bits as usize;
     if data.len() * 8 < n * bits {
-        return Err("dati compressi troppo corti".into());
+        return Err(crate::i18n::tr("dati compressi troppo corti").to_string());
     }
     match bits {
         8 => return Ok(data[..n].iter().map(|&b| b as u32).collect()),
@@ -274,10 +274,10 @@ fn unpack(data: &[u8], bits: u8, n: usize) -> Res<Vec<u32>> {
         8 => 1,
         16 => 2,
         32 => 4,
-        _ => return Err(format!("valori a {bits} bit non supportati")),
+        _ => return Err(trf!("valori a {bits} bit non supportati", bits = bits)),
     };
     if data.len() < n * size {
-        return Err("dati compressi troppo corti".into());
+        return Err(crate::i18n::tr("dati compressi troppo corti").to_string());
     }
     Ok((0..n)
         .map(|i| {
@@ -316,10 +316,10 @@ fn strips(list: &[u32], bits: u8, point_count: usize, signed: bool) -> Res<Vec<u
         let fan = c < 0;
         let n = c.unsigned_abs() as usize;
         let Some(v) = list.get(k..k + n) else {
-            return Err("lista delle strisce troncata".into());
+            return Err(crate::i18n::tr("lista delle strisce troncata").to_string());
         };
         if v.iter().any(|&i| i as usize >= point_count) {
-            return Err("indice di vertice fuori dalla Shell".into());
+            return Err(crate::i18n::tr("indice di vertice fuori dalla Shell").to_string());
         }
         for i in 2..n {
             let t = if fan {
@@ -347,10 +347,10 @@ fn triangles_from_polygons(list: &[i64], point_count: usize) -> Res<Vec<u32>> {
         k += 1;
         let n = c.unsigned_abs() as usize;
         let Some(v) = list.get(k..k + n) else {
-            return Err("lista delle facce troncata".into());
+            return Err(crate::i18n::tr("lista delle facce troncata").to_string());
         };
         if v.iter().any(|&i| i < 0 || i as usize >= point_count) {
-            return Err("indice di vertice fuori dalla Shell".into());
+            return Err(crate::i18n::tr("indice di vertice fuori dalla Shell").to_string());
         }
         if c > 0 {
             for i in 2..n {
@@ -401,7 +401,7 @@ impl<'a> Reader<'a> {
         while !self.s.at_end() {
             let at = self.s.pos;
             let op = self.s.u8()?;
-            self.opcode(op).map_err(|e| format!("{e} (opcode 0x{op:02x} a {at})"))?;
+            self.opcode(op).map_err(|e| trf!("{e} (opcode 0x{op} a {at})", e = e, op = format!("{:02x}", op), at = at))?;
             if op == b'D' || (op == 0 && self.stack.len() == 1 && self.geometry_attrs.is_none()) {
                 // Dizionario o terminazione: il resto sono indici per lo streaming
                 break;
@@ -467,7 +467,7 @@ impl<'a> Reader<'a> {
                         let id = *id;
                         self.stack.push(id);
                     }
-                    _ => return Err(format!("riapertura di un segmento sconosciuto ({tag})")),
+                    _ => return Err(trf!("riapertura di un segmento sconosciuto ({tag})", tag = tag)),
                 }
             }
             b'q' => {
@@ -557,7 +557,7 @@ impl<'a> Reader<'a> {
                 // x y z. Si salta: la scena mostra solo superfici
                 let flags = s.precision()?;
                 if flags > 1 {
-                    return Err(format!("polilinea con opzioni {flags:02x} non supportata"));
+                    return Err(trf!("polilinea con opzioni {flags} non supportata", flags = format!("{:02x}", flags)));
                 }
                 let n = s.len_i32("polilinea")?;
                 s.bytes(n * if flags == 1 { 24 } else { 12 })?;
@@ -566,7 +566,7 @@ impl<'a> Reader<'a> {
                 // Linea: precisione (0 = float, 1 = double), due punti. Si salta come le polilinee
                 let flags = s.precision()?;
                 if flags > 1 {
-                    return Err(format!("linea con opzioni {flags:02x} non supportata"));
+                    return Err(trf!("linea con opzioni {flags} non supportata", flags = format!("{:02x}", flags)));
                 }
                 s.bytes(if flags == 1 { 48 } else { 24 })?;
             }
@@ -590,7 +590,7 @@ impl<'a> Reader<'a> {
             }
             b':' => {
                 if self.geometry_attrs.is_some() {
-                    return Err("attributi di geometria annidati".into());
+                    return Err(crate::i18n::tr("attributi di geometria annidati").to_string());
                 }
                 self.geometry_attrs = Some((None, Mat4::IDENTITY));
             }
@@ -603,7 +603,7 @@ impl<'a> Reader<'a> {
                         let segment = self.current();
                         self.slots.push(Slot { segment, content: Content::Copy { tag, matrix: Mat4::IDENTITY } });
                     }
-                    _ => self.warnings.push(format!("Riferimento a un segmento ({tag}) non supportato: ignorato")),
+                    _ => self.warnings.push(trf!("Riferimento a un segmento ({tag}) non supportato: ignorato", tag = tag)),
                 }
             }
             b'!' => {
@@ -616,7 +616,7 @@ impl<'a> Reader<'a> {
             b'D' => {}
             _ => {
                 let c = if op.is_ascii_graphic() { format!(" «{}»", op as char) } else { String::new() };
-                return Err(format!("opcode{c} non supportato"));
+                return Err(trf!("opcode{c} non supportato", c = c));
             }
         }
         Ok(())
@@ -628,7 +628,7 @@ impl<'a> Reader<'a> {
                 self.slots[*slot].content = content;
                 Ok(())
             }
-            _ => Err(format!("geometria per una marcatura sconosciuta ({tag})")),
+            _ => Err(trf!("geometria per una marcatura sconosciuta ({tag})", tag = tag)),
         }
     }
 
@@ -731,7 +731,7 @@ impl<'a> Reader<'a> {
         }
         let unsupported = mask & (0x0001_0000 | 0x0002_0000 | 0x0040_0000 | 0x0080_0000 | 0x0100_0000 | 0x0400_0000 | 0x0800_0000 | 0x1000_0000 | 0x4000_0000);
         if unsupported != 0 || extended != 0 {
-            return Err(format!("opzioni di resa non supportate ({mask:08x} {extended:08x})"));
+            return Err(trf!("opzioni di resa non supportate ({mask} {extended})", mask = format!("{:08x}", mask), extended = format!("{:08x}", extended)));
         }
         Ok(())
     }
@@ -749,7 +749,7 @@ impl<'a> Reader<'a> {
         }
         let with_data = 0x04 | 0x08 | 0x40 | 0x80 | 0x1_0000 | 0x10_0000 | 0x20_0000 | 0x40_0000 | 0x80_0000 | 0x100_0000;
         if mask & with_data != 0 {
-            return Err(format!("euristiche non supportate ({mask:08x})"));
+            return Err(trf!("euristiche non supportate ({mask})", mask = format!("{:08x}", mask)));
         }
         Ok(())
     }
@@ -779,7 +779,7 @@ impl<'a> Reader<'a> {
             // 2 = un valore per tutti, 3 = un valore per polilinea; i punti hanno solo le altre.
             // Visto nei file reali: XY per tutti i punti, poi una Z per polilinea
             if sub & 0x01 != 0 {
-                return Err("polilinee 2D compresse non supportate".into());
+                return Err(crate::i18n::tr("polilinee 2D compresse non supportate").to_string());
             }
             let mut dims = 0;
             let mut extra = 0;
@@ -830,10 +830,10 @@ impl<'a> Reader<'a> {
             return Ok(());
         }
         if sub2 & 0x01 != 0 {
-            return Err("Shell come insieme di geometrie non supportata".into());
+            return Err(crate::i18n::tr("Shell come insieme di geometrie non supportata").to_string());
         }
         if sub & 0x40 != 0 {
-            return Err("Shell con compressione edgebreaker non supportata".into());
+            return Err(crate::i18n::tr("Shell con compressione edgebreaker non supportata").to_string());
         }
         // Punti
         let points: Vec<[f32; 3]> = if sub & 0x01 != 0 {
@@ -943,7 +943,7 @@ impl<'a> Reader<'a> {
                         0 => 4,
                         8 => 1,
                         16 => 2,
-                        _ => return Err(format!("regioni delle facce: formato {scheme:02x}")),
+                        _ => return Err(trf!("regioni delle facce: formato {scheme}", scheme = format!("{:02x}", scheme))),
                     };
                     let read = |s: &mut Stream| -> Res<usize> {
                         let b = s.bytes(size)?;
@@ -965,10 +965,10 @@ impl<'a> Reader<'a> {
                             let n = read(s)?;
                             s.bytes(2 * n * size)?;
                         }
-                        k => return Err(format!("regioni delle facce: schema {k}")),
+                        k => return Err(trf!("regioni delle facce: schema {k}", k = k)),
                     }
                 }
-                _ => return Err(format!("attributo di Shell 0x{op:02x} non supportato")),
+                _ => return Err(trf!("attributo di Shell 0x{op} non supportato", op = format!("{:02x}", op))),
             }
         }
     }

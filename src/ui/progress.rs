@@ -13,6 +13,7 @@ fn thousands(n: usize) -> String {
     out
 }
 
+use crate::i18n::tr;
 use crate::log::gigabytes;
 
 /// Memoria di Dima 3D e del PC: (usata da Dima, totale, libera) in MB. Letta al massimo una volta
@@ -37,20 +38,19 @@ fn memory_status(ctx: &egui::Context) -> Option<(u64, u64, u64)> {
 fn memory_indicator(ui: &mut egui::Ui, own: u64, total: u64, free: u64) {
     // Meno del 10% libero: il PC comincia a usare il disco al posto della RAM
     let low = free * 10 < total;
-    let hover = format!(
-        "Memoria usata da Dima 3D: {} GB
-Usata da altri programmi: {} GB
-Libera: {} GB su {} GB{}",
-        gigabytes(own),
-        gigabytes(total.saturating_sub(free).saturating_sub(own)),
-        gigabytes(free),
-        gigabytes(total),
-        if low { "
-
-RAM quasi esaurita: aprire altri file può rallentare molto il PC" } else { "" }
+    let mut hover = trf!(
+        "Memoria usata da Dima 3D: {own} GB\nUsata da altri programmi: {others} GB\nLibera: {free} GB su {total} GB",
+        own = gigabytes(own),
+        others = gigabytes(total.saturating_sub(free).saturating_sub(own)),
+        free = gigabytes(free),
+        total = gigabytes(total)
     );
+    if low {
+        hover.push_str("\n\n");
+        hover.push_str(tr("RAM quasi esaurita: aprire altri file può rallentare molto il PC"));
+    }
     // Barra della RAM del PC: parte di Dima 3D, parte degli altri programmi, parte libera
-    let text = egui::RichText::new(format!("libera {} GB", gigabytes(free))).small();
+    let text = egui::RichText::new(trf!("libera {n} GB", n = gigabytes(free))).small();
     let text = if low { text.color(theme::warning_color(ui)) } else { text.weak() };
     let label = ui.label(text);
     let (rect, response) = ui.allocate_exact_size(egui::vec2(110.0, 10.0), egui::Sense::hover());
@@ -69,7 +69,7 @@ RAM quasi esaurita: aprire altri file può rallentare molto il PC" } else { "" }
     dima_rect.set_width(rect.width() * dima);
     painter.rect_filled(dima_rect, radius, theme::accent_color(ui));
     painter.rect_stroke(rect, radius, visuals.widgets.noninteractive.bg_stroke, egui::StrokeKind::Inside);
-    let tag = ui.label(egui::RichText::new("RAM").small().weak());
+    let tag = ui.label(egui::RichText::new(tr("RAM")).small().weak());
     label.union(response).union(tag).on_hover_text(hover);
 }
 
@@ -123,9 +123,9 @@ pub fn draw_status_bar(ui: &mut egui::Ui, app: &crate::app::GestoreApp) {
                 text.weak()
             };
             ui.label(text).on_hover_text(
-                "Fotogrammi al secondo mentre ruoti o sposti la vista (resta l'ultimo valore).\n\
+                tr("Fotogrammi al secondo mentre ruoti o sposti la vista (resta l'ultimo valore).\n\
                  Sopra 30 il movimento è fluido; sotto 15 va a scatti: nascondere i pezzi che \
-                 non servono lo rende più leggero.",
+                 non servono lo rende più leggero."),
             );
             ui.separator();
         }
@@ -135,20 +135,20 @@ pub fn draw_status_bar(ui: &mut egui::Ui, app: &crate::app::GestoreApp) {
             let triangles: usize = scene.shapes_data.iter().map(|s| s.indices.len() / 3).sum();
             let vertices: usize = scene.shapes_data.iter().map(|s| s.world_vertices.len()).sum();
             ui.label(
-                egui::RichText::new(format!(
-                    "Pezzi {} / {}   ·   Triangoli {}   ·   Vertici {}",
-                    thousands(visible),
-                    thousands(total),
-                    thousands(triangles),
-                    thousands(vertices),
+                egui::RichText::new(trf!(
+                    "Pezzi {visible} / {total}   ·   Triangoli {triangles}   ·   Vertici {vertices}",
+                    visible = thousands(visible),
+                    total = thousands(total),
+                    triangles = thousands(triangles),
+                    vertices = thousands(vertices),
                 ))
                 .small()
                 .weak(),
             )
-            .on_hover_text(format!(
-                "Macro-oggetti: {}\nComponenti raggruppati in automatico: {}",
-                scene.top_level_count(),
-                scene.macro_components.len()
+            .on_hover_text(trf!(
+                "Macro-oggetti: {n}\nComponenti raggruppati in automatico: {c}",
+                n = scene.top_level_count(),
+                c = scene.macro_components.len()
             ));
         }
 
@@ -163,8 +163,8 @@ pub fn draw_status_bar(ui: &mut egui::Ui, app: &crate::app::GestoreApp) {
         let warnings = &app.ui_state.load_warnings;
         if !warnings.is_empty() {
             let text = match warnings.len() {
-                1 => "1 avviso sul file".to_string(),
-                n => format!("{n} avvisi sul file"),
+                1 => tr("1 avviso sul file").to_string(),
+                n => trf!("{n} avvisi sul file", n = n),
             };
             let color = theme::warning_color(ui);
             ui.scope(|ui| {
@@ -184,7 +184,7 @@ pub fn draw_status_bar(ui: &mut egui::Ui, app: &crate::app::GestoreApp) {
                     theme::flat_buttons(ui);
                     if ui
                         .button(egui::RichText::new(format!("{} Log", icon::FILE_TEXT)).small())
-                        .on_hover_text("Apre il log di Dima 3D, con i dettagli dell'errore")
+                        .on_hover_text(tr("Apre il log di Dima 3D, con i dettagli dell'errore"))
                         .clicked()
                     {
                         crate::log::open();

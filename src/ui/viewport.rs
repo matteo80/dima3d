@@ -1,4 +1,5 @@
 use super::theme::{self, icon, icon_text};
+use crate::i18n::tr;
 use crate::app::Action;
 use crate::renderer::camera::ArcballCamera;
 use crate::scene_graph::SceneGraph;
@@ -81,24 +82,24 @@ fn context_menu(ui: &mut egui::Ui, app: &crate::app::GestoreApp, actions: &mut V
     if let Some(&current) = app.ui_state.selected_node.as_ref().or(selection.first()) {
         let title = match selection.len() {
             0 | 1 => scene.display_name(current),
-            n => format!("{n} elementi selezionati"),
+            n => trf!("{n} elementi selezionati", n = n),
         };
         ui.label(egui::RichText::new(title).strong());
         ui.separator();
-        item(ui, true, icon::COPY, "Copia    Ctrl+C", Some(Action::Copy(selection.clone())));
-        item(ui, !app.ui_state.clipboard.is_empty(), icon::CLIPBOARD, "Incolla    Ctrl+V", Some(Action::Paste));
+        item(ui, true, icon::COPY, tr("Copia    Ctrl+C"), Some(Action::Copy(selection.clone())));
+        item(ui, !app.ui_state.clipboard.is_empty(), icon::CLIPBOARD, tr("Incolla    Ctrl+V"), Some(Action::Paste));
         ui.separator();
         let visible = scene.nodes.get(current as usize).is_some_and(|n| n.is_visible());
-        let (glyph, label) = if visible { (icon::EYE_SLASH, "Nascondi    Spazio") } else { (icon::EYE, "Mostra    Spazio") };
+        let (glyph, label) = if visible { (icon::EYE_SLASH, tr("Nascondi    Spazio")) } else { (icon::EYE, tr("Mostra    Spazio")) };
         item(ui, true, glyph, label, app.toggle_selection_action());
-        item(ui, true, icon::CUBE_FOCUS, "Isola    I", app.ui_state.isolate_action());
-        item(ui, true, icon::CORNERS_OUT, "Inquadra    F", Some(app.ui_state.focus_action()));
-        item(ui, true, icon::EXPORT, "Esporta selezionati…    Ctrl+Maiusc+E", Some(Action::ExportSelected(selection.clone())));
+        item(ui, true, icon::CUBE_FOCUS, tr("Isola    I"), app.ui_state.isolate_action());
+        item(ui, true, icon::CORNERS_OUT, tr("Inquadra    F"), Some(app.ui_state.focus_action()));
+        item(ui, true, icon::EXPORT, tr("Esporta selezionati…    Ctrl+Maiusc+E"), Some(Action::ExportSelected(selection.clone())));
         ui.separator();
-        item(ui, true, icon::TRASH, "Elimina    Canc", app.ui_state.on_selection(Action::Delete));
+        item(ui, true, icon::TRASH, tr("Elimina    Canc"), app.ui_state.on_selection(Action::Delete));
     } else {
-        item(ui, !app.ui_state.clipboard.is_empty(), icon::CLIPBOARD, "Incolla    Ctrl+V", Some(Action::Paste));
-        item(ui, true, icon::EYE, "Mostra tutto", Some(Action::ShowAll));
+        item(ui, !app.ui_state.clipboard.is_empty(), icon::CLIPBOARD, tr("Incolla    Ctrl+V"), Some(Action::Paste));
+        item(ui, true, icon::EYE, tr("Mostra tutto"), Some(Action::ShowAll));
     }
 }
 
@@ -337,11 +338,11 @@ pub fn draw_viewport(ui: &mut egui::Ui, app: &mut crate::app::GestoreApp) {
                     let selection = app.ui_state.selected_nodes();
                     if selection.is_empty() {
                         actions.push(Action::SaveColor([color[0], color[1], color[2]]));
-                        eyedropper_message = Some(format!("Colore di {name} salvato tra i miei colori"));
+                        eyedropper_message = Some(trf!("Colore di {name} salvato tra i miei colori", name = name));
                     } else {
                         let count = selection.len();
                         actions.push(Action::Batch(selection.into_iter().map(|n| Action::SetColor(n, Some(color))).collect()));
-                        eyedropper_message = Some(format!("Colore di {name} dato a {count} elementi"));
+                        eyedropper_message = Some(trf!("Colore di {name} dato a {count} elementi", name = name, count = count));
                     }
                     app.ui_state.eyedropper = false;
                 }
@@ -536,7 +537,7 @@ pub fn draw_viewport(ui: &mut egui::Ui, app: &mut crate::app::GestoreApp) {
             if let [a, b] = m.points.as_slice() {
                 let i = app.ui_state.scene_measures.add(*a, *b);
                 let name = app.ui_state.scene_measures.items[i].name.clone();
-                app.ui_state.status_message = format!("{name} salvata nel gruppo «Misure» (sotto l'albero)");
+                app.ui_state.status_message = trf!("{name} salvata nel gruppo «Misure» (sotto l'albero)", name = name);
                 // Si riparte da capo per la prossima misura
                 m.points.clear();
             }
@@ -618,8 +619,8 @@ pub fn draw_viewport(ui: &mut egui::Ui, app: &mut crate::app::GestoreApp) {
         theme::overlay_frame(&left).show(&mut left, |ui| {
             theme::flat_buttons(ui);
             if ui
-                .selectable_label(shown, icon_text(ui, icon::CROSSHAIR, "Centro"))
-                .on_hover_text("Terna World nello zero: i punti Object si disegnano così come sono, come la matematica in posizione 0")
+                .selectable_label(shown, icon_text(ui, icon::CROSSHAIR, tr("Centro")))
+                .on_hover_text(tr("Terna World nello zero: i punti Object si disegnano così come sono, come la matematica in posizione 0"))
                 .clicked()
             {
                 shown = !shown;
@@ -705,9 +706,9 @@ fn draw_section_controls(
     theme::overlay_frame(&child).show(&mut child, |ui| {
         theme::flat_buttons(ui);
         ui.horizontal(|ui| {
-            ui.label(egui::RichText::new("Sezione").strong());
+            ui.label(egui::RichText::new(tr("Sezione")).strong());
             for (axis, name) in ["X", "Y", "Z"].iter().enumerate() {
-                if ui.selectable_label(s.axis == axis, *name).on_hover_text(format!("Taglio perpendicolare all'asse {name}")).clicked()
+                if ui.selectable_label(s.axis == axis, *name).on_hover_text(trf!("Taglio perpendicolare all'asse {name}", name = name)).clicked()
                     && s.axis != axis
                 {
                     s.axis = axis;
@@ -718,15 +719,15 @@ fn draw_section_controls(
             ui.spacing_mut().slider_width = 200.0;
             let decimals = if (hi - lo) >= 100.0 { 1 } else { 3 };
             ui.add(egui::Slider::new(&mut s.position, lo..=hi).fixed_decimals(decimals))
-                .on_hover_text("Posizione del piano lungo l'asse");
+                .on_hover_text(tr("Posizione del piano lungo l'asse"));
             if ui
-                .button(icon_text(ui, icon::ARROWS_LEFT_RIGHT, "Inverti"))
-                .on_hover_text("Tiene l'altra metà del modello")
+                .button(icon_text(ui, icon::ARROWS_LEFT_RIGHT, tr("Inverti")))
+                .on_hover_text(tr("Tiene l'altra metà del modello"))
                 .clicked()
             {
                 s.flip = !s.flip;
             }
-            if ui.button(icon::X).on_hover_text("Chiudi la sezione").clicked() {
+            if ui.button(icon::X).on_hover_text(tr("Chiudi la sezione")).clicked() {
                 open = false;
             }
         });
@@ -767,7 +768,7 @@ fn draw_empty_state(ui: &egui::Ui, rect: egui::Rect, background: [f32; 3], dragg
         egui::FontId::proportional(56.0),
         color,
     );
-    let title = if dragging_file { "Rilascia per aprire il file" } else { "Trascina qui un file 3D" };
+    let title = if dragging_file { tr("Rilascia per aprire il file") } else { tr("Trascina qui un file 3D") };
     painter.text(
         center + egui::vec2(0.0, 18.0),
         egui::Align2::CENTER_CENTER,
@@ -778,14 +779,14 @@ fn draw_empty_state(ui: &egui::Ui, rect: egui::Rect, background: [f32; 3], dragg
     painter.text(
         center + egui::vec2(0.0, 42.0),
         egui::Align2::CENTER_CENTER,
-        "WRL, STEP, JT, STL, HSF, IV",
+        tr("WRL, STEP, JT, STL, HSF, IV"),
         egui::FontId::proportional(13.5),
         color,
     );
     painter.text(
         center + egui::vec2(0.0, 64.0),
         egui::Align2::CENTER_CENTER,
-        "oppure premi Ctrl+O",
+        tr("oppure premi Ctrl+O"),
         egui::FontId::proportional(13.5),
         color,
     );
@@ -821,8 +822,8 @@ fn draw_view_controls(
         ui.horizontal(|ui| {
             ui.spacing_mut().item_spacing.x = 2.0;
             if ui
-                .button(icon_text(ui, icon::CORNERS_OUT, "Centra"))
-                .on_hover_text("Inquadra le parti visibili  [F = inquadra la selezione]")
+                .button(icon_text(ui, icon::CORNERS_OUT, tr("Centra")))
+                .on_hover_text(tr("Inquadra le parti visibili  [F = inquadra la selezione]"))
                 .clicked()
             {
                 actions.push(Action::Focus(None));
@@ -832,13 +833,13 @@ fn draw_view_controls(
                 if matches!(v, V::Back | V::Left | V::Bottom) {
                     continue; // le viste opposte sono nel menu Vista e con Ctrl
                 }
-                if ui.button(v.short()).on_hover_text(format!("Vista {name}  [{key}]")).clicked() {
+                if ui.button(v.short()).on_hover_text(trf!("Vista {name}  [{key}]", name = tr(name), key = key)).clicked() {
                     actions.push(Action::View(v));
                 }
             }
             if ui
                 .button(icon_text(ui, icon::ARROW_UP, ""))
-                .on_hover_text("Raddrizza la vista (annulla il rollio)  [5]")
+                .on_hover_text(tr("Raddrizza la vista (annulla il rollio)  [5]"))
                 .clicked()
             {
                 actions.push(Action::Straighten);
@@ -846,8 +847,8 @@ fn draw_view_controls(
             ui.separator();
             let active = measure.is_some();
             if ui
-                .selectable_label(active, icon_text(ui, icon::RULER, "Misura"))
-                .on_hover_text("Distanza tra due punti dei pezzi: clic sul primo e sul secondo punto  [M]")
+                .selectable_label(active, icon_text(ui, icon::RULER, tr("Misura")))
+                .on_hover_text(tr("Distanza tra due punti dei pezzi: clic sul primo e sul secondo punto  [M]"))
                 .clicked()
             {
                 *measure = if active { None } else { Some(Default::default()) };
@@ -855,16 +856,16 @@ fn draw_view_controls(
             }
             let cutting = section.is_some();
             if ui
-                .selectable_label(cutting, icon_text(ui, icon::SCISSORS, "Sezione"))
-                .on_hover_text("Piano di sezione: taglia il modello lungo X, Y o Z")
+                .selectable_label(cutting, icon_text(ui, icon::SCISSORS, tr("Sezione")))
+                .on_hover_text(tr("Piano di sezione: taglia il modello lungo X, Y o Z"))
                 .clicked()
             {
                 *section = if cutting { None } else { section_start };
             }
             let shown = *center;
             if ui
-                .selectable_label(shown, icon_text(ui, icon::CROSSHAIR, "Centro"))
-                .on_hover_text("Centro cabina: terna degli assi nello zero della scena, anche senza cabina (riferimento per allineare i 3D)")
+                .selectable_label(shown, icon_text(ui, icon::CROSSHAIR, tr("Centro")))
+                .on_hover_text(tr("Centro cabina: terna degli assi nello zero della scena, anche senza cabina (riferimento per allineare i 3D)"))
                 .clicked()
             {
                 *center = !shown;
@@ -872,11 +873,11 @@ fn draw_view_controls(
             ui.separator();
             let inverted = *invert_zoom;
             if ui
-                .selectable_label(inverted, icon_text(ui, icon::ARROWS_DOWN_UP, "Zoom"))
+                .selectable_label(inverted, icon_text(ui, icon::ARROWS_DOWN_UP, tr("Zoom")))
                 .on_hover_text(if inverted {
-                    "Zoom invertito: rotella in avanti per allontanarsi. Clic per tornare al verso normale"
+                    tr("Zoom invertito: rotella in avanti per allontanarsi. Clic per tornare al verso normale")
                 } else {
-                    "Inverti lo zoom della rotella (e di sinistro + rotella premuti)"
+                    tr("Inverti lo zoom della rotella (e di sinistro + rotella premuti)")
                 })
                 .clicked()
             {
@@ -891,19 +892,19 @@ fn draw_view_controls(
     theme::overlay_frame(&right).show(&mut right, |ui| {
         theme::flat_buttons(ui);
         ui.menu_button(icon_text(ui, icon::QUESTION, ""), |ui| {
-            ui.label(egui::RichText::new("Comandi del mouse").strong());
+            ui.label(egui::RichText::new(tr("Comandi del mouse")).strong());
             egui::Grid::new("comandi_mouse").num_columns(2).spacing([16.0, 4.0]).show(ui, |ui| {
                 for (input, what) in [
-                    ("Sinistro", "Ruota attorno al punto cliccato"),
-                    ("Shift + sinistro", "Rollio"),
-                    ("Destro o rotella premuta", "Sposta"),
-                    ("Rotella", "Zoom verso il mouse (verso invertibile con il tasto Zoom)"),
-                    ("Sinistro + rotella premuti", "Zoom"),
-                    ("Click", "Seleziona il macro-oggetto"),
-                    ("Ctrl + click", "Seleziona il singolo pezzo"),
-                    ("Shift + click", "Aggiunge o toglie dalla selezione (Ctrl + Shift: il singolo pezzo)"),
-                    ("Ctrl + trascina", "Apre la parte con una cerniera salvata"),
-                    ("Doppio click", "Inquadra la selezione"),
+                    (tr("Sinistro"), tr("Ruota attorno al punto cliccato")),
+                    (tr("Shift + sinistro"), tr("Rollio")),
+                    (tr("Destro o rotella premuta"), tr("Sposta")),
+                    (tr("Rotella"), tr("Zoom verso il mouse (verso invertibile con il tasto Zoom)")),
+                    (tr("Sinistro + rotella premuti"), tr("Zoom")),
+                    (tr("Click"), tr("Seleziona il macro-oggetto")),
+                    (tr("Ctrl + click"), tr("Seleziona il singolo pezzo")),
+                    (tr("Shift + click"), tr("Aggiunge o toglie dalla selezione (Ctrl + Shift: il singolo pezzo)")),
+                    (tr("Ctrl + trascina"), tr("Apre la parte con una cerniera salvata")),
+                    (tr("Doppio click"), tr("Inquadra la selezione")),
                 ] {
                     ui.label(egui::RichText::new(input).strong());
                     ui.label(what);
@@ -912,7 +913,7 @@ fn draw_view_controls(
             });
         })
         .response
-        .on_hover_text("Comandi del mouse");
+        .on_hover_text(tr("Comandi del mouse"));
     });
 }
 

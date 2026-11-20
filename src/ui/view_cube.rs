@@ -3,6 +3,7 @@
 //! (26 direzioni). I nomi delle facce seguono il sistema di assi scelto (Fronte = muso in
 //! coordinate veicolo).
 
+use crate::i18n::tr;
 use crate::app::Action;
 use crate::renderer::camera::{ArcballCamera, Axes, StandardView};
 use glam::Vec3;
@@ -103,7 +104,7 @@ pub fn label_for(dir: Vec3, axes: Axes) -> String {
 }
 
 fn view_name(v: StandardView) -> &'static str {
-    StandardView::ALL.iter().find(|x| x.0 == v).map_or("", |x| x.1)
+    StandardView::ALL.iter().find(|x| x.0 == v).map_or("", |x| tr(x.1))
 }
 
 /// Disegna il cubo e gestisce il clic. Ritorna l'azione da applicare.

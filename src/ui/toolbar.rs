@@ -421,7 +421,7 @@ fn view_menu(
     ui.label(egui::RichText::new(tr("Rotazione")).strong());
     ui.horizontal(|ui| {
         let before = settings.rotation;
-        ui.selectable_value(&mut settings.rotation, RotationMode::Trackball, "OpenInventor")
+        ui.selectable_value(&mut settings.rotation, RotationMode::Trackball, tr("OpenInventor"))
             .on_hover_text(tr("Trackball come in FreeCAD: vicino al centro della finestra il modello segue il mouse, verso i bordi ruota attorno all'asse di vista"));
         ui.selectable_value(&mut settings.rotation, RotationMode::FixedAxis, tr("Asse fisso"))
             .on_hover_text(tr("L'orizzonte resta dritto: gira attorno all'asse verticale del modello"));
@@ -440,7 +440,7 @@ fn view_menu(
         .on_hover_text(tr("Rotella in avanti per allontanarsi invece di avvicinarsi (anche dal tasto Zoom nella vista)"));
 
     ui.separator();
-    ui.label(egui::RichText::new("Lingua · Language").strong());
+    ui.label(egui::RichText::new(tr("Lingua · Language")).strong());
     ui.horizontal(|ui| {
         for lang in crate::i18n::Lang::ALL {
             ui.selectable_value(&mut settings.language, lang, lang.name());

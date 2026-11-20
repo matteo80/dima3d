@@ -56,7 +56,7 @@ pub(crate) fn ascii(data: &[u8]) -> (Cow<'_, [u8]>, Vec<String>) {
         }
         let mark = bin.out.len();
         if let Err(e) = bin.node(0) {
-            warnings.push(format!("IV binario letto solo in parte: {e}"));
+            warnings.push(trf!("IV binario letto solo in parte: {e}", e = e));
             close_braces(&mut bin.out, mark);
             break;
         }
@@ -140,7 +140,7 @@ impl<'a> Binary<'a> {
     fn string(&mut self) -> Result<&'a str, String> {
         let len = self.u32()? as usize;
         let end = self.pos.checked_add(len).filter(|&e| e <= self.data.len()).ok_or("stringa oltre la fine del file")?;
-        let s = std::str::from_utf8(&self.data[self.pos..end]).map_err(|_| format!("testo non valido alla posizione {}", self.pos))?;
+        let s = std::str::from_utf8(&self.data[self.pos..end]).map_err(|_| trf!("testo non valido alla posizione {pos}", pos = self.pos))?;
         self.pos = end.next_multiple_of(4).min(self.data.len());
         Ok(s)
     }
@@ -158,7 +158,7 @@ impl<'a> Binary<'a> {
 
     fn node(&mut self, depth: usize) -> Result<(), String> {
         if depth > MAX_DEPTH {
-            return Err("nodi annidati troppo in profondità".into());
+            return Err(crate::i18n::tr("nodi annidati troppo in profondità").to_string());
         }
         let first = self.string()?;
         match first {
@@ -182,11 +182,11 @@ impl<'a> Binary<'a> {
             first
         };
         if class.is_empty() || !class.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_') {
-            return Err(format!("nodo non valido alla posizione {}", self.pos));
+            return Err(trf!("nodo non valido alla posizione {pos}", pos = self.pos));
         }
         let flags = self.u32()?;
         if flags & 1 != 0 {
-            return Err(format!("engine «{class}» non supportato"));
+            return Err(trf!("engine «{class}» non supportato", class = class));
         }
         let _ = writeln!(self.out, "{class} {{");
 
@@ -212,13 +212,13 @@ impl<'a> Binary<'a> {
                 .get(name)
                 .copied()
                 .or_else(|| field_type(class, name))
-                .ok_or_else(|| format!("campo «{name}» del nodo «{class}» sconosciuto"))?;
+                .ok_or_else(|| trf!("campo «{name}» del nodo «{class}» sconosciuto", name = name, class = class))?;
             let _ = write!(self.out, "{name} ");
             self.value(ty, depth)?;
             self.out.push(b'\n');
             let field_flags = self.u32()?;
             if field_flags & 2 != 0 {
-                return Err(format!("campo «{name}» collegato a un engine: non supportato"));
+                return Err(trf!("campo «{name}» collegato a un engine: non supportato", name = name));
             }
         }
         // I nodi VRML 2.0 di Coin sono gruppi, ma i figli stanno solo nel campo `children`
@@ -237,7 +237,7 @@ impl<'a> Binary<'a> {
             let n = self.u32()? as usize;
             // Ogni valore occupa almeno 4 byte: un numero più grande è un file rotto
             if n > (self.data.len() - self.pos) / 4 + 1 {
-                return Err(format!("{n} valori oltre la fine del file"));
+                return Err(trf!("{n} valori oltre la fine del file", n = n));
             }
             self.out.extend_from_slice(b"[");
             for i in 0..n {
@@ -251,7 +251,7 @@ impl<'a> Binary<'a> {
         } else if let Some(single) = ty.strip_prefix("SF") {
             self.single(single, depth)
         } else {
-            Err(format!("tipo di campo «{ty}» sconosciuto"))
+            Err(trf!("tipo di campo «{ty}» sconosciuto", ty = ty))
         }
     }
 
@@ -315,7 +315,7 @@ impl<'a> Binary<'a> {
                 self.out.push(b'\n');
                 self.node(depth + 1)?;
             }
-            other => return Err(format!("tipo di campo «{other}» non supportato")),
+            other => return Err(trf!("tipo di campo «{other}» non supportato", other = other)),
         }
         Ok(())
     }

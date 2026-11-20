@@ -10,6 +10,7 @@
 //! La rete passa da PowerShell di Windows: usa il proxy di sistema con le credenziali di Windows
 //! (le reti aziendali lo richiedono spesso) e sa estrarre gli zip, senza librerie in più.
 
+use crate::i18n::tr;
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::{channel, Receiver};
 
@@ -70,10 +71,10 @@ fn parse_release(text: &str) -> Result<Release, String> {
     let zip_url = lines.next().unwrap_or("").trim().to_string();
     let page_url = lines.next().unwrap_or("").trim().to_string();
     if tag.is_empty() {
-        return Err("risposta di GitHub non valida".into());
+        return Err(tr("risposta di GitHub non valida").to_string());
     }
     if !zip_url.starts_with(DOWNLOAD_PREFIX) || !zip_url.ends_with(".zip") {
-        return Err("la versione pubblicata non ha uno zip da scaricare".into());
+        return Err(tr("la versione pubblicata non ha uno zip da scaricare").to_string());
     }
     let notes = lines.collect::<Vec<_>>().join("\n").trim().to_string();
     Ok(Release { version: tag.trim_start_matches(['v', 'V']).to_string(), zip_url, page_url, notes })
@@ -104,19 +105,19 @@ fn powershell_command(script: &str, env: &[(&str, &str)]) -> std::process::Comma
 fn powershell_error(stderr: &[u8], what: &str) -> String {
     let err: String = String::from_utf8_lossy(stderr).split_whitespace().collect::<Vec<_>>().join(" ");
     if err.contains("Not Found") || err.contains("404") {
-        return "su GitHub non c'è ancora una versione pubblicata".into();
+        return tr("su GitHub non c'è ancora una versione pubblicata").to_string();
     }
     let short: String = err.chars().take(160).collect();
-    format!("{what} ({})", if short.is_empty() { "errore sconosciuto" } else { &short })
+    format!("{what} ({})", if short.is_empty() { tr("errore sconosciuto") } else { &short })
 }
 
 /// Esegue uno script PowerShell e ne ritorna l'uscita.
 fn powershell(script: &str, env: &[(&str, &str)]) -> Result<String, String> {
-    let out = powershell_command(script, env).output().map_err(|e| format!("PowerShell non disponibile: {e}"))?;
+    let out = powershell_command(script, env).output().map_err(|e| trf!("PowerShell non disponibile: {e}", e = e))?;
     if out.status.success() {
         Ok(String::from_utf8_lossy(&out.stdout).into_owned())
     } else {
-        Err(powershell_error(&out.stderr, "connessione a GitHub non riuscita"))
+        Err(powershell_error(&out.stderr, tr("connessione a GitHub non riuscita")))
     }
 }
 
@@ -162,8 +163,8 @@ fn download(release: &Release, tx: &std::sync::mpsc::Sender<DownloadEvent>, chil
     let dir_text = dir.to_string_lossy().into_owned();
     let mut command = powershell_command(DOWNLOAD_SCRIPT, &[("DIMA3D_ZIP", &release.zip_url), ("DIMA3D_DIR", &dir_text)]);
     command.stdout(std::process::Stdio::piped()).stderr(std::process::Stdio::piped());
-    let mut process = command.spawn().map_err(|e| format!("PowerShell non disponibile: {e}"))?;
-    let stdout = process.stdout.take().ok_or("uscita di PowerShell non leggibile")?;
+    let mut process = command.spawn().map_err(|e| trf!("PowerShell non disponibile: {e}", e = e))?;
+    let stdout = process.stdout.take().ok_or(tr("uscita di PowerShell non leggibile"))?;
     let mut stderr = process.stderr.take();
     *child.lock().unwrap() = Some(process);
     for line in std::io::BufReader::new(stdout).lines().map_while(Result::ok) {
@@ -189,9 +190,9 @@ fn download(release: &Release, tx: &std::sync::mpsc::Sender<DownloadEvent>, chil
         if let Some(s) = stderr.as_mut() {
             let _ = std::io::Read::read_to_end(s, &mut err);
         }
-        return Err(powershell_error(&err, "download non riuscito"));
+        return Err(powershell_error(&err, tr("download non riuscito")));
     }
-    find_package(&dir.join("file")).ok_or_else(|| format!("nello zip non c'è {EXE}"))
+    find_package(&dir.join("file")).ok_or_else(|| trf!("nello zip non c'è {EXE}", EXE = EXE))
 }
 
 /// Processo del download, condiviso con la finestra per «Annulla».
@@ -226,7 +227,7 @@ fn megabytes(bytes: u64) -> String {
 /// `1 min 20 s`, `45 s`
 fn duration_text(seconds: f64) -> String {
     let s = seconds.round().max(1.0) as u64;
-    if s >= 60 { format!("{} min {} s", s / 60, s % 60) } else { format!("{s} s") }
+    if s >= 60 { trf!("{v} min {w} s", v = s / 60, w = s % 60) } else { format!("{s} s") }
 }
 
 /// Cartella che contiene l'exe (lo zip ha una cartella `Dima3D-x.y.z` con dentro i file).
@@ -262,7 +263,7 @@ fn install_into(package: &Path, install: &Path) -> Result<(), String> {
     let exe = install.join(EXE);
     let old = install.join(format!("{EXE}.old"));
     let _ = std::fs::remove_file(&old);
-    std::fs::rename(&exe, &old).map_err(|e| format!("la cartella del programma non si può modificare ({e})"))?;
+    std::fs::rename(&exe, &old).map_err(|e| trf!("la cartella del programma non si può modificare ({e})", e = e))?;
     let dll = install.join(LOADED_DLL);
     let dll_old = install.join(format!("{LOADED_DLL}.old"));
     let _ = std::fs::remove_file(&dll_old);
@@ -274,7 +275,7 @@ fn install_into(package: &Path, install: &Path) -> Result<(), String> {
             let _ = std::fs::remove_file(&dll);
             let _ = std::fs::rename(&dll_old, &dll);
         }
-        return Err(format!("copia dei file nuovi non riuscita ({e})"));
+        return Err(trf!("copia dei file nuovi non riuscita ({e})", e = e));
     }
     // Pacchetto senza la DLL: resta quella di prima
     if dll_moved && !dll.is_file() {
@@ -336,7 +337,7 @@ fn install_elevated(package: &Path, install: &Path) -> Result<(), String> {
     if out.status.success() {
         Ok(())
     } else {
-        Err("serve il permesso di amministratore per scrivere nella cartella del programma, e non è stato dato".into())
+        Err(tr("serve il permesso di amministratore per scrivere nella cartella del programma, e non è stato dato").to_string())
     }
 }
 
@@ -351,7 +352,7 @@ pub fn install_and_restart(package: &Path) -> Result<(), String> {
     }
     install_into(package, install)?;
     update_installed_version(package);
-    std::process::Command::new(install.join(EXE)).spawn().map_err(|e| format!("riavvio non riuscito ({e})"))?;
+    std::process::Command::new(install.join(EXE)).spawn().map_err(|e| trf!("riavvio non riuscito ({e})", e = e))?;
     Ok(())
 }
 
@@ -401,7 +402,7 @@ impl crate::app::GestoreApp {
         });
         self.update.check = Some((rx, manual));
         if manual {
-            self.update.message = Some("Verifica in corso…".into());
+            self.update.message = Some(tr("Verifica in corso…").to_string());
         }
     }
 
@@ -419,9 +420,9 @@ impl crate::app::GestoreApp {
                             self.update.offer = Some(r);
                         }
                         Ok(_) if manual => {
-                            self.update.message = Some(format!("Hai già l'ultima versione ({current})."));
+                            self.update.message = Some(trf!("Hai già l'ultima versione ({current}).", current = current));
                         }
-                        Err(e) if manual => self.update.message = Some(format!("Verifica non riuscita: {e}.")),
+                        Err(e) if manual => self.update.message = Some(trf!("Verifica non riuscita: {e}.", e = e)),
                         Err(e) => tracing::info!("Verifica aggiornamenti: {e}"),
                         Ok(_) => {}
                     }
@@ -452,10 +453,10 @@ impl crate::app::GestoreApp {
             let release = self.update.download.take().map(|d| d.release);
             match result {
                 Ok(package) => self.request_install(ctx, package),
-                Err(e) if e == "annullato" => self.update.message = Some("Aggiornamento annullato.".into()),
+                Err(e) if e == "annullato" => self.update.message = Some(tr("Aggiornamento annullato.").to_string()),
                 Err(e) => {
                     let version = release.map(|r| r.version).unwrap_or_default();
-                    self.update.message = Some(format!("Aggiornamento a {version} non riuscito: {e}."));
+                    self.update.message = Some(trf!("Aggiornamento a {version} non riuscito: {e}.", version = version, e = e));
                 }
             }
         }
@@ -510,7 +511,7 @@ impl crate::app::GestoreApp {
                 true
             }
             Err(e) => {
-                self.update.message = Some(format!("Aggiornamento non riuscito: {e}. Puoi scaricare lo zip dalla pagina del progetto."));
+                self.update.message = Some(trf!("Aggiornamento non riuscito: {e}. Puoi scaricare lo zip dalla pagina del progetto.", e = e));
                 false
             }
         }
@@ -522,21 +523,16 @@ pub fn draw(ctx: &egui::Context, app: &mut crate::app::GestoreApp) {
     app.poll_update(ctx);
     if let Some(release) = app.update.offer.clone() {
         let mut close = false;
-        egui::Window::new("Aggiornamento disponibile")
+        egui::Window::new(tr("Aggiornamento disponibile"))
             .collapsible(false)
             .resizable(false)
             .anchor(egui::Align2::CENTER_CENTER, egui::Vec2::ZERO)
             .show(ctx, |ui| {
                 ui.set_width(420.0);
-                ui.label(format!(
-                    "È disponibile {} {} (questa è la {}).",
-                    crate::APP_NAME,
-                    release.version,
-                    env!("CARGO_PKG_VERSION")
-                ));
+                ui.label(trf!("È disponibile {v} {version} (questa è la {w}).", v = crate::APP_NAME, version = release.version, w = env!("CARGO_PKG_VERSION")));
                 if !release.notes.is_empty() {
                     ui.add_space(4.0);
-                    ui.label(egui::RichText::new("Novità").strong());
+                    ui.label(egui::RichText::new(tr("Novità")).strong());
                     egui::ScrollArea::vertical().max_height(220.0).show(ui, |ui| {
                         ui.label(&release.notes);
                     });
@@ -546,18 +542,18 @@ pub fn draw(ctx: &egui::Context, app: &mut crate::app::GestoreApp) {
                 }
                 ui.add_space(6.0);
                 ui.label(
-                    egui::RichText::new("Il programma scarica il pacchetto, sostituisce i suoi file e si riapre.")
+                    egui::RichText::new(tr("Il programma scarica il pacchetto, sostituisce i suoi file e si riapre."))
                         .weak(),
                 );
                 ui.horizontal(|ui| {
-                    if ui.button("Aggiorna adesso").clicked() {
+                    if ui.button(tr("Aggiorna adesso")).clicked() {
                         app.start_download(release.clone());
                         close = true;
                     }
-                    if ui.button("Più tardi").clicked() {
+                    if ui.button(tr("Più tardi")).clicked() {
                         close = true;
                     }
-                    if ui.button("Salta questa versione").on_hover_text("Non avvisare più per questa versione all'avvio").clicked() {
+                    if ui.button(tr("Salta questa versione")).on_hover_text(tr("Non avvisare più per questa versione all'avvio")).clicked() {
                         let mut settings = app.settings.clone();
                         settings.skipped_version = release.version.clone();
                         app.apply_settings(settings);
@@ -571,7 +567,7 @@ pub fn draw(ctx: &egui::Context, app: &mut crate::app::GestoreApp) {
     }
     if let Some(d) = &app.update.download {
         let mut cancel = false;
-        let title = format!("Aggiornamento a {} {}", crate::APP_NAME, d.release.version);
+        let title = trf!("Aggiornamento a {v} {version}", v = crate::APP_NAME, version = d.release.version);
         egui::Window::new(title)
             .id(egui::Id::new("finestra_download"))
             .collapsible(false)
@@ -582,7 +578,7 @@ pub fn draw(ctx: &egui::Context, app: &mut crate::app::GestoreApp) {
                 if d.extracting {
                     ui.horizontal(|ui| {
                         ui.spinner();
-                        ui.label("Estrazione dei file…");
+                        ui.label(tr("Estrazione dei file…"));
                     });
                     return;
                 }
@@ -598,16 +594,16 @@ pub fn draw(ctx: &egui::Context, app: &mut crate::app::GestoreApp) {
                     Some(s) if s > 0.0 => {
                         let rate = format!("{}/s", megabytes(s as u64));
                         if d.total > d.done {
-                            format!("{rate}  ·  mancano circa {}", duration_text((d.total - d.done) as f64 / s))
+                            trf!("{rate}  ·  mancano circa {v}", rate = rate, v = duration_text((d.total - d.done) as f64 / s))
                         } else {
                             rate
                         }
                     }
-                    _ if d.done == 0 => "Collegamento a GitHub…".to_string(),
-                    _ => "In attesa di dati…".to_string(),
+                    _ if d.done == 0 => tr("Collegamento a GitHub…").to_string(),
+                    _ => tr("In attesa di dati…").to_string(),
                 };
                 ui.label(egui::RichText::new(detail).weak());
-                if ui.button("Annulla").clicked() {
+                if ui.button(tr("Annulla")).clicked() {
                     cancel = true;
                 }
             });
@@ -618,7 +614,7 @@ pub fn draw(ctx: &egui::Context, app: &mut crate::app::GestoreApp) {
     if let Some(message) = app.update.message.clone() {
         let busy = app.update.busy();
         let mut open = true;
-        egui::Window::new("Aggiornamenti")
+        egui::Window::new(tr("Aggiornamenti"))
             .collapsible(false)
             .resizable(false)
             .anchor(egui::Align2::CENTER_CENTER, egui::Vec2::ZERO)

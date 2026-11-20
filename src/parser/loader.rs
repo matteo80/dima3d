@@ -39,22 +39,19 @@ pub fn load_blocking(
     let file = match std::fs::File::open(path) {
         Ok(f) => f,
         Err(e) => {
-            let _ = sender.send(LoadEvent::Error(format!("Impossibile aprire il file '{}': {e}", path.display())));
+            let _ = sender.send(LoadEvent::Error(trf!("Impossibile aprire il file '{path}': {e}", path = path.display(), e = e)));
             return;
         }
     };
     let file_size = match file.metadata() {
         Ok(m) => m.len(),
         Err(e) => {
-            let _ = sender.send(LoadEvent::Error(format!(
-                "Impossibile leggere le dimensioni di '{}': {e}",
-                path.display()
-            )));
+            let _ = sender.send(LoadEvent::Error(trf!("Impossibile leggere le dimensioni di '{path}': {e}", path = path.display(), e = e)));
             return;
         }
     };
     if file_size == 0 {
-        let _ = sender.send(LoadEvent::Error("Il file selezionato è vuoto (0 byte)".to_string()));
+        let _ = sender.send(LoadEvent::Error(crate::i18n::tr("Il file selezionato è vuoto (0 byte)").to_string()));
         return;
     }
     if start == 0.0 {
@@ -62,7 +59,7 @@ pub fn load_blocking(
     }
     let _ = sender.send(LoadEvent::Progress {
         percent: scaled(0.05),
-        message: format!("Memory mapping con memmap2 ({:.2} MB)...", file_size as f64 / (1024.0 * 1024.0)),
+        message: trf!("Memory mapping con memmap2 ({v} MB)...", v = format!("{:.2}", file_size as f64 / (1024.0 * 1024.0))),
     });
 
     let progress = {
@@ -103,7 +100,7 @@ pub fn load_blocking(
             tracing::warn!("memmap2 non riuscito ({mmap_err}); fallback a lettura su buffer heap");
             let _ = sender.send(LoadEvent::Progress {
                 percent: scaled(0.10),
-                message: "Fallback: lettura del file in buffer RAM...".to_string(),
+                message: crate::i18n::tr("Fallback: lettura del file in buffer RAM...").to_string(),
             });
             match std::fs::read(path) {
                 Ok(buffer) => {
@@ -118,7 +115,7 @@ pub fn load_blocking(
                     finish(scene);
                 }
                 Err(read_err) => {
-                    let _ = sender.send(LoadEvent::Error(format!("Errore durante la lettura del file: {read_err}")));
+                    let _ = sender.send(LoadEvent::Error(trf!("Errore durante la lettura del file: {read_err}", read_err = read_err)));
                 }
             }
         }
@@ -136,7 +133,7 @@ fn empty_file_message(data: &[u8]) -> String {
         (false, true) => "solo punti",
         (false, false) => "nessuna superficie",
     };
-    format!("Il file contiene {what}: non ci sono superfici da mostrare. Dima 3D apre solo matematiche con facce.")
+    trf!("Il file contiene {what}: non ci sono superfici da mostrare. Dima 3D apre solo matematiche con facce.", what = what)
 }
 
 /// Nome del nodo radice di un file: il nome del file con estensione.

@@ -237,7 +237,7 @@ impl Program {
     /// stessa cartella, più i dati globali (file `.tid` che iniziano con `_`).
     pub fn load(path: &Path) -> Result<Program, String> {
         let program_path = if has_ext(path, &DATA_EXTS) {
-            sibling(path, &PROGRAM_EXTS).ok_or_else(|| format!("Nessun programma .tis o .tip accanto a {}", path.display()))?
+            sibling(path, &PROGRAM_EXTS).ok_or_else(|| trf!("Nessun programma .tis o .tip accanto a {path}", path = path.display()))?
         } else {
             path.to_path_buf()
         };

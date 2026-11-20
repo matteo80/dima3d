@@ -638,7 +638,7 @@ impl ProjectFile {
         // Dentro la sezione [allinea su misure] o [misure salvate]
         let mut in_measures = false;
         let mut in_saved = false;
-        let bad = |line: usize| format!("Riga {} del progetto non valida", line + 1);
+        let bad = |line: usize| trf!("Riga {v} del progetto non valida", v = line + 1);
         for (i, raw) in text.lines().enumerate() {
             let line = raw.trim();
             if line.is_empty() || line.starts_with('#') {
@@ -672,7 +672,7 @@ impl ProjectFile {
             if key == "versione" {
                 let v: u32 = value.parse().map_err(|_| bad(i))?;
                 if v > VERSION {
-                    return Err(format!("Progetto salvato da una versione più nuova di Dima 3D (formato {v})"));
+                    return Err(trf!("Progetto salvato da una versione più nuova di Dima 3D (formato {v})", v = v));
                 }
                 seen_header = true;
                 continue;
@@ -786,13 +786,13 @@ impl ProjectFile {
             }
         }
         if !seen_header {
-            return Err("Non è un progetto di Dima 3D".to_string());
+            return Err(crate::i18n::tr("Non è un progetto di Dima 3D").to_string());
         }
         for (index, f) in out.files.iter_mut().enumerate() {
             if let Some(c) = &f.copy {
                 // Una copia viene da un elemento scritto prima nel progetto
                 if c.source >= index || c.nodes.is_empty() {
-                    return Err("Nel progetto c'è una copia senza provenienza valida".to_string());
+                    return Err(crate::i18n::tr("Nel progetto c'è una copia senza provenienza valida").to_string());
                 }
                 continue;
             }
@@ -800,7 +800,7 @@ impl ProjectFile {
                 continue;
             }
             if f.path.as_os_str().is_empty() && f.relative.is_none() {
-                return Err("Nel progetto c'è un file senza percorso".to_string());
+                return Err(crate::i18n::tr("Nel progetto c'è un file senza percorso").to_string());
             }
             if let Some(rel) = &f.relative {
                 let candidate = base.join(rel);

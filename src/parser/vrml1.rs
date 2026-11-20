@@ -107,34 +107,19 @@ impl Counts {
     fn warnings(&self) -> Vec<String> {
         let mut list = Vec::new();
         if self.lines > 0 {
-            list.push(format!(
-                "VRML 1.0: {} nodi di linee o punti non caricati né esportati (si leggono solo le superfici)",
-                self.lines
-            ));
+            list.push(trf!("VRML 1.0: {lines} nodi di linee o punti non caricati né esportati (si leggono solo le superfici)", lines = self.lines));
         }
         if self.unsupported > 0 {
-            list.push(format!(
-                "VRML 1.0: {} nodi non supportati (primitive, testo o WWWInline) non caricati né esportati",
-                self.unsupported
-            ));
+            list.push(trf!("VRML 1.0: {unsupported} nodi non supportati (primitive, testo o WWWInline) non caricati né esportati", unsupported = self.unsupported));
         }
         if self.hidden_switches > 0 {
-            list.push(format!(
-                "VRML 1.0: {} nodi Switch spenti: il loro contenuto non è caricato né esportato",
-                self.hidden_switches
-            ));
+            list.push(trf!("VRML 1.0: {hidden_switches} nodi Switch spenti: il loro contenuto non è caricato né esportato", hidden_switches = self.hidden_switches));
         }
         if self.multi_colors > 0 {
-            list.push(format!(
-                "VRML 1.0: {} superfici con più colori mostrate con il solo primo colore",
-                self.multi_colors
-            ));
+            list.push(trf!("VRML 1.0: {multi_colors} superfici con più colori mostrate con il solo primo colore", multi_colors = self.multi_colors));
         }
         if self.broken > 0 {
-            list.push(format!(
-                "VRML 1.0: {} nodi non letti perché incompleti o con riferimenti non validi",
-                self.broken
-            ));
+            list.push(trf!("VRML 1.0: {broken} nodi non letti perché incompleti o con riferimenti non validi", broken = self.broken));
         }
         list
     }

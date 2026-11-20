@@ -24,7 +24,7 @@ pub struct TextMesh {
 fn load(bytes: &[u8]) -> Result<FontRef<'_>, String> {
     FontRef::try_from_slice(bytes)
         .or_else(|_| FontRef::try_from_slice_and_index(bytes, 0))
-        .map_err(|_| "il file non è un font TrueType/OpenType leggibile".to_string())
+        .map_err(|_| crate::i18n::tr("il file non è un font TrueType/OpenType leggibile").to_string())
 }
 
 /// Scritta `text` con il font in `bytes`: maiuscole alte `height` mm, rilievo `depth` mm.
@@ -97,7 +97,7 @@ pub fn text_mesh(bytes: &[u8], text: &str, height: f32, depth: f32) -> Result<Te
             &FillOptions::tolerance(tolerance).with_fill_rule(FillRule::NonZero),
             &mut BuffersBuilder::new(&mut fill, |v: FillVertex| v.position().to_array()),
         )
-        .map_err(|e| format!("lettere non riempibili ({e:?})"))?;
+        .map_err(|e| trf!("lettere non riempibili ({e})", e = format!("{:?}", e)))?;
 
     let mut points = Vec::new();
     let mut faces = Vec::new();

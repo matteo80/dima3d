@@ -1,3 +1,4 @@
+use crate::i18n::tr;
 use crate::app::Action;
 use crate::scene_graph::{SceneGraph, SceneNode};
 
@@ -87,12 +88,12 @@ pub fn color_menu(
 
     // Colori salvati dall'utente (tasto destro per toglierli)
     ui.add_space(4.0);
-    ui.label(egui::RichText::new("I miei colori").small().weak());
+    ui.label(egui::RichText::new(tr("I miei colori")).small().weak());
     ui.horizontal_wrapped(|ui| {
         ui.spacing_mut().item_spacing = egui::vec2(3.0, 3.0);
         for (i, &[r, g, b]) in saved_colors.iter().enumerate() {
             let col = to_color32([r, g, b, 1.0]);
-            let resp = swatch(ui, col).on_hover_text("Clic: applica  ·  tasto destro: togli dai miei colori");
+            let resp = swatch(ui, col).on_hover_text(tr("Clic: applica  ·  tasto destro: togli dai miei colori"));
             if resp.clicked() {
                 actions.push(Action::SetColor(node, Some([r, g, b, alpha])));
             }
@@ -102,7 +103,7 @@ pub fn color_menu(
         }
         if ui
             .small_button(crate::ui::theme::icon_text(ui, crate::ui::theme::icon::PLUS, ""))
-            .on_hover_text("Salva il colore attuale tra i miei colori (restano anche alla prossima apertura)")
+            .on_hover_text(tr("Salva il colore attuale tra i miei colori (restano anche alla prossima apertura)"))
             .clicked()
         {
             actions.push(Action::SaveColor([current[0], current[1], current[2]]));
@@ -117,7 +118,7 @@ pub fn color_menu(
 
     let mut transparency = (1.0 - alpha) * 100.0;
     if ui
-        .add(egui::Slider::new(&mut transparency, 0.0..=90.0).suffix(" %").text("Trasparenza"))
+        .add(egui::Slider::new(&mut transparency, 0.0..=90.0).suffix(" %").text(tr("Trasparenza")))
         .changed()
     {
         alpha = 1.0 - transparency / 100.0;
@@ -127,8 +128,8 @@ pub fn color_menu(
     ui.separator();
     let has_user = scene.info.get(node as usize).is_some_and(|i| i.color.is_some());
     if ui
-        .add_enabled(has_user, egui::Button::new(crate::ui::theme::icon_text(ui, crate::ui::theme::icon::ARROW_COUNTER_CLOCKWISE, "Colore originale")))
-        .on_hover_text("Rimuove il colore impostato su questo elemento")
+        .add_enabled(has_user, egui::Button::new(crate::ui::theme::icon_text(ui, crate::ui::theme::icon::ARROW_COUNTER_CLOCKWISE, tr("Colore originale"))))
+        .on_hover_text(tr("Rimuove il colore impostato su questo elemento"))
         .clicked()
     {
         actions.push(Action::SetColor(node, None));

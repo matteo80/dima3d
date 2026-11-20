@@ -10,6 +10,7 @@
 //! egui i pannelli laterali vanno creati prima di quello centrale.
 
 use super::theme::{icon, icon_text};
+use crate::i18n::tr;
 
 /// Larghezza minima di ogni finestra (regola per tutto il programma): si stringe fin quasi al
 /// titolo e, sotto la larghezza che serve al contenuto, compare la barra di scorrimento
@@ -202,12 +203,12 @@ fn docked<R>(ctx: &egui::Context, side: Side, w: Dockable, add: impl FnOnce(&mut
                 .add(egui::Label::new(egui::RichText::new(&w.title).strong()).selectable(false).sense(egui::Sense::drag()))
                 .on_hover_cursor(egui::CursorIcon::Grab);
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                if ui.button(icon_text(ui, icon::X, "")).on_hover_text("Chiudi").clicked() {
+                if ui.button(icon_text(ui, icon::X, "")).on_hover_text(tr("Chiudi")).clicked() {
                     *open = false;
                 }
                 if ui
                     .button(icon_text(ui, icon::ARROW_SQUARE_OUT, ""))
-                    .on_hover_text("Sgancia: torna una finestra mobile (o trascina la barra del titolo)")
+                    .on_hover_text(tr("Sgancia: torna una finestra mobile (o trascina la barra del titolo)"))
                     .clicked()
                 {
                     state.side = Side::Floating;

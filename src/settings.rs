@@ -64,7 +64,7 @@ impl StepLoad {
     /// Descrizione breve per l'albero: "visualizzazione" o "mesh 0.1 mm · 30°".
     pub fn describe(self) -> String {
         match self {
-            StepLoad::View => "visualizzazione".to_string(),
+            StepLoad::View => crate::i18n::tr("visualizzazione").to_string(),
             StepLoad::Mesh(m) => {
                 let unit = if m.relative { " rel." } else { " mm" };
                 format!("mesh {}{unit} · {}°", m.deviation, m.angle)

@@ -1,5 +1,6 @@
 //! Finestra Info: nome, versione, origine del codice, licenze.
 
+use crate::i18n::tr;
 use super::theme::{icon, icon_text};
 use crate::app::GestoreApp;
 
@@ -10,16 +11,16 @@ pub const AUTHOR: &str = "matteo80";
 
 /// Librerie principali mostrate nella finestra (l'elenco completo è in licenses\librerie-rust.txt).
 const LIBRARIES: &[(&str, &str, &str)] = &[
-    ("egui / eframe", "interfaccia", "MIT o Apache 2.0"),
-    ("wgpu", "grafica 3D", "MIT o Apache 2.0"),
-    ("glam", "matematica 3D", "MIT o Apache 2.0"),
-    ("rayon", "calcolo in parallelo", "MIT o Apache 2.0"),
-    ("meshoptimizer (meshopt)", "riduzione delle facce", "MIT"),
-    ("Phosphor Icons (egui-phosphor)", "icone", "MIT"),
-    ("ab_glyph, lyon", "lettere delle scritte", "Apache 2.0; MIT o Apache 2.0"),
-    ("OpenCASCADE 8.0.1", "convertitore STEP", "LGPL 2.1 con eccezione"),
-    ("JTReader, SharpCompress", "convertitore JT", "MIT"),
-    ("pdfium, pdfium-render", "Misure PDF", "BSD 3 clausole; MIT o Apache 2.0"),
+    ("egui / eframe", tn!("interfaccia"), tn!("MIT o Apache 2.0")),
+    ("wgpu", tn!("grafica 3D"), tn!("MIT o Apache 2.0")),
+    ("glam", tn!("matematica 3D"), tn!("MIT o Apache 2.0")),
+    ("rayon", tn!("calcolo in parallelo"), tn!("MIT o Apache 2.0")),
+    ("meshoptimizer (meshopt)", tn!("riduzione delle facce"), "MIT"),
+    ("Phosphor Icons (egui-phosphor)", tn!("icone"), "MIT"),
+    ("ab_glyph, lyon", tn!("lettere delle scritte"), tn!("Apache 2.0; MIT o Apache 2.0")),
+    ("OpenCASCADE 8.0.1", tn!("convertitore STEP"), tn!("LGPL 2.1 con eccezione")),
+    ("JTReader, SharpCompress", tn!("convertitore JT"), "MIT"),
+    ("pdfium, pdfium-render", tn!("Misure PDF"), tn!("BSD 3 clausole; MIT o Apache 2.0")),
 ];
 
 pub fn draw(ctx: &egui::Context, app: &mut GestoreApp) {
@@ -27,7 +28,7 @@ pub fn draw(ctx: &egui::Context, app: &mut GestoreApp) {
         return;
     }
     let mut open = true;
-    egui::Window::new(format!("{}  Info", icon::INFO))
+    egui::Window::new(format!("{}  {}", icon::INFO, tr("Info")))
         .id(egui::Id::new("finestra_info"))
         .open(&mut open)
         .resizable(false)
@@ -41,52 +42,52 @@ pub fn draw(ctx: &egui::Context, app: &mut GestoreApp) {
                 }
                 ui.vertical(|ui| {
                     ui.label(egui::RichText::new(crate::APP_NAME).size(26.0).strong());
-                    ui.label(format!("Versione {}", env!("CARGO_PKG_VERSION")));
-                    ui.label(format!("Autore: {AUTHOR}"));
+                    ui.label(trf!("Versione {v}", v = env!("CARGO_PKG_VERSION")));
+                    ui.label(trf!("Autore: {name}", name = AUTHOR));
                     ui.label(
-                        egui::RichText::new("Visualizza, posiziona ed esporta matematiche 3D di grandi dimensioni")
+                        egui::RichText::new(tr("Visualizza, posiziona ed esporta matematiche 3D di grandi dimensioni"))
                             .weak(),
                     );
                 });
             });
             ui.add_space(6.0);
-            ui.label("Formati: WRL (VRML 1.0 e 2.0), STEP, JT, STL, HSF, Open Inventor (IV).");
+            ui.label(tr("Formati: WRL (VRML 1.0 e 2.0), STEP, JT, STL, HSF, Open Inventor (IV)."));
 
             ui.add_space(8.0);
-            ui.label(egui::RichText::new("Come è stato scritto").strong());
+            ui.label(egui::RichText::new(tr("Come è stato scritto")).strong());
             ui.label(
-                "Il codice è stato scritto interamente con l'intelligenza artificiale (Claude, di Anthropic). \
+                tr("Il codice è stato scritto interamente con l'intelligenza artificiale (Claude, di Anthropic). \
                  L'autore del progetto non ha scritto codice: ha definito le richieste, provato il programma \
-                 sulle matematiche reali e deciso cosa correggere.",
+                 sulle matematiche reali e deciso cosa correggere."),
             );
 
             ui.add_space(8.0);
-            ui.label(egui::RichText::new("Licenza").strong());
-            ui.label("Software libero con licenza MIT. Il codice sorgente è pubblico:");
+            ui.label(egui::RichText::new(tr("Licenza")).strong());
+            ui.label(tr("Software libero con licenza MIT. Il codice sorgente è pubblico:"));
             ui.hyperlink_to(PROJECT_URL, PROJECT_URL);
 
             ui.add_space(8.0);
-            ui.label(egui::RichText::new("Librerie usate").strong());
+            ui.label(egui::RichText::new(tr("Librerie usate")).strong());
             egui::Grid::new("info_librerie").num_columns(3).spacing([12.0, 2.0]).striped(true).show(ui, |ui| {
                 for (name, what, license) in LIBRARIES {
                     ui.label(*name);
-                    ui.label(egui::RichText::new(*what).weak());
-                    ui.label(egui::RichText::new(*license).small());
+                    ui.label(egui::RichText::new(tr(what)).weak());
+                    ui.label(egui::RichText::new(tr(license)).small());
                     ui.end_row();
                 }
             });
             ui.label(
                 egui::RichText::new(
-                    "Testi completi delle licenze e note di copyright di tutte le librerie (216 solo per il \
-                     programma) nella cartella «licenses» accanto all'eseguibile.",
+                    tr("Testi completi delle licenze e note di copyright di tutte le librerie (216 solo per il \
+                     programma) nella cartella «licenses» accanto all'eseguibile."),
                 )
                 .small(),
             );
             let folder = licenses_folder();
             ui.horizontal(|ui| {
                 if ui
-                    .add_enabled(folder.is_some(), egui::Button::new(icon_text(ui, icon::FOLDER_OPEN, "Apri la cartella delle licenze")))
-                    .on_disabled_hover_text("Cartella «licenses» non trovata accanto all'eseguibile")
+                    .add_enabled(folder.is_some(), egui::Button::new(icon_text(ui, icon::FOLDER_OPEN, tr("Apri la cartella delle licenze"))))
+                    .on_disabled_hover_text(tr("Cartella «licenses» non trovata accanto all'eseguibile"))
                     .clicked()
                 {
                     if let Some(f) = &folder {
@@ -94,20 +95,20 @@ pub fn draw(ctx: &egui::Context, app: &mut GestoreApp) {
                     }
                 }
                 if ui
-                    .button(icon_text(ui, icon::FILE_TEXT, "Log"))
-                    .on_hover_text("Apre il log di Dima 3D (aperture, conversioni, errori)")
+                    .button(icon_text(ui, icon::FILE_TEXT, tr("Log")))
+                    .on_hover_text(tr("Apre il log di Dima 3D (aperture, conversioni, errori)"))
                     .clicked()
                 {
                     crate::log::open();
                 }
                 if ui
-                    .add_enabled(!app.update.busy(), egui::Button::new(icon_text(ui, icon::ARROW_CLOCKWISE, "Verifica aggiornamenti")))
-                    .on_hover_text("Chiede a GitHub se c'è una versione nuova")
+                    .add_enabled(!app.update.busy(), egui::Button::new(icon_text(ui, icon::ARROW_CLOCKWISE, tr("Verifica aggiornamenti"))))
+                    .on_hover_text(tr("Chiede a GitHub se c'è una versione nuova"))
                     .clicked()
                 {
                     app.check_for_updates(true);
                 }
-                if ui.button("Chiudi").clicked() {
+                if ui.button(tr("Chiudi")).clicked() {
                     app.ui_state.about = false;
                 }
             });

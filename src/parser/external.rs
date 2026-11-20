@@ -109,13 +109,13 @@ fn error_message(label: &str, code: Option<i32>, stderr: &[String]) -> String {
     let detail: Vec<&str> =
         stderr.iter().map(String::as_str).filter(|l| !is_log_only(l) && !l.starts_with("Avviso:") && !l.trim().is_empty()).collect();
     match (code, detail.last()) {
-        (_, Some(last)) => format!("Conversione {label} non riuscita: {last}"),
+        (_, Some(last)) => trf!("Conversione {label} non riuscita: {last}", label = label, last = last),
         // 0xC0000135: manca una DLL accanto al convertitore
-        (Some(-1073741515), None) => format!("Convertitore {label} incompleto: manca una DLL nella sua cartella"),
+        (Some(-1073741515), None) => trf!("Convertitore {label} incompleto: manca una DLL nella sua cartella", label = label),
         // 0xC0000005 / 0xC00000FD: il convertitore si è bloccato (lettura fuori dai dati, pila esaurita)
-        (Some(-1073741819 | -1073741571), None) => format!("Il convertitore {label} si è bloccato leggendo il file"),
-        (Some(c), None) => format!("Conversione {label} non riuscita (codice {c})"),
-        (None, None) => format!("Il convertitore {label} si è chiuso in modo inatteso"),
+        (Some(-1073741819 | -1073741571), None) => trf!("Il convertitore {label} si è bloccato leggendo il file", label = label),
+        (Some(c), None) => trf!("Conversione {label} non riuscita (codice {c})", label = label, c = c),
+        (None, None) => trf!("Il convertitore {label} si è chiuso in modo inatteso", label = label),
     }
 }
 
@@ -152,10 +152,10 @@ pub fn convert_and_load(source: PathBuf, kind: Kind, cluster: crate::clusterer::
 fn convert(source: &Path, kind: Kind, sender: &Sender<LoadEvent>) -> Result<(PathBuf, Vec<String>), String> {
     let label = kind.label();
     let converter = converter_path(kind).ok_or_else(|| {
-        format!("Convertitore {label} non trovato: serve {} nella cartella di Dima 3D", kind.locations().1[0])
+        trf!("Convertitore {label} non trovato: serve {v} nella cartella di Dima 3D", label = label, v = kind.locations().1[0])
     })?;
     let dir = work_dir();
-    std::fs::create_dir_all(&dir).map_err(|e| format!("Cartella temporanea non disponibile: {e}"))?;
+    std::fs::create_dir_all(&dir).map_err(|e| trf!("Cartella temporanea non disponibile: {e}", e = e))?;
     // Nome unico: un file con lo stesso nome può essere ancora aperto (e mappato) nella scena
     let stamp = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_nanos());
     let stem = source.file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_else(|| "file".into());
@@ -177,7 +177,7 @@ fn convert(source: &Path, kind: Kind, sender: &Sender<LoadEvent>) -> Result<(Pat
         converter.display()
     );
     let started = std::time::Instant::now();
-    let mut child = command.spawn().map_err(|e| format!("Avvio del convertitore {label} non riuscito: {e}"))?;
+    let mut child = command.spawn().map_err(|e| trf!("Avvio del convertitore {label} non riuscito: {e}", label = label, e = e))?;
 
     let stderr = child.stderr.take();
     let errors = std::thread::spawn(move || {
@@ -198,7 +198,7 @@ fn convert(source: &Path, kind: Kind, sender: &Sender<LoadEvent>) -> Result<(Pat
             }
         }
     }
-    let status = child.wait().map_err(|e| format!("Convertitore {label}: {e}"))?;
+    let status = child.wait().map_err(|e| trf!("Convertitore {label}: {e}", label = label, e = e))?;
     let stderr = errors.join().unwrap_or_default();
     let seconds = started.elapsed().as_secs_f32();
     match status.code() {

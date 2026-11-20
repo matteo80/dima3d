@@ -235,7 +235,7 @@ impl GestoreApp {
             };
             let _ = tx.send((scene, stash, summary));
         });
-        self.ui_state.status_message = "Riduzione delle facce in corso…".to_string();
+        self.ui_state.status_message = crate::i18n::tr("Riduzione delle facce in corso…").to_string();
         self.project.reduction.job = Some(Job { rx, progress, started: Instant::now() });
         true
     }
@@ -246,13 +246,7 @@ impl GestoreApp {
         let Ok((scene, stash, summary)) = job.rx.try_recv() else { return false };
         self.project.reduction.job = None;
         self.project.reduction.stash = stash;
-        self.ui_state.status_message = format!(
-            "Riduzione: {} → {} facce in {} pezzi ({:.1} s)",
-            group_thousands(summary.before),
-            group_thousands(summary.after),
-            summary.pieces,
-            summary.seconds
-        );
+        self.ui_state.status_message = trf!("Riduzione: {v} → {w} facce in {pieces} pezzi ({seconds} s)", v = group_thousands(summary.before), w = group_thousands(summary.after), pieces = summary.pieces, seconds = format!("{:.1}", summary.seconds));
         self.project.reduction.summary = Some(summary);
         self.scene_graph = Some(scene);
         self.upload_geometry();
@@ -266,7 +260,7 @@ impl GestoreApp {
         self.project.reduction.forget_geometry();
         if n > 0 {
             scene.revision += 1;
-            self.ui_state.status_message = format!("Geometria originale ripristinata ({n} pezzi)");
+            self.ui_state.status_message = trf!("Geometria originale ripristinata ({n} pezzi)", n = n);
             self.upload_geometry();
         }
     }

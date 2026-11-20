@@ -1,3 +1,4 @@
+use crate::i18n::tr;
 pub mod about;
 pub mod cabin_panel;
 pub mod dock;
@@ -123,7 +124,7 @@ impl Default for UiState {
             scroll_to_selected: false,
             is_loading: false,
             load_progress: 0.0,
-            status_message: "Pronto. Apri un file 3D per iniziare.".to_string(),
+            status_message: tr("Pronto. Apri un file 3D per iniziare.").to_string(),
             load_warnings: Vec::new(),
             unit_suggestions: Vec::new(),
             measure: None,
@@ -613,7 +614,7 @@ fn draw_scene_measures(ui: &mut egui::Ui, app: &mut crate::app::GestoreApp) {
     let all_visible = list.items.iter().all(|m| m.visible);
     let mut remove = None;
     let mut clear = false;
-    let header = egui::CollapsingHeader::new(egui::RichText::new(format!("{}  Misure ({})", icon::RULER, list.items.len())).strong())
+    let header = egui::CollapsingHeader::new(egui::RichText::new(format!("{}  {} ({})", icon::RULER, tr("Misure"), list.items.len())).strong())
         .id_salt("gruppo_misure")
         .default_open(true)
         .show(ui, |ui| {
@@ -622,7 +623,7 @@ fn draw_scene_measures(ui: &mut egui::Ui, app: &mut crate::app::GestoreApp) {
                     ui.horizontal(|ui| {
                         let m = &mut list.items[i];
                         let eye = if m.visible { icon::EYE } else { icon::EYE_SLASH };
-                        if ui.small_button(eye).on_hover_text(if m.visible { "Nascondi nella vista" } else { "Mostra nella vista" }).clicked() {
+                        if ui.small_button(eye).on_hover_text(if m.visible { tr("Nascondi nella vista") } else { tr("Mostra nella vista") }).clicked() {
                             m.visible = !m.visible;
                         }
                         let (d, delta) = m.result();
@@ -639,11 +640,12 @@ fn draw_scene_measures(ui: &mut egui::Ui, app: &mut crate::app::GestoreApp) {
                             let selected = list.selected == Some(i);
                             let text = format!("{}  {} {}", m.name, fmt(d), measure::UNIT);
                             let row = ui.selectable_label(selected, text).on_hover_text(format!(
-                                "ΔX {}   ΔY {}   ΔZ {}  ({})\nClic: evidenzia nella vista · doppio clic: cambia il nome",
+                                "ΔX {}   ΔY {}   ΔZ {}  ({})\n{}",
                                 fmt(delta.x),
                                 fmt(delta.y),
                                 fmt(delta.z),
-                                measure::UNIT
+                                measure::UNIT,
+                                tr("Clic: evidenzia nella vista · doppio clic: cambia il nome")
                             ));
                             if row.double_clicked() {
                                 list.renaming = Some(i);
@@ -651,25 +653,25 @@ fn draw_scene_measures(ui: &mut egui::Ui, app: &mut crate::app::GestoreApp) {
                                 list.selected = if selected { None } else { Some(i) };
                             }
                         }
-                        if ui.small_button(icon::X).on_hover_text("Togli la misura").clicked() {
+                        if ui.small_button(icon::X).on_hover_text(tr("Togli la misura")).clicked() {
                             remove = Some(i);
                         }
                     });
                 }
             });
             ui.horizontal(|ui| {
-                let label = if all_visible { "Nascondi tutte" } else { "Mostra tutte" };
+                let label = if all_visible { tr("Nascondi tutte") } else { tr("Mostra tutte") };
                 if ui.small_button(label).clicked() {
                     for m in &mut list.items {
                         m.visible = !all_visible;
                     }
                 }
-                if ui.small_button(icon_text(ui, icon::TRASH, "Togli tutte")).clicked() {
+                if ui.small_button(icon_text(ui, icon::TRASH, tr("Togli tutte"))).clicked() {
                     clear = true;
                 }
             });
         });
-    header.header_response.on_hover_text("Misure salvate con lo strumento Misura (tasto M, poi «Salva»): vanno nel progetto");
+    header.header_response.on_hover_text(tr("Misure salvate con lo strumento Misura (tasto M, poi «Salva»): vanno nel progetto"));
     if let Some(i) = remove {
         list.remove(i);
     }
@@ -684,10 +686,10 @@ pub fn expand_collapse(ui: &mut egui::Ui) -> Option<bool> {
     use theme::{icon, icon_text};
     let mut choice = None;
     ui.horizontal(|ui| {
-        if ui.small_button(icon_text(ui, icon::ARROWS_OUT_LINE_VERTICAL, "Espandi")).on_hover_text("Apri tutte le sezioni").clicked() {
+        if ui.small_button(icon_text(ui, icon::ARROWS_OUT_LINE_VERTICAL, tr("Espandi"))).on_hover_text(tr("Apri tutte le sezioni")).clicked() {
             choice = Some(true);
         }
-        if ui.small_button(icon_text(ui, icon::ARROWS_IN_LINE_VERTICAL, "Comprimi")).on_hover_text("Chiudi tutte le sezioni").clicked() {
+        if ui.small_button(icon_text(ui, icon::ARROWS_IN_LINE_VERTICAL, tr("Comprimi"))).on_hover_text(tr("Chiudi tutte le sezioni")).clicked() {
             choice = Some(false);
         }
     });

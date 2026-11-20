@@ -1,6 +1,7 @@
 //! Gestione del progetto aperto: file corrente, modifiche non esportate,
 //! chiusura con conferma, Annulla/Ripeti.
 
+use crate::i18n::tr;
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
@@ -68,17 +69,13 @@ fn enough_memory(paths: &[PathBuf]) -> bool {
     let size = std::fs::metadata(path).map_or(0, |m| m.len() >> 20);
     let name = path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
     tracing::warn!("Avviso RAM: {} MB, servono circa {need} MB, liberi {free} MB", size);
-    let text = format!(
-        "{name} pesa {size} MB: per aprirlo servono circa {} GB di RAM, ma ora ne sono liberi {} GB.\n\n\
+    let text = trf!("{name} pesa {size} MB: per aprirlo servono circa {v} GB di RAM, ma ora ne sono liberi {w} GB.\n\n\
          Il PC potrebbe rallentare molto e l'apertura potrebbe non riuscire. Conviene chiudere \
          altri programmi (browser, Teams, altri CAD) prima di continuare.\n\n\
-         Aprire comunque?",
-        crate::log::gigabytes(need),
-        crate::log::gigabytes(free)
-    );
+         Aprire comunque?", name = name, size = size, v = crate::log::gigabytes(need), w = crate::log::gigabytes(free));
     let answer = rfd::MessageDialog::new()
         .set_level(rfd::MessageLevel::Warning)
-        .set_title("RAM forse insufficiente")
+        .set_title(tr("RAM forse insufficiente"))
         .set_description(text)
         .set_buttons(rfd::MessageButtons::YesNo)
         .show();
@@ -221,7 +218,7 @@ impl GestoreApp {
     /// Aggiorna il titolo della finestra: "nome.wrl* — Dima 3D" (con più file: "nome.wrl + 2 file").
     pub fn update_window_title(&mut self, ctx: &egui::Context) {
         let others = self.scene_graph.as_ref().map_or(0, |s| s.open_files().count().saturating_sub(1));
-        let name = self.file_name().map(|n| if others > 0 { format!("{n} + {others} file") } else { n });
+        let name = self.file_name().map(|n| if others > 0 { trf!("{n} + {others} file", n = n, others = others) } else { n });
         let title = match name {
             Some(n) if self.is_dirty() => format!("{n}* — {}", crate::APP_NAME),
             Some(n) => format!("{n} — {}", crate::APP_NAME),
@@ -254,25 +251,25 @@ impl GestoreApp {
     pub fn undo(&mut self) {
         let Some(scene) = &mut self.scene_graph else { return };
         let Some(prev) = self.project.undo.pop() else {
-            self.ui_state.status_message = "Niente da annullare.".to_string();
+            self.ui_state.status_message = tr("Niente da annullare.").to_string();
             return;
         };
         let current = scene.swap_snapshot(prev);
         self.project.redo.push(current);
         self.project.last_coalesce = None;
-        self.after_history_change("Annullato");
+        self.after_history_change(tr("Annullato"));
     }
 
     pub fn redo(&mut self) {
         let Some(scene) = &mut self.scene_graph else { return };
         let Some(next) = self.project.redo.pop() else {
-            self.ui_state.status_message = "Niente da ripetere.".to_string();
+            self.ui_state.status_message = tr("Niente da ripetere.").to_string();
             return;
         };
         let current = scene.swap_snapshot(next);
         self.project.undo.push(current);
         self.project.last_coalesce = None;
-        self.after_history_change("Ripetuto");
+        self.after_history_change(tr("Ripetuto"));
     }
 
     fn after_history_change(&mut self, what: &str) {
@@ -283,11 +280,7 @@ impl GestoreApp {
         self.ui_state
             .drop_from_selection(|n| scene.info.get(n as usize).is_none_or(|i| i.deleted));
         self.ui_state.renaming = None;
-        self.ui_state.status_message = format!(
-            "{what}  (annullabili: {}, ripetibili: {})",
-            self.project.undo.len(),
-            self.project.redo.len()
-        );
+        self.ui_state.status_message = trf!("{what}  (annullabili: {n}, ripetibili: {len})", what = what, n = self.project.undo.len(), len = self.project.redo.len());
     }
 
     /// Chiude il progetto, chiedendo conferma se ci sono modifiche non esportate.
@@ -450,7 +443,7 @@ impl GestoreApp {
 
     /// Finestra di scelta di uno o più file da aggiungere alla scena.
     pub fn add_dialog(&mut self) {
-        let mut dialog = rfd::FileDialog::new().add_filter("Modelli 3D (WRL, JT, STEP, STL, HSF, IV)", &["wrl", "WRL", "vrml", "jt", "JT", "stp", "STP", "step", "STEP", "stl", "STL", "hsf", "HSF", "iv", "IV"]);
+        let mut dialog = rfd::FileDialog::new().add_filter(tr("Modelli 3D (WRL, JT, STEP, STL, HSF, IV)"), &["wrl", "WRL", "vrml", "jt", "JT", "stp", "STP", "step", "STEP", "stl", "STL", "hsf", "HSF", "iv", "IV"]);
         if let Some(dir) = self.settings.recent.first().and_then(|p| p.parent()) {
             dialog = dialog.set_directory(dir);
         }
@@ -467,7 +460,7 @@ impl GestoreApp {
     /// Esporta le parti visibili dei nodi selezionati con la finestra "Salva come".
     pub fn export_selection_dialog(&mut self, nodes: Vec<u32>) {
         if nodes.is_empty() {
-            self.ui_state.status_message = "Esporta selezionati: non c'è niente di selezionato.".to_string();
+            self.ui_state.status_message = tr("Esporta selezionati: non c'è niente di selezionato.").to_string();
             return;
         }
         self.export_part_dialog(crate::exporter::Scope::Selected(nodes));
@@ -530,7 +523,7 @@ impl GestoreApp {
             };
             let _ = tx.send((scene, result));
         });
-        self.ui_state.status_message = format!("Esportazione in corso: {}", path.display());
+        self.ui_state.status_message = trf!("Esportazione in corso: {path}", path = path.display());
         self.project.export_job = Some(ExportJob { rx, path, whole, then, started: Instant::now() });
         true
     }
@@ -547,9 +540,9 @@ impl GestoreApp {
                 if job.whole {
                     self.project.saved_revision = scene.revision;
                 }
-                format!("Esportato: {} ({} shape, {seconds:.1} s)", job.path.display(), stats.shapes_written)
+                trf!("Esportato: {path} ({shapes_written} shape, {seconds} s)", path = job.path.display(), shapes_written = stats.shapes_written, seconds = format!("{:.1}", seconds))
             }
-            Err(e) => format!("Errore export: {e}"),
+            Err(e) => trf!("Errore export: {e}", e = e),
         };
         self.scene_graph = Some(scene);
         if let (true, Some(then)) = (ok, job.then) {
@@ -561,8 +554,8 @@ impl GestoreApp {
     /// Apre la finestra di scelta file.
     pub fn open_dialog(&mut self) {
         let mut dialog = rfd::FileDialog::new()
-            .add_filter("Modelli 3D e progetti (WRL, JT, STEP, STL, HSF, IV, DIMA3D)", &["wrl", "WRL", "vrml", "jt", "JT", "stp", "STP", "step", "STEP", "stl", "STL", "hsf", "HSF", "iv", "IV", "dima3d"])
-            .add_filter("Progetto Dima 3D", &["dima3d"]);
+            .add_filter(tr("Modelli 3D e progetti (WRL, JT, STEP, STL, HSF, IV, DIMA3D)"), &["wrl", "WRL", "vrml", "jt", "JT", "stp", "STP", "step", "STEP", "stl", "STL", "hsf", "HSF", "iv", "IV", "dima3d"])
+            .add_filter(tr("Progetto Dima 3D"), &["dima3d"]);
         if let Some(dir) = self.settings.recent.first().and_then(|p| p.parent()) {
             dialog = dialog.set_directory(dir);
         }
@@ -582,7 +575,7 @@ impl GestoreApp {
         self.load_state = crate::app::LoadState::Idle;
         let status = match name {
             Some(n) => format!("Chiuso: {n}"),
-            None => "Progetto chiuso.".to_string(),
+            None => tr("Progetto chiuso.").to_string(),
         };
         self.ui_state = crate::ui::UiState { status_message: status, ..Default::default() };
     }
@@ -649,7 +642,7 @@ impl GestoreApp {
 
     /// Finestra di scelta di un progetto da aprire.
     pub fn open_project_dialog(&mut self) {
-        let mut dialog = rfd::FileDialog::new().add_filter("Progetto Dima 3D", &[crate::project_file::EXTENSION]);
+        let mut dialog = rfd::FileDialog::new().add_filter(tr("Progetto Dima 3D"), &[crate::project_file::EXTENSION]);
         if let Some(dir) = self.project.project_path.as_ref().or(self.settings.recent.first()).and_then(|p| p.parent()) {
             dialog = dialog.set_directory(dir);
         }
@@ -668,12 +661,12 @@ impl GestoreApp {
         let mut file = match parsed {
             Ok(f) => f,
             Err(e) => {
-                self.ui_state.status_message = format!("Progetto non aperto ({name}): {e}");
+                self.ui_state.status_message = trf!("Progetto non aperto ({name}): {e}", name = name, e = e);
                 return;
             }
         };
         if file.files.is_empty() {
-            self.ui_state.status_message = format!("Il progetto {name} non contiene modelli");
+            self.ui_state.status_message = trf!("Il progetto {name} non contiene modelli", name = name);
             return;
         }
         let mut warnings = Vec::new();
@@ -684,7 +677,7 @@ impl GestoreApp {
                     Some(p) => f.path = p,
                     None => {
                         self.ui_state.status_message =
-                            format!("Progetto non aperto: non trovo {}", f.path.display());
+                            trf!("Progetto non aperto: non trovo {path}", path = f.path.display());
                         return;
                     }
                 }
@@ -692,9 +685,7 @@ impl GestoreApp {
             let (size, modified) = crate::project_file::file_stamp(&f.path);
             if (f.size, f.modified) != (0, 0) && (size, modified) != (f.size, f.modified) {
                 let file_name = f.path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
-                warnings.push(format!(
-                    "{file_name} è cambiato dopo il salvataggio del progetto: controlla posizioni, colori e nomi"
-                ));
+                warnings.push(trf!("{file_name} è cambiato dopo il salvataggio del progetto: controlla posizioni, colori e nomi", file_name = file_name));
             }
         }
         let paths: Vec<PathBuf> =
@@ -725,7 +716,7 @@ impl GestoreApp {
             self.scene_graph = Some(crate::scene_graph::SceneGraph::default());
         }
         if self.scene_graph.is_none() {
-            self.ui_state.status_message = format!("Progetto {name}: nessun modello si è aperto");
+            self.ui_state.status_message = trf!("Progetto {name}: nessun modello si è aperto", name = name);
             self.ui_state.load_warnings.extend(warnings);
             return;
         }
@@ -761,7 +752,7 @@ impl GestoreApp {
                     }
                 }
                 if source.is_none() && entry.copy.is_some() {
-                    warnings.push(format!("{}: copia non rifatta (manca il pezzo da cui veniva)", entry.title));
+                    warnings.push(trf!("{title}: copia non rifatta (manca il pezzo da cui veniva)", title = entry.title));
                 }
                 sources.push(source);
             }
@@ -773,7 +764,7 @@ impl GestoreApp {
             let Some(scene) = &self.scene_graph else { break };
             let Some(source) = source else {
                 if entry.copy.is_none() {
-                    warnings.push(format!("{} non si è aperto: le sue modifiche non sono state applicate", entry.path.display()));
+                    warnings.push(trf!("{path} non si è aperto: le sue modifiche non sono state applicate", path = entry.path.display()));
                 }
                 continue;
             };
@@ -786,14 +777,14 @@ impl GestoreApp {
             }
         }
         if skipped > 0 {
-            warnings.push(format!("{skipped} modifiche del progetto non trovano più il loro pezzo (modello cambiato?)"));
+            warnings.push(trf!("{skipped} modifiche del progetto non trovano più il loro pezzo (modello cambiato?)", skipped = skipped));
         }
         self.sync_moved_geometry();
         // «Allinea su misure»: le quote salvate, con i punti di nuovo sui loro pezzi
         if let Some(scene) = &self.scene_graph {
             let (rows, lost) = restore.file.restore_measures(scene, &sources);
             if lost > 0 {
-                warnings.push(format!("Allinea su misure: {lost} punti non trovano più il loro pezzo (restano fermi)"));
+                warnings.push(trf!("Allinea su misure: {lost} punti non trovano più il loro pezzo (restano fermi)", lost = lost));
             }
             self.ui_state.position.distances =
                 crate::ui::distance_align::DistanceAlign::restored(rows, restore.file.only_move, restore.file.mode);
@@ -801,7 +792,7 @@ impl GestoreApp {
             // Misure salvate con lo strumento Misura
             let (list, lost) = restore.file.restore_scene_measures(scene, &sources);
             if lost > 0 {
-                warnings.push(format!("Misure: {lost} punti non trovano più il loro pezzo (restano fermi)"));
+                warnings.push(trf!("Misure: {lost} punti non trovano più il loro pezzo (restano fermi)", lost = lost));
             }
             self.ui_state.scene_measures = list;
             self.project.saved_scene_measures = self.ui_state.scene_measures.items.clone();
@@ -822,7 +813,7 @@ impl GestoreApp {
         self.ui_state.select_single(None);
         self.ui_state.load_warnings.extend(warnings);
         let files = restore.file.files.len();
-        self.ui_state.status_message = format!("Progetto aperto: {name} ({files} modelli)");
+        self.ui_state.status_message = trf!("Progetto aperto: {name} ({files} modelli)", name = name, files = files);
         let mut s = self.settings.clone();
         s.add_recent(&restore.path);
         self.apply_settings(s);
@@ -850,7 +841,7 @@ impl GestoreApp {
             .and_then(|p| p.file_stem())
             .map_or_else(|| "progetto".to_string(), |s| s.to_string_lossy().into_owned());
         let mut dialog = rfd::FileDialog::new()
-            .add_filter("Progetto Dima 3D", &[crate::project_file::EXTENSION])
+            .add_filter(tr("Progetto Dima 3D"), &[crate::project_file::EXTENSION])
             .set_file_name(format!("{stem}.{}", crate::project_file::EXTENSION));
         if let Some(dir) = self.project.project_path.as_ref().or(self.project.current_path.as_ref()).and_then(|p| p.parent()) {
             dialog = dialog.set_directory(dir);
@@ -877,7 +868,7 @@ impl GestoreApp {
         let unsaved = scene.open_files().filter(|f| f.path.is_none() && f.copy_of.is_none() && !f.generated()).count();
         let revision = scene.revision;
         if let Err(e) = std::fs::write(path, file.to_text(path)) {
-            self.ui_state.status_message = format!("Progetto non salvato: {e}");
+            self.ui_state.status_message = trf!("Progetto non salvato: {e}", e = e);
             return false;
         }
         self.project.project_path = Some(path.to_path_buf());
@@ -887,9 +878,9 @@ impl GestoreApp {
         let mut s = self.settings.clone();
         s.add_recent(path);
         self.apply_settings(s);
-        self.ui_state.status_message = format!("Progetto salvato: {}", path.display());
+        self.ui_state.status_message = trf!("Progetto salvato: {path}", path = path.display());
         if unsaved > 0 {
-            self.ui_state.status_message.push_str(&format!("  ·  {unsaved} modelli senza file non sono nel progetto"));
+            self.ui_state.status_message.push_str(&trf!("  ·  {unsaved} modelli senza file non sono nel progetto", unsaved = unsaved));
         }
         true
     }
@@ -901,7 +892,7 @@ fn locate_missing(path: &std::path::Path) -> Option<PathBuf> {
         return None;
     }
     let name = path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
-    let mut dialog = rfd::FileDialog::new().set_title(format!("Dov'è {name}? (non è più nella cartella del progetto)")).set_file_name(&name);
+    let mut dialog = rfd::FileDialog::new().set_title(trf!("Dov'è {name}? (non è più nella cartella del progetto)", name = name)).set_file_name(&name);
     if let Some(ext) = path.extension() {
         let ext = ext.to_string_lossy().into_owned();
         dialog = dialog.add_filter(name.as_str(), &[ext.as_str()]);
@@ -1830,7 +1821,7 @@ pub fn draw_export_progress(ctx: &egui::Context, app: &GestoreApp) {
         ui.set_width(380.0);
         ui.horizontal(|ui| {
             ui.spinner();
-            ui.heading("Esportazione in corso");
+            ui.heading(tr("Esportazione in corso"));
         });
         ui.add_space(6.0);
         let name = job.path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
@@ -1852,15 +1843,15 @@ pub fn draw_unit_suggestion(ctx: &egui::Context, app: &mut GestoreApp) {
     }
     let mut convert: Vec<crate::ui::UnitSuggestion> = Vec::new();
     let mut dismiss = false;
-    egui::Window::new("Unità di misura diverse")
+    egui::Window::new(tr("Unità di misura diverse"))
         .collapsible(false)
         .resizable(false)
         .anchor(egui::Align2::CENTER_TOP, egui::vec2(0.0, 70.0))
         .show(ctx, |ui| {
             ui.set_max_width(460.0);
             ui.label(
-                "Questi file sembrano scritti in unità diverse dal primo file aperto: così come sono \
-                 finiscono lontani dal resto. Convertiti, si posizionano sopra.",
+                tr("Questi file sembrano scritti in unità diverse dal primo file aperto: così come sono \
+                 finiscono lontani dal resto. Convertiti, si posizionano sopra."),
             );
             ui.add_space(6.0);
             for s in &list {
@@ -1868,7 +1859,7 @@ pub fn draw_unit_suggestion(ctx: &egui::Context, app: &mut GestoreApp) {
                     ui.label(egui::RichText::new(&s.file).strong());
                     let unit = if s.factor < 1.0 { "da millimetri a metri" } else { "da metri a millimetri" };
                     ui.label(egui::RichText::new(unit).weak());
-                    if list.len() > 1 && ui.small_button("Converti").clicked() {
+                    if list.len() > 1 && ui.small_button(tr("Converti")).clicked() {
                         convert.push(s.clone());
                     }
                 });
@@ -1879,12 +1870,12 @@ pub fn draw_unit_suggestion(ctx: &egui::Context, app: &mut GestoreApp) {
                 if ui.button(all).clicked() {
                     convert = list.clone();
                 }
-                if ui.button("Lascia così").clicked() {
+                if ui.button(tr("Lascia così")).clicked() {
                     dismiss = true;
                 }
             });
             ui.label(
-                egui::RichText::new("Si può convertire anche dopo, con il tasto destro sul file nell'albero: «Unità di misura»")
+                egui::RichText::new(tr("Si può convertire anche dopo, con il tasto destro sul file nell'albero: «Unità di misura»"))
                     .small()
                     .weak(),
             );
@@ -1927,20 +1918,20 @@ pub fn draw_step_prompt(ctx: &egui::Context, app: &mut GestoreApp) {
             ui.label(egui::RichText::new(f).strong());
         }
         if files.len() > shown {
-            ui.label(egui::RichText::new(format!("e altri {} file STEP", files.len() - shown)).weak());
+            ui.label(egui::RichText::new(trf!("e altri {v} file STEP", v = files.len() - shown)).weak());
         }
         ui.add_space(6.0);
         if !remesh {
             ui.label(
-                "«Visualizza STEP» apre subito il file con una mesh veloce, solo per guardarlo: \
-                 la conversione con le tue tolleranze si fa dopo, dal menu del file nell'albero.",
+                tr("«Visualizza STEP» apre subito il file con una mesh veloce, solo per guardarlo: \
+                 la conversione con le tue tolleranze si fa dopo, dal menu del file nell'albero."),
             );
             ui.add_space(6.0);
         }
-        ui.label(egui::RichText::new("Opzioni di mesh").strong());
+        ui.label(egui::RichText::new(tr("Opzioni di mesh")).strong());
         let o = &mut prompt.options;
         egui::Grid::new("griglia_mesh_step").num_columns(2).spacing([12.0, 6.0]).show(ui, |ui| {
-            ui.label("Deviazione di superficie:");
+            ui.label(tr("Deviazione di superficie:"));
             let suffix = if o.relative { "" } else { " mm" };
             ui.add(
                 egui::DragValue::new(&mut o.deviation)
@@ -1950,39 +1941,39 @@ pub fn draw_step_prompt(ctx: &egui::Context, app: &mut GestoreApp) {
                     .suffix(suffix),
             );
             ui.end_row();
-            ui.label("Deviazione angolare:");
+            ui.label(tr("Deviazione angolare:"));
             ui.add(egui::DragValue::new(&mut o.angle).range(STEP_ANGLE_RANGE).speed(0.5).max_decimals(2).suffix(" °"));
             ui.end_row();
         });
-        ui.checkbox(&mut o.relative, "Deviazione relativa delle superfici")
-            .on_hover_text("La deviazione è una frazione della dimensione di ogni faccia invece che in mm");
+        ui.checkbox(&mut o.relative, tr("Deviazione relativa delle superfici"))
+            .on_hover_text(tr("La deviazione è una frazione della dimensione di ogni faccia invece che in mm"));
         ui.add_space(4.0);
         ui.label(
-            egui::RichText::new("Valori più piccoli: superfici più fedeli, ma più triangoli e file più pesanti.")
+            egui::RichText::new(tr("Valori più piccoli: superfici più fedeli, ma più triangoli e file più pesanti."))
                 .small()
                 .weak(),
         );
         ui.add_space(8.0);
-        if ui.small_button("Valori predefiniti").clicked() {
+        if ui.small_button(tr("Valori predefiniti")).clicked() {
             *o = StepMesh::default();
         }
         ui.add_space(8.0);
         ui.horizontal(|ui| {
-            if !remesh && ui.button("Visualizza STEP").clicked() {
+            if !remesh && ui.button(tr("Visualizza STEP")).clicked() {
                 choice = Some(0);
             }
-            if ui.button("Converti in mesh").clicked() {
+            if ui.button(tr("Converti in mesh")).clicked() {
                 choice = Some(1);
             }
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                if ui.button("Annulla").clicked() {
+                if ui.button(tr("Annulla")).clicked() {
                     choice = Some(2);
                 }
             });
         });
         if remesh {
             ui.label(
-                egui::RichText::new("Il file viene riletto dallo STEP originale: colori e modifiche fatti su questo file si perdono.")
+                egui::RichText::new(tr("Il file viene riletto dallo STEP originale: colori e modifiche fatti su questo file si perdono."))
                     .small()
                     .weak(),
             );
@@ -2014,25 +2005,23 @@ pub fn draw_confirm_dialog(ctx: &egui::Context, app: &mut GestoreApp) {
     let mut choice: Option<u8> = None; // 0 = esporta, 1 = continua, 2 = annulla, 3 = salva progetto
     let modal = egui::Modal::new(egui::Id::new("conferma_modifiche")).show(ctx, |ui| {
         ui.set_width(400.0);
-        ui.heading("Modifiche non salvate");
+        ui.heading(tr("Modifiche non salvate"));
         ui.add_space(6.0);
-        ui.label(format!(
-            "Hai modificato la scena (posizioni, visibilità, eliminazioni, colori o nomi) e non l'hai ancora \
-             salvata come progetto né esportata.\nVuoi salvarla prima di {what}?"
-        ));
+        ui.label(trf!("Hai modificato la scena (posizioni, visibilità, eliminazioni, colori o nomi) e non l'hai ancora \
+             salvata come progetto né esportata.\nVuoi salvarla prima di {what}?", what = what));
         ui.add_space(10.0);
         // I pulsanti vanno a capo invece di sovrapporsi
         ui.horizontal_wrapped(|ui| {
-            if ui.button(crate::ui::theme::icon_text(ui, crate::ui::theme::icon::FLOPPY_DISK, "Salva progetto")).clicked() {
+            if ui.button(crate::ui::theme::icon_text(ui, crate::ui::theme::icon::FLOPPY_DISK, tr("Salva progetto"))).clicked() {
                 choice = Some(3);
             }
-            if ui.button(crate::ui::theme::icon_text(ui, crate::ui::theme::icon::EXPORT, "Esporta…")).clicked() {
+            if ui.button(crate::ui::theme::icon_text(ui, crate::ui::theme::icon::EXPORT, tr("Esporta…"))).clicked() {
                 choice = Some(0);
             }
-            if ui.button("Continua senza salvare").clicked() {
+            if ui.button(tr("Continua senza salvare")).clicked() {
                 choice = Some(1);
             }
-            if ui.button("Annulla").clicked() {
+            if ui.button(tr("Annulla")).clicked() {
                 choice = Some(2);
             }
         });

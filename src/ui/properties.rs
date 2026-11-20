@@ -1,6 +1,7 @@
 //! Proprietà dell'elemento selezionato, in fondo al pannello Scena: nome, tipo, file di
 //! provenienza, pezzi, triangoli, vertici e ingombro (con più elementi selezionati, il totale).
 
+use crate::i18n::tr;
 use crate::scene_graph::{NodeKind, SceneGraph, SceneNode};
 
 /// Riepilogo di uno o più sotto-alberi.
@@ -48,13 +49,13 @@ pub fn summarize(scene: &SceneGraph, nodes: &[u32]) -> Summary {
 
 fn kind_label(scene: &SceneGraph, node: u32) -> &'static str {
     match (scene.info.get(node as usize).map(|i| i.kind), scene.nodes.get(node as usize)) {
-        (Some(NodeKind::File), _) => "File",
-        (Some(NodeKind::Cluster), _) => "Componente (raggruppamento automatico)",
-        (Some(NodeKind::Singles), _) => "Pezzi singoli",
-        (Some(NodeKind::Use), _) => "Istanza (USE)",
-        (_, Some(SceneNode::Shape { .. })) => "Pezzo",
+        (Some(NodeKind::File), _) => tr("File"),
+        (Some(NodeKind::Cluster), _) => tr("Componente (raggruppamento automatico)"),
+        (Some(NodeKind::Singles), _) => tr("Pezzi singoli"),
+        (Some(NodeKind::Use), _) => tr("Istanza (USE)"),
+        (_, Some(SceneNode::Shape { .. })) => tr("Pezzo"),
         (Some(NodeKind::Transform), _) => "Transform",
-        _ => "Gruppo",
+        _ => tr("Gruppo"),
     }
 }
 
@@ -83,9 +84,9 @@ pub fn draw(ui: &mut egui::Ui, app: &crate::app::GestoreApp) {
 
     ui.add_space(4.0);
     ui.horizontal(|ui| {
-        ui.label(egui::RichText::new("Proprietà").strong());
+        ui.label(egui::RichText::new(tr("Proprietà")).strong());
         if nodes.len() > 1 {
-            ui.label(egui::RichText::new(format!("({} elementi selezionati)", nodes.len())).weak());
+            ui.label(egui::RichText::new(format!("({})", trf!("{n} elementi selezionati", n = nodes.len()))).weak());
         }
     });
     // I valori lunghi (nomi CAD) si troncano: non devono allargare il pannello.
@@ -101,25 +102,31 @@ pub fn draw(ui: &mut egui::Ui, app: &crate::app::GestoreApp) {
             ui.end_row();
         };
         if nodes.len() == 1 {
-            row("Nome", scene.display_name(primary));
-            row("Tipo", kind_label(scene, primary).to_string());
+            row(tr("Nome"), scene.display_name(primary));
+            row(tr("Tipo"), kind_label(scene, primary).to_string());
             if let Some(h) = scene.hinge_of_node(primary).map(|i| &scene.hinges[i]) {
                 let part = h.nodes.first().map(|&n| scene.display_name(n)).unwrap_or_default();
-                let of = if h.nodes.contains(&primary) { String::new() } else { format!(" (parte «{part}»)") };
-                row("Cerniera", format!("{}  {} {:.1}° (da {:.0}° a {:.0}°){of}", super::theme::icon::DOOR_OPEN, h.name, h.angle, h.min, h.max));
+                let of = if h.nodes.contains(&primary) { String::new() } else { trf!(" (parte «{part}»)", part = part) };
+                row(tr("Cerniera"), format!(
+                    "{}  {} {:.1}° {}{of}",
+                    super::theme::icon::DOOR_OPEN,
+                    h.name,
+                    h.angle,
+                    trf!("(da {min}° a {max}°)", min = format!("{:.0}", h.min), max = format!("{:.0}", h.max))
+                ));
             }
         }
         match s.files.as_slice() {
             [] => {}
-            [one] => row("File", one.clone()),
-            many => row("File", format!("{} file", many.len())),
+            [one] => row(tr("File"), one.clone()),
+            many => row(tr("File"), trf!("{n} file", n = many.len())),
         }
-        row("Pezzi", thousands(s.pieces));
-        row("Triangoli", thousands(s.triangles));
-        row("Vertici", thousands(s.vertices));
+        row(tr("Pezzi"), thousands(s.pieces));
+        row(tr("Triangoli"), thousands(s.triangles));
+        row(tr("Vertici"), thousands(s.vertices));
         if s.bbox.is_valid() {
             let d = s.bbox.max - s.bbox.min;
-            row("Dimensioni", format!("{} × {} × {} {}", fmt(d.x), fmt(d.y), fmt(d.z), super::measure::UNIT));
+            row(tr("Dimensioni"), format!("{} × {} × {} {}", fmt(d.x), fmt(d.y), fmt(d.z), super::measure::UNIT));
             row("Min", format!("{}  {}  {} {}", fmt(s.bbox.min.x), fmt(s.bbox.min.y), fmt(s.bbox.min.z), super::measure::UNIT));
             row("Max", format!("{}  {}  {} {}", fmt(s.bbox.max.x), fmt(s.bbox.max.y), fmt(s.bbox.max.z), super::measure::UNIT));
         }

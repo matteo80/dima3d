@@ -1,3 +1,4 @@
+use crate::i18n::tr;
 use std::sync::mpsc::Receiver;
 use crate::parser::LoadEvent;
 use crate::{parser, renderer, scene_graph, ui};
@@ -285,7 +286,7 @@ impl GestoreApp {
             return;
         }
         if let Action::NewEmptyGroup(target) = action {
-            self.create_group(|scene| scene.new_empty_group(target, "Nuovo gruppo"));
+            self.create_group(|scene| scene.new_empty_group(target, tr("Nuovo gruppo")));
             return;
         }
         if let Action::MoveInto { nodes, into } = action {
@@ -299,9 +300,9 @@ impl GestoreApp {
         if let Action::SaveColor(c) = action {
             let mut settings = self.settings.clone();
             self.ui_state.status_message = if settings.save_color(c) {
-                "Colore aggiunto ai miei colori".to_string()
+                tr("Colore aggiunto ai miei colori").to_string()
             } else {
-                "Il colore era già tra i miei colori".to_string()
+                tr("Il colore era già tra i miei colori").to_string()
             };
             self.apply_settings(settings);
             return;
@@ -310,7 +311,7 @@ impl GestoreApp {
             let mut settings = self.settings.clone();
             if i < settings.saved_colors.len() {
                 settings.saved_colors.remove(i);
-                self.ui_state.status_message = "Colore tolto dai miei colori".to_string();
+                self.ui_state.status_message = tr("Colore tolto dai miei colori").to_string();
             }
             self.apply_settings(settings);
             return;
@@ -379,7 +380,7 @@ impl GestoreApp {
             for a in list {
                 self.apply_without_undo(a);
             }
-            self.ui_state.status_message = format!("Modifica applicata a {count} elementi");
+            self.ui_state.status_message = trf!("Modifica applicata a {count} elementi", count = count);
             return;
         }
         match &action {
@@ -388,7 +389,7 @@ impl GestoreApp {
                     scene.isolate_many(nodes);
                 }
                 self.fit_nodes(nodes);
-                self.ui_state.status_message = format!("Isolati: {} elementi", nodes.len());
+                self.ui_state.status_message = trf!("Isolati: {n} elementi", n = nodes.len());
                 return;
             }
             Action::FocusMany(nodes) => {
@@ -399,7 +400,7 @@ impl GestoreApp {
                 if let Some(scene) = &mut self.scene_graph {
                     let meshes = scene.meshes_of(nodes);
                     scene.transform_meshes(&meshes, *matrix);
-                    self.ui_state.status_message = format!("Spostati {} pezzi", meshes.len());
+                    self.ui_state.status_message = trf!("Spostati {n} pezzi", n = meshes.len());
                 }
                 return;
             }
@@ -407,7 +408,7 @@ impl GestoreApp {
                 if let Some(scene) = &mut self.scene_graph {
                     if let Some(done) = scene.set_hinge_angle(*index, *angle) {
                         let name = scene.hinges[*index].name.clone();
-                        self.ui_state.status_message = format!("{name}: aperta a {done:.1}°");
+                        self.ui_state.status_message = trf!("{name}: aperta a {done}°", name = name, done = format!("{:.1}", done));
                     }
                 }
                 return;
@@ -416,7 +417,7 @@ impl GestoreApp {
                 if let Some(scene) = &mut self.scene_graph {
                     let meshes = scene.meshes_of(nodes);
                     scene.reset_placements(&meshes);
-                    self.ui_state.status_message = "Posizione ripristinata".to_string();
+                    self.ui_state.status_message = tr("Posizione ripristinata").to_string();
                 }
                 return;
             }
@@ -462,7 +463,7 @@ impl GestoreApp {
             | Action::ViewFrom(_)
             | Action::Straighten => {}
             Action::SelectMany { nodes, primary, anchor } => {
-                self.ui_state.status_message = format!("Selezionati: {} elementi", nodes.len());
+                self.ui_state.status_message = trf!("Selezionati: {n} elementi", n = nodes.len());
                 self.ui_state.selected_node = Some(primary);
                 self.ui_state.selected_extra = nodes.into_iter().filter(|&n| n != primary).collect();
                 self.ui_state.selection_anchor = Some(anchor);
@@ -478,7 +479,7 @@ impl GestoreApp {
                 if let Some(n) = node {
                     let count = scene.info.get(n as usize).map(|i| i.shape_count).unwrap_or(0);
                     self.ui_state.status_message =
-                        format!("Selezionato: {} ({} pezzi)", scene.display_name(n), count);
+                        trf!("Selezionato: {name} ({count} pezzi)", name = scene.display_name(n), count = count);
                 }
             }
             Action::ToggleVisible(n) => {
@@ -508,11 +509,11 @@ impl GestoreApp {
                 self.ui_state
                     .drop_from_selection(|n| scene.info.get(n as usize).is_none_or(|i| i.deleted));
                 self.ui_state.status_message =
-                    if is_file { format!("Chiuso il file: {name}") } else { format!("Eliminato: {name}") };
+                    if is_file { trf!("Chiuso il file: {name}", name = name) } else { format!("Eliminato: {name}") };
             }
             Action::ShowAll => {
                 scene.show_all();
-                self.ui_state.status_message = "Tutti i nodi visibili.".to_string();
+                self.ui_state.status_message = tr("Tutti i nodi visibili.").to_string();
             }
             Action::Focus(node) => {
                 let bbox = match node {
@@ -533,25 +534,25 @@ impl GestoreApp {
             Action::SetColor(n, color) => {
                 scene.set_color(n, color);
                 self.ui_state.status_message = match color {
-                    Some(_) => format!("Colore impostato: {}", scene.display_name(n)),
-                    None => format!("Colore originale: {}", scene.display_name(n)),
+                    Some(_) => trf!("Colore impostato: {name}", name = scene.display_name(n)),
+                    None => trf!("Colore originale: {name}", name = scene.display_name(n)),
                 };
             }
             Action::SetColors(list) => {
                 for &(n, color) in &list {
                     scene.set_color(n, Some(color));
                 }
-                self.ui_state.status_message = format!("Colori casuali su {} pezzi", list.len());
+                self.ui_state.status_message = trf!("Colori casuali su {n} pezzi", n = list.len());
             }
             Action::ResetAllColors => {
                 scene.reset_all_colors();
-                self.ui_state.status_message = "Ripristinati i colori originali.".to_string();
+                self.ui_state.status_message = tr("Ripristinati i colori originali.").to_string();
             }
             Action::Rename(n, name) => {
                 let old = scene.display_name(n);
                 scene.rename(n, &name);
                 self.ui_state.status_message =
-                    format!("Rinominato: da {old} a {}", scene.display_name(n));
+                    trf!("Rinominato: da {old} a {name}", old = old, name = scene.display_name(n));
             }
             Action::StartRename(_)
             | Action::ExportNode(_)
@@ -696,24 +697,24 @@ impl GestoreApp {
         }
         if esc_key && self.ui_state.position.distances.picking.is_some() {
             self.ui_state.position.distances.stop_picking();
-            self.ui_state.status_message = "Presa dei punti della misura finita".to_string();
+            self.ui_state.status_message = tr("Presa dei punti della misura finita").to_string();
             return;
         }
         if esc_key && self.ui_state.position.points.picking.is_some() {
             self.ui_state.position.points.picking = None;
-            self.ui_state.status_message = "Scelta dei punti sul 3D finita".to_string();
+            self.ui_state.status_message = tr("Scelta dei punti sul 3D finita").to_string();
             return;
         }
         if esc_key && self.ui_state.position.hinge.picking {
             let hinge = &mut self.ui_state.position.hinge;
             hinge.picking = false;
             hinge.points.clear();
-            self.ui_state.status_message = "Scelta dell'asse annullata".to_string();
+            self.ui_state.status_message = tr("Scelta dell'asse annullata").to_string();
             return;
         }
         if esc_key && self.ui_state.eyedropper {
             self.ui_state.eyedropper = false;
-            self.ui_state.status_message = "Pipetta annullata".to_string();
+            self.ui_state.status_message = tr("Pipetta annullata").to_string();
             return;
         }
         if esc_key && self.ui_state.measure.is_some() {
@@ -790,9 +791,7 @@ impl GestoreApp {
         if let (Some(renderer), Some(rs)) = (&mut self.renderer, &self.wgpu_render_state) {
             let undrawn = renderer.append_meshes(&current.shapes_data, &rs.device);
             if undrawn > 0 {
-                warnings.push(format!(
-                    "{name}: {undrawn} pezzi troppo grandi per un buffer della scheda video: caricati ma non disegnati"
-                ));
+                warnings.push(trf!("{name}: {undrawn} pezzi troppo grandi per un buffer della scheda video: caricati ma non disegnati", name = name, undrawn = undrawn));
             }
             // Inquadra l'insieme, mantenendo l'orientamento della vista
             let all = current.compute_bounding_box();
@@ -813,9 +812,9 @@ impl GestoreApp {
         }
         let files = current.open_files().count();
         self.ui_state.status_message =
-            format!("Aggiunto: {name} ({new_shapes} shape)  ·  {files} file aperti");
+            trf!("Aggiunto: {name} ({new_shapes} shape)  ·  {files} file aperti", name = name, new_shapes = new_shapes, files = files);
         if current.sources.last().is_some_and(|s| s.scale == 1000.0) {
-            self.ui_state.status_message.push_str(CONVERTED);
+            self.ui_state.status_message.push_str(tr(CONVERTED));
         }
         if let Some(p) = path {
             let mut s = self.settings.clone();
@@ -835,7 +834,7 @@ impl GestoreApp {
             [one] => scene.display_name(*one),
             many => format!("{} elementi", many.len()),
         };
-        self.ui_state.status_message = format!("Copiato: {label}  ·  Ctrl+V per incollare");
+        self.ui_state.status_message = trf!("Copiato: {label}  ·  Ctrl+V per incollare", label = label);
         // Un testo anche negli appunti di Windows: senza, egui non segnala Ctrl+V
         self.ui_state.clipboard_text = Some(format!("Dima 3D: {label}"));
         self.ui_state.clipboard = kept;
@@ -856,10 +855,10 @@ impl GestoreApp {
         }
         let changed = matches!(result, Ok(n) if n > 0);
         self.ui_state.status_message = match result {
-            Ok(0) => "Già in questo gruppo".to_string(),
-            Ok(1) => format!("Spostato in «{target}»"),
-            Ok(n) => format!("Spostati {n} elementi in «{target}»"),
-            Err(e) => format!("Non spostato: {e}"),
+            Ok(0) => tr("Già in questo gruppo").to_string(),
+            Ok(1) => trf!("Spostato in «{target}»", target = target),
+            Ok(n) => trf!("Spostati {n} elementi in «{target}»", n = n, target = target),
+            Err(e) => trf!("Non spostato: {e}", e = e),
         };
         if !changed {
             self.project.undo.pop();
@@ -869,7 +868,7 @@ impl GestoreApp {
     /// Nuovo gruppo con i nodi dati (vedi `SceneGraph::new_group`): si annulla con Ctrl+Z e
     /// appena creato si rinomina.
     pub fn new_group(&mut self, nodes: Vec<u32>) {
-        self.create_group(|scene| scene.new_group(&nodes, "Nuovo gruppo"));
+        self.create_group(|scene| scene.new_group(&nodes, tr("Nuovo gruppo")));
     }
 
     /// Crea un gruppo con `make` (un passo di Annulla), lo seleziona e ne apre la rinomina.
@@ -890,13 +889,13 @@ impl GestoreApp {
                 }
                 self.ui_state.expanded.insert(group);
                 self.apply_without_undo(Action::Select { node: Some(group), reveal: true });
-                self.ui_state.status_message = "Gruppo creato: scrivi il nome e premi Invio".to_string();
+                self.ui_state.status_message = tr("Gruppo creato: scrivi il nome e premi Invio").to_string();
                 self.start_rename(group);
             }
             Err(e) => {
                 // Niente è cambiato: lo stato salvato per Annulla non serve
                 self.project.undo.pop();
-                self.ui_state.status_message = format!("Gruppo non creato: {e}");
+                self.ui_state.status_message = trf!("Gruppo non creato: {e}", e = e);
             }
         }
     }
@@ -910,7 +909,7 @@ impl GestoreApp {
         let Some(scene) = &self.scene_graph else { return };
         let groups = scene.copy_groups(&self.ui_state.clipboard);
         if groups.is_empty() {
-            self.ui_state.status_message = "Niente da incollare: seleziona un pezzo e copialo con Ctrl+C".to_string();
+            self.ui_state.status_message = tr("Niente da incollare: seleziona un pezzo e copialo con Ctrl+C").to_string();
             return;
         }
         self.push_undo(None);
@@ -945,10 +944,7 @@ impl GestoreApp {
             many => Action::SelectMany { nodes: many.to_vec(), primary: many[0], anchor: many[0] },
         };
         self.apply_without_undo(select);
-        self.ui_state.status_message = format!(
-            "Incollato: {} ({pieces} pezzi) nella stessa posizione dell'originale: spostalo con la finestra Posizione",
-            names.join(", ")
-        );
+        self.ui_state.status_message = trf!("Incollato: {v} ({pieces} pezzi) nella stessa posizione dell'originale: spostalo con la finestra Posizione", v = names.join(", "), pieces = pieces);
     }
 }
 
@@ -965,12 +961,7 @@ impl GestoreApp {
         // La stima della dimensione non vale più
         self.project.reduction.summary = None;
         let file = &scene.sources[source];
-        self.ui_state.status_message = format!(
-            "{}: {} (scala complessiva {})",
-            file.name,
-            if factor < 1.0 { "convertito da millimetri a metri" } else { "convertito da metri a millimetri" },
-            file.scale
-        );
+        self.ui_state.status_message = trf!("{name}: {v} (scala complessiva {scale})", name = file.name, v = if factor < 1.0 { tr("convertito da millimetri a metri") } else { tr("convertito da metri a millimetri") }, scale = file.scale);
         if let (Some(renderer), Some(rs)) = (&mut self.renderer, &self.wgpu_render_state) {
             let orientation = renderer.camera.orientation;
             renderer.upload_meshes(&scene.shapes_data, &rs.device);
@@ -1005,7 +996,7 @@ impl GestoreApp {
                     LoadEvent::Started { path, file_size_bytes } => {
                         let mb = file_size_bytes as f64 / (1024.0 * 1024.0);
                         tracing::info!("Apertura di {path} ({mb:.1} MB)");
-                        self.ui_state.status_message = format!("Caricamento {path} ({mb:.1} MB)...");
+                        self.ui_state.status_message = trf!("Caricamento {path} ({mb} MB)...", path = path, mb = format!("{:.1}", mb));
                         self.ui_state.load_progress = 0.05;
                     }
                     LoadEvent::Progress { percent, message } => {
@@ -1031,12 +1022,10 @@ impl GestoreApp {
                             match undrawn {
                                 0 => {}
                                 1 => self.ui_state.load_warnings.push(
-                                    "1 pezzo troppo grande per un buffer della scheda video: caricato ma non disegnato"
+                                    tr("1 pezzo troppo grande per un buffer della scheda video: caricato ma non disegnato")
                                         .to_string(),
                                 ),
-                                n => self.ui_state.load_warnings.push(format!(
-                                    "{n} pezzi troppo grandi per un buffer della scheda video: caricati ma non disegnati"
-                                )),
+                                n => self.ui_state.load_warnings.push(trf!("{n} pezzi troppo grandi per un buffer della scheda video: caricati ma non disegnati", n = n)),
                             }
                             let bbox = scene.compute_bounding_box();
                             if bbox.is_valid() {
@@ -1049,12 +1038,9 @@ impl GestoreApp {
                             }
                         }
 
-                        self.ui_state.status_message = format!(
-                            "Caricato: {} shape in {} macro-oggetti principali",
-                            shape_count, macro_count
-                        );
+                        self.ui_state.status_message = trf!("Caricato: {shape_count} shape in {macro_count} macro-oggetti principali", shape_count = shape_count, macro_count = macro_count);
                         if scene.sources.first().is_some_and(|s| s.scale == 1000.0) {
-                            self.ui_state.status_message.push_str(CONVERTED);
+                            self.ui_state.status_message.push_str(tr(CONVERTED));
                         }
                         if far_parts > 0 {
                             self.ui_state.status_message.push_str("  ·  ");
@@ -1111,12 +1097,12 @@ impl GestoreApp {
 
 /// File aperto con coordinate da metri e convertito nei millimetri di Dima 3D.
 const CONVERTED: &str =
-    "  ·  convertito da metri a millimetri (per annullare: tasto destro sul file, «Unità di misura»)";
+    tn!("  ·  convertito da metri a millimetri (per annullare: tasto destro sul file, «Unità di misura»)");
 
 /// Avviso quando l'inquadratura lascia fuori pezzi molto lontani dal gruppo principale.
 fn far_parts_message(count: usize) -> String {
-    let parts = if count == 1 { "1 pezzo molto lontano".to_string() } else { format!("{count} pezzi molto lontani") };
-    format!("{parts} dal gruppo principale fuori inquadratura: seleziona la radice nell'albero e premi F per vederli")
+    let parts = if count == 1 { tr("1 pezzo molto lontano").to_string() } else { trf!("{count} pezzi molto lontani", count = count) };
+    trf!("{parts} dal gruppo principale fuori inquadratura: seleziona la radice nell'albero e premi F per vederli", parts = parts)
 }
 
 impl Default for GestoreApp {
@@ -1143,7 +1129,7 @@ impl eframe::App for GestoreApp {
         // La finestra non si chiude a metà lavoro (il file resterebbe troncato, la scena persa)
         if ctx.input(|i| i.viewport().close_requested()) && self.project.busy() {
             ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
-            self.ui_state.status_message = "Attendi la fine del lavoro in corso prima di uscire.".to_string();
+            self.ui_state.status_message = tr("Attendi la fine del lavoro in corso prima di uscire.").to_string();
         }
 
         // Chiusura della finestra con modifiche non esportate → chiedi conferma

@@ -385,15 +385,15 @@ impl StandardView {
 
     /// Etichetta breve per i pulsanti della viewport.
     pub fn short(self) -> &'static str {
-        match self {
-            StandardView::Front => "Fronte",
-            StandardView::Back => "Retro",
-            StandardView::Left => "Sx",
-            StandardView::Right => "Dx",
-            StandardView::Top => "Alto",
-            StandardView::Bottom => "Basso",
+        crate::i18n::tr(match self {
+            StandardView::Front => tn!("Fronte"),
+            StandardView::Back => tn!("Retro"),
+            StandardView::Left => tn!("Sx"),
+            StandardView::Right => tn!("Dx"),
+            StandardView::Top => tn!("Alto"),
+            StandardView::Bottom => tn!("Basso"),
             StandardView::Iso => "Iso",
-        }
+        })
     }
 }
 

@@ -1544,7 +1544,7 @@ Lungo Y del robot
 Mette nella scena i robot (e il simbolo del centro) come file «Centro e robot», al posto di quelli di prima
 = Puts the robots (and the center symbol) in the scene as the file "Center and robots", replacing the previous ones
 Misure
-= Dimensions
+= Measurements
 Modifiche non applicate
 = Changes not applied
 Nessun robot: «Aggiungi robot» per inserirne uno.
@@ -1866,3 +1866,690 @@ un file intero non si sposta in un gruppo
 = a whole file cannot be moved into a group
 «{name}» non può andare dentro sé stesso
 = "{name}" cannot go inside itself
+
+# ── Vista, finestre di servizio, stato, progetto, aggiornamenti, lettura dei file ───
+
+Apache 2.0; MIT o Apache 2.0
+= Apache 2.0; MIT or Apache 2.0
+Apre il log di Dima 3D (aperture, conversioni, errori)
+= Opens the Dima 3D log (openings, conversions, errors)
+Apri la cartella delle licenze
+= Open the licenses folder
+Autore: {name}
+= Author: {name}
+BSD 3 clausole; MIT o Apache 2.0
+= BSD 3-Clause; MIT or Apache 2.0
+Cartella «licenses» non trovata accanto all'eseguibile
+= "licenses" folder not found next to the executable
+Chiede a GitHub se c'è una versione nuova
+= Asks GitHub whether there is a new version
+Come è stato scritto
+= How it was written
+Formati: WRL (VRML 1.0 e 2.0), STEP, JT, STL, HSF, Open Inventor (IV).
+= Formats: WRL (VRML 1.0 and 2.0), STEP, JT, STL, HSF, Open Inventor (IV).
+Il codice è stato scritto interamente con l'intelligenza artificiale (Claude, di Anthropic). L'autore del progetto non ha scritto codice: ha definito le richieste, provato il programma sulle matematiche reali e deciso cosa correggere.
+= The code was written entirely with artificial intelligence (Claude, by Anthropic). The project author did not write code: they defined the requests, tested the program on real CAD models and decided what to fix.
+Info
+= About
+LGPL 2.1 con eccezione
+= LGPL 2.1 with exception
+Librerie usate
+= Libraries used
+Licenza
+= License
+Log
+= Log
+MIT o Apache 2.0
+= MIT or Apache 2.0
+Software libero con licenza MIT. Il codice sorgente è pubblico:
+= Free software under the MIT license. The source code is public:
+Testi completi delle licenze e note di copyright di tutte le librerie (216 solo per il programma) nella cartella «licenses» accanto all'eseguibile.
+= Full license texts and copyright notices of all libraries (216 for the program alone) in the "licenses" folder next to the executable.
+Verifica aggiornamenti
+= Check for updates
+Versione {v}
+= Version {v}
+Visualizza, posiziona ed esporta matematiche 3D di grandi dimensioni
+= View, position and export large 3D CAD models
+calcolo in parallelo
+= parallel computing
+convertitore JT
+= JT converter
+convertitore STEP
+= STEP converter
+grafica 3D
+= 3D graphics
+icone
+= icons
+interfaccia
+= user interface
+lettere delle scritte
+= lettering glyphs
+matematica 3D
+= 3D math
+riduzione delle facce
+= face reduction
+  ·  convertito da metri a millimetri (per annullare: tasto destro sul file, «Unità di misura»)
+=   ·  converted from meters to millimeters (to undo: right-click the file, "Units")
+1 pezzo molto lontano
+= 1 part very far away
+1 pezzo troppo grande per un buffer della scheda video: caricato ma non disegnato
+= 1 part too large for a graphics card buffer: loaded but not drawn
+Aggiunto: {name} ({new_shapes} shape)  ·  {files} file aperti
+= Added: {name} ({new_shapes} shapes)  ·  {files} files open
+Attendi la fine del lavoro in corso prima di uscire.
+= Wait for the current job to finish before exiting.
+Caricamento {path} ({mb} MB)...
+= Loading {path} ({mb} MB)...
+Caricato: {shape_count} shape in {macro_count} macro-oggetti principali
+= Loaded: {shape_count} shapes in {macro_count} top-level objects
+Chiuso il file: {name}
+= File closed: {name}
+Colore aggiunto ai miei colori
+= Color added to my colors
+Colore impostato: {name}
+= Color set: {name}
+Colore originale: {name}
+= Original color: {name}
+Colore tolto dai miei colori
+= Color removed from my colors
+Colori casuali su {n} pezzi
+= Random colors on {n} parts
+Copiato: {label}  ·  Ctrl+V per incollare
+= Copied: {label}  ·  Ctrl+V to paste
+Già in questo gruppo
+= Already in this group
+Gruppo creato: scrivi il nome e premi Invio
+= Group created: type the name and press Enter
+Gruppo non creato: {e}
+= Group not created: {e}
+Il colore era già tra i miei colori
+= The color was already in my colors
+Incollato: {v} ({pieces} pezzi) nella stessa posizione dell'originale: spostalo con la finestra Posizione
+= Pasted: {v} ({pieces} parts) in the same position as the original: move it with the Position window
+Isolati: {n} elementi
+= Isolated: {n} items
+Modifica applicata a {count} elementi
+= Change applied to {count} items
+Niente da incollare: seleziona un pezzo e copialo con Ctrl+C
+= Nothing to paste: select a part and copy it with Ctrl+C
+Non spostato: {e}
+= Not moved: {e}
+Nuovo gruppo
+= New group
+Pipetta annullata
+= Eyedropper canceled
+Posizione ripristinata
+= Position restored
+Presa dei punti della misura finita
+= Measurement point picking finished
+Rinominato: da {old} a {name}
+= Renamed: from {old} to {name}
+Ripristinati i colori originali.
+= Original colors restored.
+Scelta dei punti sul 3D finita
+= Point picking on the 3D model finished
+Scelta dell'asse annullata
+= Axis picking canceled
+Selezionati: {n} elementi
+= Selected: {n} items
+Selezionato: {name} ({count} pezzi)
+= Selected: {name} ({count} parts)
+Spostati {n} elementi in «{target}»
+= Moved {n} items into "{target}"
+Spostati {n} pezzi
+= Moved {n} parts
+Spostato in «{target}»
+= Moved into "{target}"
+Tutti i nodi visibili.
+= All nodes visible.
+convertito da metri a millimetri
+= converted from meters to millimeters
+convertito da millimetri a metri
+= converted from millimeters to meters
+{count} pezzi molto lontani
+= {count} parts very far away
+{name}: aperta a {done}°
+= {name}: open at {done}°
+{name}: {undrawn} pezzi troppo grandi per un buffer della scheda video: caricati ma non disegnati
+= {name}: {undrawn} parts too large for a graphics card buffer: loaded but not drawn
+{name}: {v} (scala complessiva {scale})
+= {name}: {v} (overall scale {scale})
+{n} pezzi troppo grandi per un buffer della scheda video: caricati ma non disegnati
+= {n} parts too large for a graphics card buffer: loaded but not drawn
+{parts} dal gruppo principale fuori inquadratura: seleziona la radice nell'albero e premi F per vederli
+= {parts} from the main group out of frame: select the root in the tree and press F to see them
+Dx
+= R
+Sx
+= L
+Clic: applica  ·  tasto destro: togli dai miei colori
+= Click: apply  ·  right-click: remove from my colors
+Colore originale
+= Original color
+I miei colori
+= My colors
+Rimuove il colore impostato su questo elemento
+= Removes the color set on this item
+Salva il colore attuale tra i miei colori (restano anche alla prossima apertura)
+= Save the current color in my colors (they stay for the next session too)
+Trasparenza
+= Transparency
+Sgancia: torna una finestra mobile (o trascina la barra del titolo)
+= Undock: back to a floating window (or drag the title bar)
+Avvio del convertitore {label} non riuscito: {e}
+= Starting the {label} converter failed: {e}
+Cartella temporanea non disponibile: {e}
+= Temporary folder not available: {e}
+Conversione {label} non riuscita (codice {c})
+= {label} conversion failed (code {c})
+Conversione {label} non riuscita: {last}
+= {label} conversion failed: {last}
+Convertitore {label} incompleto: manca una DLL nella sua cartella
+= {label} converter incomplete: a DLL is missing in its folder
+Convertitore {label} non trovato: serve {v} nella cartella di Dima 3D
+= {label} converter not found: {v} is needed in the Dima 3D folder
+Convertitore {label}: {e}
+= {label} converter: {e}
+Il convertitore {label} si è bloccato leggendo il file
+= The {label} converter got stuck reading the file
+Il convertitore {label} si è chiuso in modo inatteso
+= The {label} converter closed unexpectedly
+HSF letto solo in parte: {e}
+= HSF read only in part: {e}
+Riferimento a un segmento ({tag}) non supportato: ignorato
+= Reference to a segment ({tag}) not supported: ignored
+Shell come insieme di geometrie non supportata
+= Shell as a set of geometries not supported
+Shell con compressione edgebreaker non supportata
+= Shell with edgebreaker compression not supported
+attributi di geometria annidati
+= nested geometry attributes
+attributo di Shell 0x{op} non supportato
+= Shell attribute 0x{op} not supported
+blocco compresso rovinato: {e}
+= corrupted compressed block: {e}
+blocco compresso troncato
+= truncated compressed block
+campioni a {bits} bit non validi
+= invalid {bits}-bit samples
+compressione annidata
+= nested compression
+dati compressi troppo corti
+= compressed data too short
+euristiche non supportate ({mask})
+= unsupported heuristics ({mask})
+fine del file inattesa
+= unexpected end of file
+geometria per una marcatura sconosciuta ({tag})
+= geometry for an unknown marker ({tag})
+indice di vertice fuori dalla Shell
+= vertex index outside the Shell
+linea con opzioni {flags} non supportata
+= line with options {flags} not supported
+lista delle facce troncata
+= truncated face list
+lista delle strisce troncata
+= truncated strip list
+opcode{c} non supportato
+= opcode{c} not supported
+opzioni di resa non supportate ({mask} {extended})
+= unsupported rendering options ({mask} {extended})
+polilinea con opzioni {flags} non supportata
+= polyline with options {flags} not supported
+polilinee 2D compresse non supportate
+= compressed 2D polylines not supported
+regioni delle facce: formato {scheme}
+= face regions: format {scheme}
+regioni delle facce: schema {k}
+= face regions: scheme {k}
+riapertura di un segmento sconosciuto ({tag})
+= reopening of an unknown segment ({tag})
+valori a {bits} bit non supportati
+= {bits}-bit values not supported
+{e} (opcode 0x{op} a {at})
+= {e} (opcode 0x{op} at {at})
+{what}: lunghezza negativa ({n})
+= {what}: negative length ({n})
+IV binario letto solo in parte: {e}
+= Binary IV read only in part: {e}
+campo «{name}» collegato a un engine: non supportato
+= field "{name}" connected to an engine: not supported
+campo «{name}» del nodo «{class}» sconosciuto
+= unknown field "{name}" of node "{class}"
+engine «{class}» non supportato
+= engine "{class}" not supported
+nodi annidati troppo in profondità
+= nodes nested too deeply
+nodo non valido alla posizione {pos}
+= invalid node at position {pos}
+testo non valido alla posizione {pos}
+= invalid text at position {pos}
+tipo di campo «{other}» non supportato
+= field type "{other}" not supported
+tipo di campo «{ty}» sconosciuto
+= unknown field type "{ty}"
+{n} valori oltre la fine del file
+= {n} values past the end of the file
+Errore durante la lettura del file: {read_err}
+= Error while reading the file: {read_err}
+Fallback: lettura del file in buffer RAM...
+= Fallback: reading the file into a RAM buffer...
+Il file contiene {what}: non ci sono superfici da mostrare. Dima 3D apre solo matematiche con facce.
+= The file contains {what}: there are no surfaces to show. Dima 3D opens only CAD models with faces.
+Il file selezionato è vuoto (0 byte)
+= The selected file is empty (0 bytes)
+Impossibile aprire il file '{path}': {e}
+= Cannot open the file '{path}': {e}
+Impossibile leggere le dimensioni di '{path}': {e}
+= Cannot read the size of '{path}': {e}
+Memory mapping con memmap2 ({v} MB)...
+= Memory mapping with memmap2 ({v} MB)...
+Apri tutte le sezioni
+= Open all sections
+Chiudi tutte le sezioni
+= Close all sections
+Clic: evidenzia nella vista · doppio clic: cambia il nome
+= Click: highlight in the view · double-click: rename
+Comprimi
+= Collapse
+Espandi
+= Expand
+Misure salvate con lo strumento Misura (tasto M, poi «Salva»): vanno nel progetto
+= Measurements saved with the Measure tool (M key, then "Save"): they go in the project
+Mostra nella vista
+= Show in the view
+Mostra tutte
+= Show all
+Nascondi nella vista
+= Hide in the view
+Nascondi tutte
+= Hide all
+Pronto. Apri un file 3D per iniziare.
+= Ready. Open a 3D file to start.
+Togli tutte
+= Remove all
+Istanza #{node_idx}
+= Instance #{node_idx}
+1 avviso sul file
+= 1 warning about the file
+Apre il log di Dima 3D, con i dettagli dell'errore
+= Opens the Dima 3D log, with the error details
+Fotogrammi al secondo mentre ruoti o sposti la vista (resta l'ultimo valore).\nSopra 30 il movimento è fluido; sotto 15 va a scatti: nascondere i pezzi che non servono lo rende più leggero.
+= Frames per second while you rotate or move the view (the last value stays).\nAbove 30 the motion is smooth; below 15 it is jerky: hiding the parts you do not need makes it lighter.
+Macro-oggetti: {n}\nComponenti raggruppati in automatico: {c}
+= Top-level objects: {n}\nAutomatically grouped components: {c}
+Memoria usata da Dima 3D: {own} GB\nUsata da altri programmi: {others} GB\nLibera: {free} GB su {total} GB
+= Memory used by Dima 3D: {own} GB\nUsed by other programs: {others} GB\nFree: {free} GB of {total} GB
+Pezzi {visible} / {total}   ·   Triangoli {triangles}   ·   Vertici {vertices}
+= Parts {visible} / {total}   ·   Triangles {triangles}   ·   Vertices {vertices}
+RAM
+= RAM
+RAM quasi esaurita: aprire altri file può rallentare molto il PC
+= RAM almost full: opening more files can slow down the PC a lot
+libera {n} GB
+= {n} GB free
+{n} avvisi sul file
+= {n} warnings about the file
+  ·  {unsaved} modelli senza file non sono nel progetto
+=   ·  {unsaved} models without a file are not in the project
+Allinea su misure: {lost} punti non trovano più il loro pezzo (restano fermi)
+= Align by measurements: {lost} points no longer find their part (they stay put)
+Annullato
+= Undone
+Continua senza salvare
+= Continue without saving
+Converti
+= Convert
+Converti in mesh
+= Convert to mesh
+Deviazione angolare:
+= Angular deviation:
+Deviazione di superficie:
+= Surface deviation:
+Deviazione relativa delle superfici
+= Relative surface deviation
+Dov'è {name}? (non è più nella cartella del progetto)
+= Where is {name}? (it is no longer in the project folder)
+Errore export: {e}
+= Export error: {e}
+Esporta selezionati: non c'è niente di selezionato.
+= Export selected: nothing is selected.
+Esportato: {path} ({shapes_written} shape, {seconds} s)
+= Exported: {path} ({shapes_written} shapes, {seconds} s)
+Esportazione in corso
+= Exporting
+Esportazione in corso: {path}
+= Exporting: {path}
+Hai modificato la scena (posizioni, visibilità, eliminazioni, colori o nomi) e non l'hai ancora salvata come progetto né esportata.\nVuoi salvarla prima di {what}?
+= You changed the scene (positions, visibility, deletions, colors or names) and have not saved it as a project or exported it yet.\nDo you want to save it before {what}?
+Il file viene riletto dallo STEP originale: colori e modifiche fatti su questo file si perdono.
+= The file is read again from the original STEP: colors and changes made on this file are lost.
+Il progetto {name} non contiene modelli
+= The project {name} contains no models
+La deviazione è una frazione della dimensione di ogni faccia invece che in mm
+= The deviation is a fraction of the size of each face instead of in mm
+Lascia così
+= Leave as is
+Misure: {lost} punti non trovano più il loro pezzo (restano fermi)
+= Measurements: {lost} points no longer find their part (they stay put)
+Modelli 3D (WRL, JT, STEP, STL, HSF, IV)
+= 3D models (WRL, JT, STEP, STL, HSF, IV)
+Modelli 3D e progetti (WRL, JT, STEP, STL, HSF, IV, DIMA3D)
+= 3D models and projects (WRL, JT, STEP, STL, HSF, IV, DIMA3D)
+Modifiche non salvate
+= Unsaved changes
+Niente da annullare.
+= Nothing to undo.
+Niente da ripetere.
+= Nothing to redo.
+Opzioni di mesh
+= Mesh options
+Progetto Dima 3D
+= Dima 3D project
+Progetto aperto: {name} ({files} modelli)
+= Project opened: {name} ({files} models)
+Progetto chiuso.
+= Project closed.
+Progetto non aperto ({name}): {e}
+= Project not opened ({name}): {e}
+Progetto non aperto: non trovo {path}
+= Project not opened: {path} not found
+Progetto non salvato: {e}
+= Project not saved: {e}
+Progetto salvato: {path}
+= Project saved: {path}
+Progetto {name}: nessun modello si è aperto
+= Project {name}: no model opened
+Questi file sembrano scritti in unità diverse dal primo file aperto: così come sono finiscono lontani dal resto. Convertiti, si posizionano sopra.
+= These files seem to be written in units different from the first file opened: as they are, they end up far from the rest. Converted, they are placed on top.
+RAM forse insufficiente
+= RAM may be insufficient
+Ripetuto
+= Redone
+Si può convertire anche dopo, con il tasto destro sul file nell'albero: «Unità di misura»
+= It can also be converted later, by right-clicking the file in the tree: "Units"
+Unità di misura diverse
+= Different units
+Valori più piccoli: superfici più fedeli, ma più triangoli e file più pesanti.
+= Smaller values: more faithful surfaces, but more triangles and heavier files.
+Valori predefiniti
+= Default values
+Visualizza STEP
+= View STEP
+e altri {v} file STEP
+= and {v} more STEP files
+{file_name} è cambiato dopo il salvataggio del progetto: controlla posizioni, colori e nomi
+= {file_name} changed after the project was saved: check positions, colors and names
+{name} pesa {size} MB: per aprirlo servono circa {v} GB di RAM, ma ora ne sono liberi {w} GB.\n\nIl PC potrebbe rallentare molto e l'apertura potrebbe non riuscire. Conviene chiudere altri programmi (browser, Teams, altri CAD) prima di continuare.\n\nAprire comunque?
+= {name} is {size} MB: opening it needs about {v} GB of RAM, but only {w} GB are free now.\n\nThe PC may slow down a lot and the opening may fail. Better close other programs (browser, Teams, other CAD) before continuing.\n\nOpen anyway?
+{n} + {others} file
+= {n} + {others} files
+{path} non si è aperto: le sue modifiche non sono state applicate
+= {path} did not open: its changes were not applied
+{skipped} modifiche del progetto non trovano più il loro pezzo (modello cambiato?)
+= {skipped} project changes no longer find their part (model changed?)
+{title}: copia non rifatta (manca il pezzo da cui veniva)
+= {title}: copy not redone (the part it came from is missing)
+{what}  (annullabili: {n}, ripetibili: {len})
+= {what}  (undoable: {n}, redoable: {len})
+«Visualizza STEP» apre subito il file con una mesh veloce, solo per guardarlo: la conversione con le tue tolleranze si fa dopo, dal menu del file nell'albero.
+= "View STEP" opens the file right away with a quick mesh, just to look at it: the conversion with your tolerances is done later, from the file menu in the tree.
+Nel progetto c'è un file senza percorso
+= The project has a file without a path
+Nel progetto c'è una copia senza provenienza valida
+= The project has a copy without a valid source
+Non è un progetto di Dima 3D
+= It is not a Dima 3D project
+Progetto salvato da una versione più nuova di Dima 3D (formato {v})
+= Project saved by a newer version of Dima 3D (format {v})
+Riga {v} del progetto non valida
+= Project line {v} is not valid
+ (parte «{part}»)
+=  (part "{part}")
+(da {min}° a {max}°)
+= (from {min}° to {max}°)
+Cerniera
+= Hinge
+Componente (raggruppamento automatico)
+= Component (automatic grouping)
+File
+= File
+Gruppo
+= Group
+Istanza (USE)
+= Instance (USE)
+Pezzi singoli
+= Single parts
+Pezzo
+= Part
+Proprietà
+= Properties
+Triangoli
+= Triangles
+Vertici
+= Vertices
+{n} elementi selezionati
+= {n} items selected
+{n} file
+= {n} files
+Geometria originale ripristinata ({n} pezzi)
+= Original geometry restored ({n} parts)
+Riduzione delle facce in corso…
+= Reducing faces…
+Riduzione: {v} → {w} facce in {pieces} pezzi ({seconds} s)
+= Reduction: {v} → {w} faces in {pieces} parts ({seconds} s)
+Nessun programma .tis o .tip accanto a {path}
+= No .tis or .tip program next to {path}
+visualizzazione
+= view only
+1 nodo Switch spento nel file: il suo contenuto non è caricato né esportato
+= 1 Switch node off in the file: its content is not loaded or exported
+Conversione da VRML 1.0...
+= Converting from VRML 1.0...
+Costruzione grafo scena...
+= Building the scene graph...
+Elaborazione globale definizioni DEF...
+= Processing global DEF definitions...
+Identificazione blocchi top-level...
+= Identifying top-level blocks...
+Lettura HSF...
+= Reading HSF...
+Lettura Open Inventor...
+= Reading Open Inventor...
+Lettura STL...
+= Reading STL...
+Parsing completato con successo.
+= Parsing completed successfully.
+Parsing parallelo con Rayon su {n} blocchi...
+= Parallel parsing with Rayon on {n} blocks...
+Ricostruzione gerarchia e raggruppamento di {n} shape...
+= Rebuilding hierarchy and grouping {n} shapes...
+Scansione delimitatori single-pass O(n)...
+= Single-pass delimiter scan O(n)...
+{n} nodi Switch spenti nel file: il loro contenuto non è caricato né esportato
+= {n} Switch nodes off in the file: their content is not loaded or exported
+Il file STL non contiene triangoli
+= The STL file contains no triangles
+STL di testo con caratteri non validi
+= Text STL with invalid characters
+STL non valido alla riga {v}: vertice incompleto
+= Invalid STL at line {v}: incomplete vertex
+Solido «{name}»: solo triangoli degeneri, ignorato
+= Solid "{name}": only degenerate triangles, ignored
+il file non è un font TrueType/OpenType leggibile
+= the file is not a readable TrueType/OpenType font
+lettere non riempibili ({e})
+= letters that cannot be filled ({e})
+Lingua · Language
+= Lingua · Language
+OpenInventor
+= OpenInventor
+Aggiorna adesso
+= Update now
+Aggiornamento a {version} non riuscito: {e}.
+= Update to {version} failed: {e}.
+Aggiornamento a {v} {version}
+= Updating to {v} {version}
+Aggiornamento annullato.
+= Update canceled.
+Aggiornamento disponibile
+= Update available
+Aggiornamento non riuscito: {e}. Puoi scaricare lo zip dalla pagina del progetto.
+= Update failed: {e}. You can download the zip from the project page.
+Collegamento a GitHub…
+= Connecting to GitHub…
+Estrazione dei file…
+= Extracting files…
+Hai già l'ultima versione ({current}).
+= You already have the latest version ({current}).
+Il programma scarica il pacchetto, sostituisce i suoi file e si riapre.
+= The program downloads the package, replaces its files and restarts.
+In attesa di dati…
+= Waiting for data…
+Non avvisare più per questa versione all'avvio
+= Do not notify again for this version at startup
+Novità
+= What's new
+Più tardi
+= Later
+PowerShell non disponibile: {e}
+= PowerShell not available: {e}
+Salta questa versione
+= Skip this version
+Verifica in corso…
+= Checking…
+Verifica non riuscita: {e}.
+= Check failed: {e}.
+connessione a GitHub non riuscita
+= connection to GitHub failed
+copia dei file nuovi non riuscita ({e})
+= copying the new files failed ({e})
+download non riuscito
+= download failed
+errore sconosciuto
+= unknown error
+la cartella del programma non si può modificare ({e})
+= the program folder cannot be modified ({e})
+la versione pubblicata non ha uno zip da scaricare
+= the published version has no zip to download
+nello zip non c'è {EXE}
+= the zip does not contain {EXE}
+riavvio non riuscito ({e})
+= restart failed ({e})
+risposta di GitHub non valida
+= invalid response from GitHub
+serve il permesso di amministratore per scrivere nella cartella del programma, e non è stato dato
+= administrator permission is needed to write in the program folder, and it was not given
+su GitHub non c'è ancora una versione pubblicata
+= there is no published version on GitHub yet
+uscita di PowerShell non leggibile
+= PowerShell output not readable
+{rate}  ·  mancano circa {v}
+= {rate}  ·  about {v} left
+{v} min {w} s
+= {v} min {w} s
+È disponibile {v} {version} (questa è la {w}).
+= {v} {version} is available (this is {w}).
+Aggiunge o toglie dalla selezione (Ctrl + Shift: il singolo pezzo)
+= Adds to or removes from the selection (Ctrl + Shift: the single part)
+Apre la parte con una cerniera salvata
+= Opens the part with a saved hinge
+Centra
+= Center
+Centro cabina: terna degli assi nello zero della scena, anche senza cabina (riferimento per allineare i 3D)
+= Booth center: axis triad at the scene zero, even without a booth (reference for aligning the 3D models)
+Chiudi la sezione
+= Close the section
+Click
+= Click
+Colore di {name} dato a {count} elementi
+= Color of {name} given to {count} items
+Colore di {name} salvato tra i miei colori
+= Color of {name} saved in my colors
+Comandi del mouse
+= Mouse controls
+Ctrl + click
+= Ctrl + click
+Ctrl + trascina
+= Ctrl + drag
+Destro o rotella premuta
+= Right or middle button pressed
+Distanza tra due punti dei pezzi: clic sul primo e sul secondo punto  [M]
+= Distance between two points of the parts: click the first and the second point  [M]
+Doppio click
+= Double click
+Elimina    Canc
+= Delete    Del
+Inquadra    F
+= Frame    F
+Inquadra la selezione
+= Frame the selection
+Inquadra le parti visibili  [F = inquadra la selezione]
+= Frame the visible parts  [F = frame the selection]
+Inverti lo zoom della rotella (e di sinistro + rotella premuti)
+= Invert the wheel zoom (and of left + middle button pressed)
+Isola    I
+= Isolate    I
+Piano di sezione: taglia il modello lungo X, Y o Z
+= Section plane: cuts the model along X, Y or Z
+Posizione del piano lungo l'asse
+= Position of the plane along the axis
+Raddrizza la vista (annulla il rollio)  [5]
+= Straighten the view (undo the roll)  [5]
+Rilascia per aprire il file
+= Release to open the file
+Rollio
+= Roll
+Rotella
+= Wheel
+Ruota attorno al punto cliccato
+= Rotate around the clicked point
+Seleziona il macro-oggetto
+= Select the top-level object
+Seleziona il singolo pezzo
+= Select the single part
+Sezione
+= Section
+Shift + click
+= Shift + click
+Shift + sinistro
+= Shift + left
+Sinistro
+= Left
+Sinistro + rotella premuti
+= Left + middle button pressed
+Sposta
+= Pan
+Taglio perpendicolare all'asse {name}
+= Cut perpendicular to the {name} axis
+Terna World nello zero: i punti Object si disegnano così come sono, come la matematica in posizione 0
+= World triad at the zero: Object points are drawn as they are, like the CAD model in position 0
+Tiene l'altra metà del modello
+= Keeps the other half of the model
+Trascina qui un file 3D
+= Drag a 3D file here
+Vista {name}  [{key}]
+= View {name}  [{key}]
+WRL, STEP, JT, STL, HSF, IV
+= WRL, STEP, JT, STL, HSF, IV
+Zoom
+= Zoom
+Zoom invertito: rotella in avanti per allontanarsi. Clic per tornare al verso normale
+= Inverted zoom: wheel forward to zoom out. Click to go back to the normal direction
+Zoom verso il mouse (verso invertibile con il tasto Zoom)
+= Zoom toward the mouse (direction can be inverted with the Zoom button)
+oppure premi Ctrl+O
+= or press Ctrl+O
+{name} salvata nel gruppo «Misure» (sotto l'albero)
+= {name} saved in the "Measurements" group (under the tree)
+VRML 1.0: {broken} nodi non letti perché incompleti o con riferimenti non validi
+= VRML 1.0: {broken} nodes not read because incomplete or with invalid references
+VRML 1.0: {hidden_switches} nodi Switch spenti: il loro contenuto non è caricato né esportato
+= VRML 1.0: {hidden_switches} Switch nodes off: their content is not loaded or exported
+VRML 1.0: {lines} nodi di linee o punti non caricati né esportati (si leggono solo le superfici)
+= VRML 1.0: {lines} line or point nodes not loaded or exported (only surfaces are read)
+VRML 1.0: {multi_colors} superfici con più colori mostrate con il solo primo colore
+= VRML 1.0: {multi_colors} surfaces with more colors shown with only the first color
+VRML 1.0: {unsupported} nodi non supportati (primitive, testo o WWWInline) non caricati né esportati
+= VRML 1.0: {unsupported} unsupported nodes (primitives, text or WWWInline) not loaded or exported

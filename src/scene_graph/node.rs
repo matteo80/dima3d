@@ -717,7 +717,7 @@ impl SceneGraph {
         match (node, self.info.get(node_idx as usize).map(|i| i.kind)) {
             (SceneNode::Shape { mesh_id, .. }, _) => format!("Shape #{mesh_id}"),
             (_, Some(NodeKind::Transform)) => format!("Transform #{node_idx}"),
-            (_, Some(NodeKind::Use)) => format!("Istanza #{node_idx}"),
+            (_, Some(NodeKind::Use)) => trf!("Istanza #{node_idx}", node_idx = node_idx),
             (_, Some(NodeKind::File)) => format!("File #{node_idx}"),
             _ => format!("Group #{node_idx}"),
         }

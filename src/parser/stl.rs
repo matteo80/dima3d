@@ -55,7 +55,7 @@ pub fn read(data: &[u8]) -> Result<Vec<Solid>, String> {
         return Ok(vec![Solid { name, corners }]);
     }
 
-    let text = std::str::from_utf8(data).map_err(|_| "STL di testo con caratteri non validi".to_string())?;
+    let text = std::str::from_utf8(data).map_err(|_| crate::i18n::tr("STL di testo con caratteri non validi").to_string())?;
     let mut solids = Vec::new();
     let mut current: Option<Solid> = None;
     for (n, line) in text.lines().enumerate() {
@@ -71,7 +71,7 @@ pub fn read(data: &[u8]) -> Result<Vec<Solid>, String> {
             Some("vertex") => {
                 let v: Vec<f32> = words.take(3).filter_map(|w| w.parse().ok()).collect();
                 if v.len() != 3 {
-                    return Err(format!("STL non valido alla riga {}: vertice incompleto", n + 1));
+                    return Err(trf!("STL non valido alla riga {v}: vertice incompleto", v = n + 1));
                 }
                 current.get_or_insert_with(|| Solid { name: "STL".to_string(), corners: Vec::new() }).corners.push([v[0], v[1], v[2]]);
             }
@@ -92,7 +92,7 @@ pub fn read(data: &[u8]) -> Result<Vec<Solid>, String> {
     }
     solids.retain(|s| !s.corners.is_empty());
     if solids.is_empty() {
-        return Err("Il file STL non contiene triangoli".to_string());
+        return Err(crate::i18n::tr("Il file STL non contiene triangoli").to_string());
     }
     Ok(solids)
 }
@@ -115,7 +115,7 @@ pub(crate) fn shapes(data: &[u8]) -> (Vec<crate::parser::ShapeInfo>, Vec<String>
             let order: Vec<u32> = (0..solid.corners.len() as u32).collect();
             let mesh = crate::reduce::weld(&solid.corners, &order);
             if mesh.indices.is_empty() {
-                return Err(format!("Solido «{}»: solo triangoli degeneri, ignorato", solid.name));
+                return Err(trf!("Solido «{name}»: solo triangoli degeneri, ignorato", name = solid.name));
             }
             let (normals, split) = crate::reduce::crease_normals(&mesh.positions, &mesh.indices, crate::reduce::CREASE_ANGLE);
             Ok(crate::parser::ShapeInfo {

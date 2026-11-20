@@ -210,18 +210,18 @@ where
     F: FnMut(f32, String),
 {
     let converted = if crate::parser::vrml1::is_vrml1(data) {
-        progress_fn(0.0, "Conversione da VRML 1.0...".to_string());
+        progress_fn(0.0, crate::i18n::tr("Conversione da VRML 1.0...").to_string());
         crate::parser::vrml1::convert(data)
     } else if crate::parser::iv::is_inventor(data) {
         // Il testo Inventor è quasi VRML 1.0; il binario viene prima tradotto in testo
-        progress_fn(0.0, "Lettura Open Inventor...".to_string());
+        progress_fn(0.0, crate::i18n::tr("Lettura Open Inventor...").to_string());
         let (text, mut warnings) = crate::parser::iv::ascii(data);
         let mut converted = crate::parser::vrml1::convert(&text);
         warnings.append(&mut converted.warnings);
         converted.warnings = warnings;
         converted
     } else if crate::parser::hsf::is_hsf(data) {
-        progress_fn(0.0, "Lettura HSF...".to_string());
+        progress_fn(0.0, crate::i18n::tr("Lettura HSF...").to_string());
         let (shapes, warnings) = crate::parser::hsf::shapes(data);
         let mut scene = scene_from_shapes(shapes, cluster_cfg, &mut progress_fn);
         scene.load_warnings.extend(warnings);
@@ -233,7 +233,7 @@ where
         return scene;
     } else if crate::parser::stl::is_stl(data) {
         // Nessun testo intermedio: i pezzi si costruiscono direttamente dai triangoli
-        progress_fn(0.0, "Lettura STL...".to_string());
+        progress_fn(0.0, crate::i18n::tr("Lettura STL...").to_string());
         let (shapes, warnings) = crate::parser::stl::shapes(data);
         let mut scene = scene_from_shapes(shapes, cluster_cfg, &mut progress_fn);
         scene.load_warnings.extend(warnings);
@@ -254,7 +254,7 @@ where
     F: FnMut(f32, String),
 {
     tracing::info!("Inizio parsing WRL ({} bytes)", data.len());
-    progress_fn(0.05, "Scansione delimitatori single-pass O(n)...".to_string());
+    progress_fn(0.05, crate::i18n::tr("Scansione delimitatori single-pass O(n)...").to_string());
 
     let (brace_map, bracket_map) = delimiter_map::build_delimiter_maps(data);
     tracing::debug!(
@@ -263,7 +263,7 @@ where
         bracket_map.len()
     );
 
-    progress_fn(0.20, "Identificazione blocchi top-level...".to_string());
+    progress_fn(0.20, crate::i18n::tr("Identificazione blocchi top-level...").to_string());
     let blocks = scan_top_level_blocks(data, &brace_map);
     tracing::info!("Blocchi top-level trovati: {}", blocks.len());
 
@@ -274,11 +274,11 @@ where
 
     // 1. Prima passata: pre-scansione globale di tutte le definizioni DEF
     // (coordinate, shape, transform) per popolare il registro prima del parsing parallelo
-    progress_fn(0.30, "Elaborazione globale definizioni DEF...".to_string());
+    progress_fn(0.30, crate::i18n::tr("Elaborazione globale definizioni DEF...").to_string());
     pre_scan_all_defs(data, &brace_map, &bracket_map, &mut defs);
 
     // 2. Seconda passata: parsing dei blocchi con Rayon (parallelismo data-parallel)
-    progress_fn(0.40, format!("Parsing parallelo con Rayon su {} blocchi...", blocks.len()));
+    progress_fn(0.40, trf!("Parsing parallelo con Rayon su {n} blocchi...", n = blocks.len()));
 
     let shapes: Vec<ShapeInfo> = if blocks.len() > 1 {
         // Parallelizza sui blocchi top-level. `map_init` clona il registro DEF una
@@ -328,11 +328,9 @@ where
     match hidden {
         0 => {}
         1 => scene.load_warnings.push(
-            "1 nodo Switch spento nel file: il suo contenuto non è caricato né esportato".to_string(),
+            crate::i18n::tr("1 nodo Switch spento nel file: il suo contenuto non è caricato né esportato").to_string(),
         ),
-        n => scene.load_warnings.push(format!(
-            "{n} nodi Switch spenti nel file: il loro contenuto non è caricato né esportato"
-        )),
+        n => scene.load_warnings.push(trf!("{n} nodi Switch spenti nel file: il loro contenuto non è caricato né esportato", n = n)),
     }
     tracing::info!(
         "Grafo scena: {} nodi, {} radici, {} macro-componenti",
@@ -341,7 +339,7 @@ where
         scene.macro_components.len()
     );
 
-    progress_fn(1.0, "Parsing completato con successo.".to_string());
+    progress_fn(1.0, crate::i18n::tr("Parsing completato con successo.").to_string());
 
     scene
 }
@@ -354,13 +352,13 @@ where
 {
     progress_fn(
         0.85,
-        format!("Ricostruzione gerarchia e raggruppamento di {} shape...", shapes.len()),
+        trf!("Ricostruzione gerarchia e raggruppamento di {n} shape...", n = shapes.len()),
     );
     let tree = crate::scene_graph::builder::build_tree(
         shapes.iter().map(|s| (s.path.as_slice(), s.name.as_deref())),
         |ids: &[u32]| crate::clusterer::cluster_subset(&shapes, ids, &cluster_cfg),
     );
-    progress_fn(0.95, "Costruzione grafo scena...".to_string());
+    progress_fn(0.95, crate::i18n::tr("Costruzione grafo scena...").to_string());
     SceneGraph::from_built(tree, shapes)
 }
 
