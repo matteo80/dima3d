@@ -2,7 +2,11 @@
 # Il programma la trova con «Verifica aggiornamenti» e propone di installarla.
 # Uso:  powershell -ExecutionPolicy Bypass -File pubblica.ps1 -Note note.md
 #       (note.md: le novità, in testo semplice; vengono mostrate nel programma)
-param([Parameter(Mandatory = $true)][string]$Note)
+#       powershell -ExecutionPolicy Bypass -File pubblica.ps1 -Note note.md -Beta
+#       (-Beta: dal ramo beta, come pre-release: il programma non la propone come aggiornamento,
+#       perché legge solo releases/latest; si scarica a mano dalla pagina delle Release)
+param([Parameter(Mandatory = $true)][string]$Note, [switch]$Beta)
+$branch = if ($Beta) { 'beta' } else { 'main' }
 
 $ErrorActionPreference = 'Stop'
 Set-Location $PSScriptRoot
@@ -24,7 +28,7 @@ if ($dirty) { throw 'Ci sono modifiche non salvate in git: fai prima commit e pu
 # testo del pacchetto non devono contenere le parole vietate (.git/info/parole-vietate.txt)
 git fetch --quiet origin
 $head = git rev-parse HEAD
-git merge-base --is-ancestor $head origin/main
+git merge-base --is-ancestor $head "origin/$branch"
 if ($LASTEXITCODE -ne 0) { throw 'Il commit corrente non è su GitHub: fai prima il push (con il controllo delle parole vietate)' }
 $list = Join-Path (git rev-parse --git-dir) 'info\parole-vietate.txt'
 if (-not (Test-Path $list)) { throw "Manca ${list}: senza l'elenco delle parole vietate non si pubblica" }
@@ -49,7 +53,11 @@ if (Test-Path $setup) { $assets += $setup } else { Write-Warning "Manca ${setup}
 # uploads.github.com a volte si interrompe), infine la pubblicazione: mai una Release a metà,
 # che il programma proporrebbe come aggiornamento senza lo zip.
 $tag = "v$version"
-& $gh release create $tag --draft --target main --title "Dima 3D $version" --notes-file $Note
+if ($Beta) {
+    & $gh release create $tag --draft --prerelease --target beta --title "Dima 3D $version beta" --notes-file $Note
+} else {
+    & $gh release create $tag --draft --target main --title "Dima 3D $version" --notes-file $Note
+}
 if ($LASTEXITCODE -ne 0) { throw 'Bozza della Release non creata' }
 foreach ($asset in $assets) {
     $ok = $false

@@ -962,6 +962,10 @@ Fatto:
       %LOCALAPPDATA%\Programs\Dima3D senza permessi da amministratore, menu Start, desktop facoltativo,
       associazione dei .dima3d facoltativa, disinstallazione. `pacchetto.ps1` lo crea, `pubblica.ps1` lo carica nella
       Release accanto allo zip; dopo un aggiornamento dal programma si aggiorna la versione in «App installate».
+- [x] (2026-11-21, 0.2.41 beta) **Interfaccia in inglese** (ramo `beta`, pubblicata come pre-release su GitHub:
+      «Verifica aggiornamenti» legge solo `releases/latest` e non la propone). Sistema stile gettext in `src/i18n`
+      (`tr`, `trf!`, `tn!`, traduzioni in `en.txt`), lingua da Vista → «Lingua · Language». `pubblica.ps1 -Beta`
+      pubblica dal ramo beta come pre-release.
 - [x] (2026-11-20, 0.2.40) **Espandi/Comprimi, Inverti nel calcolo tra CONST BASE, file senza superfici**:
       (1) Pulsanti «Espandi» e «Comprimi» (`ui::expand_collapse`) nelle finestre con sezioni richiudibili:
       Posizione (le sezioni seguono `position_sections`, `.open(Some(..))`), Cabina e Robot; l'albero Scena aveva
