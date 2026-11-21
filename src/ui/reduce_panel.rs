@@ -95,6 +95,7 @@ pub fn draw(ctx: &egui::Context, app: &mut GestoreApp, pass: super::dock::Pass) 
         default_height: 420.0,
         default_pos: ctx.screen_rect().right_top() + egui::vec2(-430.0, 60.0),
         scroll: true,
+        fold: false,
     };
     super::dock::show(ctx, pass, window, |ui| {
             ui.set_min_width(370.0);

@@ -679,19 +679,3 @@ fn draw_scene_measures(ui: &mut egui::Ui, app: &mut crate::app::GestoreApp) {
         list.clear();
     }
 }
-
-/// Pulsanti «Espandi» e «Comprimi» delle finestre con sezioni richiudibili:
-/// `Some(true)` apre tutte le sezioni, `Some(false)` le chiude.
-pub fn expand_collapse(ui: &mut egui::Ui) -> Option<bool> {
-    use theme::{icon, icon_text};
-    let mut choice = None;
-    ui.horizontal(|ui| {
-        if ui.small_button(icon_text(ui, icon::ARROWS_OUT_LINE_VERTICAL, tr("Espandi"))).on_hover_text(tr("Apri tutte le sezioni")).clicked() {
-            choice = Some(true);
-        }
-        if ui.small_button(icon_text(ui, icon::ARROWS_IN_LINE_VERTICAL, tr("Comprimi"))).on_hover_text(tr("Chiudi tutte le sezioni")).clicked() {
-            choice = Some(false);
-        }
-    });
-    choice
-}

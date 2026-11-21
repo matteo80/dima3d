@@ -172,6 +172,7 @@ pub fn draw(ctx: &egui::Context, app: &mut GestoreApp, pass: super::dock::Pass) 
         default_height: 560.0,
         default_pos: egui::pos2(80.0, 120.0),
         scroll: true,
+        fold: true,
     };
     super::dock::show(ctx, pass, window, |ui| {
             // ── Cabina da modificare ──────────────────────────────────────────
@@ -206,7 +207,7 @@ pub fn draw(ctx: &egui::Context, app: &mut GestoreApp, pass: super::dock::Pass) 
                 )
                 .weak(),
             );
-            let force = super::expand_collapse(ui);
+            let force = super::dock::fold_request(ui.ctx(), "finestra_cabina");
             egui::ScrollArea::vertical().max_height(520.0).show(ui, |ui| {
                 fold(ui, force, tr("Dimensioni"), |ui| {
                     egui::Grid::new("cabina_dimensioni").num_columns(2).show(ui, |ui| {

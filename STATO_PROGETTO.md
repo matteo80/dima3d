@@ -962,6 +962,10 @@ Fatto:
       %LOCALAPPDATA%\Programs\Dima3D senza permessi da amministratore, menu Start, desktop facoltativo,
       associazione dei .dima3d facoltativa, disinstallazione. `pacchetto.ps1` lo crea, `pubblica.ps1` lo carica nella
       Release accanto allo zip; dopo un aggiornamento dal programma si aggiorna la versione in «App installate».
+- [x] (2026-11-21, 0.2.42 beta) **Espandi/Comprimi nella barra del titolo**: in Posizione, Cabina e Robot i
+      pulsanti sono come quelli dell'albero Scena (sola icona) e stanno nella barra del titolo (`Dockable::fold`,
+      `dock::fold_request`); da mobili sono disegnati sopra la barra di egui, a sinistra della X, e spariscono se
+      coprirebbero il titolo. Tolto `ui::expand_collapse`. Test `fold_buttons_sit_in_the_title_bar`.
 - [x] (2026-11-21, 0.2.41 beta) **Interfaccia in inglese** (ramo `beta`, pubblicata come pre-release su GitHub:
       «Verifica aggiornamenti» legge solo `releases/latest` e non la propone). Sistema stile gettext in `src/i18n`
       (`tr`, `trf!`, `tn!`, traduzioni in `en.txt`), lingua da Vista → «Lingua · Language». `pubblica.ps1 -Beta`

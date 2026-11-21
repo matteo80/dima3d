@@ -102,6 +102,8 @@ pub fn draw(ctx: &egui::Context, app: &mut GestoreApp, pass: super::dock::Pass) 
         .scene_graph
         .as_ref()
         .and_then(|s| s.open_files().filter(|f| f.robots.is_some()).last().and_then(|f| f.robots.clone()));
+    // Senza robot non c'è niente da aprire o chiudere
+    let has_robots = !cell.robots.is_empty();
     let window = super::dock::Dockable {
         id: "finestra_robot",
         title: format!("{}  Robot", icon::ROBOT),
@@ -112,6 +114,7 @@ pub fn draw(ctx: &egui::Context, app: &mut GestoreApp, pass: super::dock::Pass) 
         default_height: 520.0,
         default_pos: egui::pos2(120.0, 140.0),
         scroll: true,
+        fold: has_robots,
     };
     super::dock::show(ctx, pass, window, |ui| {
         let [cx, cy, cz] = cell.center;
@@ -134,7 +137,7 @@ pub fn draw(ctx: &egui::Context, app: &mut GestoreApp, pass: super::dock::Pass) 
                 cell.robots.clear();
             }
         });
-        let force = if cell.robots.is_empty() { None } else { super::expand_collapse(ui) };
+        let force = super::dock::fold_request(ui.ctx(), "finestra_robot");
         ui.separator();
         egui::ScrollArea::vertical().max_height(520.0).auto_shrink([false, true]).show(ui, |ui| {
             if cell.robots.is_empty() {

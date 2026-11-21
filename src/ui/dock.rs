@@ -114,6 +114,71 @@ pub struct Dockable<'a> {
     /// Da agganciata il contenuto scorre in verticale; `false` per un contenuto che occupa
     /// esattamente lo spazio della finestra (es. la vista del PDF)
     pub scroll: bool,
+    /// Pulsanti «Espandi» e «Comprimi» nella barra del titolo, come nell'albero Scena: il
+    /// contenuto legge la scelta con [`fold_request`]
+    pub fold: bool,
+}
+
+/// Dove si lascia la scelta di «Espandi» (`true`) o «Comprimi» (`false`) di una finestra.
+fn fold_key(window: &str) -> egui::Id {
+    egui::Id::new(window).with("espandi_comprimi")
+}
+
+/// Scelta di «Espandi» o «Comprimi» fatta nella barra del titolo della finestra `window` (il suo
+/// `id`): `Some(true)` apre tutte le sezioni, `Some(false)` le chiude. Vale una volta sola.
+pub fn fold_request(ctx: &egui::Context, window: &str) -> Option<bool> {
+    ctx.data_mut(|d| d.remove_temp::<bool>(fold_key(window)))
+}
+
+/// I due pulsanti a sola icona (come in Scena), in un layout da destra: «Comprimi» più a destra.
+fn fold_buttons(ui: &mut egui::Ui, window: &str) {
+    super::theme::flat_buttons(ui);
+    let mut choice = None;
+    if ui.button(icon_text(ui, icon::ARROWS_IN_LINE_VERTICAL, "")).on_hover_text(tr("Chiudi tutte le sezioni")).clicked() {
+        choice = Some(false);
+    }
+    if ui.button(icon_text(ui, icon::ARROWS_OUT_LINE_VERTICAL, "")).on_hover_text(tr("Apri tutte le sezioni")).clicked() {
+        choice = Some(true);
+    }
+    if let Some(open) = choice {
+        ui.ctx().data_mut(|d| d.insert_temp(fold_key(window), open));
+        ui.ctx().request_repaint();
+    }
+}
+
+/// Pulsanti «Espandi» e «Comprimi» nella barra del titolo di una finestra mobile, a sinistra
+/// della X. La barra la disegna egui (titolo al centro): si disegna sopra, nello stesso livello
+/// della finestra, così i pulsanti ricevono i clic come la X. Se la finestra è così stretta che
+/// finirebbero sul titolo, non si mostrano.
+fn floating_fold_buttons(ctx: &egui::Context, window_id: egui::Id, rect: egui::Rect, title: &str, window: &str) {
+    let style = ctx.style();
+    let margin = style.spacing.window_margin;
+    let body = egui::TextStyle::Body.resolve(&style);
+    let heading = egui::TextStyle::Heading.resolve(&style);
+    // Altezza della riga del titolo come la calcola egui (Window::show)
+    let height = ctx.fonts(|f| f.row_height(&body)).max(style.spacing.interact_size.y);
+    let bar = egui::Rect::from_min_size(
+        rect.min + egui::vec2(f32::from(margin.left), f32::from(margin.top)),
+        egui::vec2(rect.width() - f32::from(margin.left) - f32::from(margin.right), height),
+    );
+    let title_width = ctx.fonts(|f| f.layout_no_wrap(title.to_string(), heading, egui::Color32::WHITE).size().x);
+    // La X occupa un quadrato alto quanto la barra
+    let close = height + 2.0;
+    let button = style.spacing.interact_size.y + 2.0 * style.spacing.button_padding.x;
+    let needed = 2.0 * (button + style.spacing.item_spacing.x);
+    if (bar.width() - title_width) / 2.0 - close < needed {
+        return;
+    }
+    let area = egui::Rect::from_min_max(bar.min, egui::pos2(bar.right() - close, bar.bottom()));
+    let mut ui = egui::Ui::new(
+        ctx.clone(),
+        window_id.with("titolo_espandi_comprimi"),
+        egui::UiBuilder::new()
+            .layer_id(egui::LayerId::new(egui::Order::Middle, window_id))
+            .max_rect(area)
+            .layout(egui::Layout::right_to_left(egui::Align::Center)),
+    );
+    fold_buttons(&mut ui, window);
 }
 
 /// Distanza dal bordo entro cui una finestra trascinata si aggancia.
@@ -213,6 +278,10 @@ fn docked<R>(ctx: &egui::Context, side: Side, w: Dockable, add: impl FnOnce(&mut
                 {
                     state.side = Side::Floating;
                 }
+                if w.fold {
+                    ui.add_space(6.0);
+                    fold_buttons(ui, w.id);
+                }
             });
             title
         });
@@ -293,6 +362,9 @@ fn floating<R>(ctx: &egui::Context, w: Dockable, add: impl FnOnce(&mut egui::Ui)
     }
     let min = w.min_width;
     let response = window.show(ctx, |ui| narrow(ui, min, add))?;
+    if w.fold {
+        floating_fold_buttons(ctx, id, response.response.rect, &w.title, w.id);
+    }
 
     // Calamita: la finestra si muove con il tasto premuto → si sta trascinando
     let track_key = id.with("trascinamento");
@@ -393,6 +465,42 @@ mod tests {
             frame(&ctx, &mut app, events);
         }
         assert_eq!(app.settings.dock_cabin.side, Side::Floating);
+    }
+
+    /// «Espandi» e «Comprimi» stanno nella barra del titolo della finestra mobile, a sinistra
+    /// della X, a sola icona; «Comprimi» chiude le sezioni e «Espandi» le riapre.
+    #[test]
+    fn fold_buttons_sit_in_the_title_bar() {
+        let mut app = crate::app::GestoreApp::new_headless();
+        app.ui_state.cabin_open = true;
+        let ctx = egui::Context::default();
+        frame(&ctx, &mut app, vec![]);
+        let texts = frame(&ctx, &mut app, vec![]);
+        let find = |texts: &[(String, egui::Rect)], t: &str| texts.iter().find(|(s, _)| s == t).map(|x| x.1);
+        let title = find(&texts, &format!("{}  Cabina", icon::CUBE_TRANSPARENT)).expect("titolo");
+        let collapse = find(&texts, icon::ARROWS_IN_LINE_VERTICAL).expect("pulsante Comprimi");
+        let expand = find(&texts, icon::ARROWS_OUT_LINE_VERTICAL).expect("pulsante Espandi");
+        assert!((collapse.center().y - title.center().y).abs() < 4.0, "sulla riga del titolo: {collapse:?} {title:?}");
+        assert!(expand.right() < collapse.left() && collapse.left() > title.right(), "a destra del titolo, Espandi prima");
+        assert!(find(&texts, "Lunghezza").is_none(), "le sezioni della cabina partono chiuse");
+
+        let button = |pos, pressed| egui::Event::PointerButton { pos, button: egui::PointerButton::Primary, pressed, modifiers: Default::default() };
+        let click = |ctx: &egui::Context, app: &mut crate::app::GestoreApp, at: egui::Pos2| {
+            for events in [vec![egui::Event::PointerMoved(at)], vec![button(at, true)], vec![button(at, false)]] {
+                frame(ctx, app, events);
+            }
+            // Le sezioni si aprono e si chiudono con un'animazione
+            for _ in 0..20 {
+                frame(ctx, app, vec![]);
+            }
+        };
+        click(&ctx, &mut app, expand.center());
+        assert!(find(&frame(&ctx, &mut app, vec![]), "Lunghezza").is_some(), "Espandi apre le sezioni");
+        assert!(app.ui_state.cabin_open, "la finestra resta aperta");
+        // Con le sezioni aperte la finestra può essersi allargata: il pulsante si ricerca
+        let collapse = find(&frame(&ctx, &mut app, vec![]), icon::ARROWS_IN_LINE_VERTICAL).expect("pulsante Comprimi");
+        click(&ctx, &mut app, collapse.center());
+        assert!(find(&frame(&ctx, &mut app, vec![]), "Lunghezza").is_none(), "Comprimi le richiude");
     }
 
     #[test]

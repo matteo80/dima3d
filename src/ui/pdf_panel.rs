@@ -125,6 +125,7 @@ pub fn draw(ctx: &egui::Context, app: &mut GestoreApp, pass: super::dock::Pass) 
             default_height: 620.0,
             default_pos: egui::pos2(160.0, 110.0),
             scroll: false,
+            fold: false,
         };
         super::dock::show(ctx, pass, window, |ui| {
             // Da mobile la finestra non si stringe sotto una vista utilizzabile

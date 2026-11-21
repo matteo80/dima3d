@@ -2151,10 +2151,6 @@ Chiudi tutte le sezioni
 = Close all sections
 Clic: evidenzia nella vista · doppio clic: cambia il nome
 = Click: highlight in the view · double-click: rename
-Comprimi
-= Collapse
-Espandi
-= Expand
 Misure salvate con lo strumento Misura (tasto M, poi «Salva»): vanno nel progetto
 = Measurements saved with the Measure tool (M key, then "Save"): they go in the project
 Mostra nella vista

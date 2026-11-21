@@ -1187,9 +1187,10 @@ pub fn draw(ctx: &egui::Context, app: &mut GestoreApp, pass: super::dock::Pass) 
         default_height: max_height,
         default_pos: ctx.screen_rect().right_top() + egui::vec2(-300.0, 60.0),
         scroll: true,
+        fold: true,
     };
     super::dock::show(ctx, pass, window, |ui| {
-            if let Some(open) = super::expand_collapse(ui) {
+            if let Some(open) = super::dock::fold_request(ui.ctx(), "finestra_posizione") {
                 sections.fill(open);
             }
             // Il contenuto prende la larghezza della finestra, non di più: con auto_shrink spento la

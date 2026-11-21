@@ -770,6 +770,7 @@ pub fn draw(ctx: &egui::Context, app: &mut GestoreApp, pass: super::dock::Pass) 
         default_height: 640.0,
         default_pos: egui::pos2(140.0, 120.0),
         scroll: false,
+        fold: false,
     };
     let pointer = super::dock::show(ctx, pass, window, |ui| {
         ui.horizontal_wrapped(|ui| {
