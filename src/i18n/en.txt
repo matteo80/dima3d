@@ -193,8 +193,8 @@ Mostra tutte le parti nascoste
 = Shows all hidden parts
 Vista
 = View
-Sfondo, rotazione, lingua, viste standard e colori generali
-= Background, rotation, language, standard views and general colors
+Sfondo, rotazione, viste standard e colori generali
+= Background, rotation, standard views and general colors
 Info su {app}
 = About {app}
 Passa al tema chiaro
@@ -2377,8 +2377,6 @@ il file non è un font TrueType/OpenType leggibile
 = the file is not a readable TrueType/OpenType font
 lettere non riempibili ({e})
 = letters that cannot be filled ({e})
-Lingua · Language
-= Lingua · Language
 OpenInventor
 = OpenInventor
 Aggiorna adesso

@@ -130,6 +130,28 @@ pub fn fold_request(ctx: &egui::Context, window: &str) -> Option<bool> {
     ctx.data_mut(|d| d.remove_temp::<bool>(fold_key(window)))
 }
 
+/// Larghezza di un pulsante a sola icona (come lo disegna `ui.button(icon_text(..))`).
+fn icon_button_width(ui: &egui::Ui, icon: &str) -> f32 {
+    let galley = icon_text(ui, icon, "").into_galley(ui, Some(egui::TextWrapMode::Extend), f32::INFINITY, egui::TextStyle::Button);
+    (galley.size().x + 2.0 * ui.spacing().button_padding.x).max(ui.spacing().interact_size.y)
+}
+
+/// Larghezza dei pulsanti «Espandi» e «Comprimi» con lo spazio tra loro.
+fn fold_buttons_width(ui: &egui::Ui) -> f32 {
+    icon_button_width(ui, icon::ARROWS_IN_LINE_VERTICAL) + icon_button_width(ui, icon::ARROWS_OUT_LINE_VERTICAL) + ui.spacing().item_spacing.x
+}
+
+/// Larghezza di un testo disegnato con lo stile indicato.
+fn text_width(ui: &egui::Ui, text: impl Into<egui::WidgetText>, style: egui::TextStyle) -> f32 {
+    text.into().into_galley(ui, Some(egui::TextWrapMode::Extend), f32::INFINITY, style).size().x
+}
+
+/// Riga sotto il titolo, allineata a destra, per i pulsanti che nel titolo non ci stanno.
+fn button_row<R>(ui: &mut egui::Ui, add: impl FnOnce(&mut egui::Ui) -> R) -> R {
+    let row = egui::vec2(ui.available_width(), ui.spacing().interact_size.y);
+    ui.allocate_ui_with_layout(row, egui::Layout::right_to_left(egui::Align::Center), add).inner
+}
+
 /// I due pulsanti a sola icona (come in Scena), in un layout da destra: «Comprimi» più a destra.
 fn fold_buttons(ui: &mut egui::Ui, window: &str) {
     super::theme::flat_buttons(ui);
@@ -146,39 +168,47 @@ fn fold_buttons(ui: &mut egui::Ui, window: &str) {
     }
 }
 
+/// Altezza della riga del titolo di una finestra mobile, come la calcola egui (`Window::show`).
+fn title_bar_height(ui: &egui::Ui) -> f32 {
+    let body = egui::TextStyle::Body.resolve(ui.style());
+    ui.fonts(|f| f.row_height(&body)).max(ui.spacing().interact_size.y)
+}
+
+/// Nella barra del titolo di una finestra mobile larga `width` c'è posto per «Espandi» e
+/// «Comprimi» tra il titolo (centrato) e la X?
+fn title_has_room(ui: &egui::Ui, width: f32, title: &str) -> bool {
+    let margin = ui.spacing().window_margin;
+    let bar = width - f32::from(margin.left) - f32::from(margin.right);
+    let title_width = text_width(ui, title, egui::TextStyle::Heading);
+    // La X occupa un quadrato alto quanto la barra; un po' di respiro dal titolo
+    let close = title_bar_height(ui) + 2.0;
+    (bar - title_width) / 2.0 - close - 6.0 >= fold_buttons_width(ui)
+}
+
 /// Pulsanti «Espandi» e «Comprimi» nella barra del titolo di una finestra mobile, a sinistra
 /// della X. La barra la disegna egui (titolo al centro): si disegna sopra, nello stesso livello
-/// della finestra, così i pulsanti ricevono i clic come la X. Se la finestra è così stretta che
-/// finirebbero sul titolo, non si mostrano.
+/// della finestra, così i pulsanti ricevono i clic come la X. Se non c'è posto non si disegnano
+/// qui: stanno nella riga sotto il titolo (vedi `floating`).
 fn floating_fold_buttons(ctx: &egui::Context, window_id: egui::Id, rect: egui::Rect, title: &str, window: &str) {
-    let style = ctx.style();
-    let margin = style.spacing.window_margin;
-    let body = egui::TextStyle::Body.resolve(&style);
-    let heading = egui::TextStyle::Heading.resolve(&style);
-    // Altezza della riga del titolo come la calcola egui (Window::show)
-    let height = ctx.fonts(|f| f.row_height(&body)).max(style.spacing.interact_size.y);
-    let bar = egui::Rect::from_min_size(
+    let margin = ctx.style().spacing.window_margin;
+    let full = egui::Rect::from_min_max(
         rect.min + egui::vec2(f32::from(margin.left), f32::from(margin.top)),
-        egui::vec2(rect.width() - f32::from(margin.left) - f32::from(margin.right), height),
+        egui::pos2(rect.right() - f32::from(margin.right), rect.bottom()),
     );
-    let title_width = ctx.fonts(|f| f.layout_no_wrap(title.to_string(), heading, egui::Color32::WHITE).size().x);
-    // La X occupa un quadrato alto quanto la barra
-    let close = height + 2.0;
-    let button = style.spacing.interact_size.y + 2.0 * style.spacing.button_padding.x;
-    let needed = 2.0 * (button + style.spacing.item_spacing.x);
-    if (bar.width() - title_width) / 2.0 - close < needed {
-        return;
-    }
-    let area = egui::Rect::from_min_max(bar.min, egui::pos2(bar.right() - close, bar.bottom()));
     let mut ui = egui::Ui::new(
         ctx.clone(),
         window_id.with("titolo_espandi_comprimi"),
-        egui::UiBuilder::new()
-            .layer_id(egui::LayerId::new(egui::Order::Middle, window_id))
-            .max_rect(area)
-            .layout(egui::Layout::right_to_left(egui::Align::Center)),
+        egui::UiBuilder::new().layer_id(egui::LayerId::new(egui::Order::Middle, window_id)).max_rect(full),
     );
-    fold_buttons(&mut ui, window);
+    if !title_has_room(&ui, rect.width(), title) {
+        return;
+    }
+    let height = title_bar_height(&ui);
+    let close = height + 2.0;
+    let area = egui::Rect::from_min_size(full.min, egui::vec2(full.width() - close, height));
+    ui.allocate_new_ui(egui::UiBuilder::new().max_rect(area).layout(egui::Layout::right_to_left(egui::Align::Center)), |ui| {
+        fold_buttons(ui, window)
+    });
 }
 
 /// Distanza dal bordo entro cui una finestra trascinata si aggancia.
@@ -261,11 +291,25 @@ pub fn show<R>(ctx: &egui::Context, pass: Pass, w: Dockable, add: impl FnOnce(&m
 fn docked<R>(ctx: &egui::Context, side: Side, w: Dockable, add: impl FnOnce(&mut egui::Ui) -> R) -> R {
     let id = egui::Id::new(w.id).with("aggancio");
     let body = |ui: &mut egui::Ui, state: &mut DockState, open: &mut bool| {
-        // Barra del titolo: trascinandola verso il centro la finestra si sgancia
+        // Barra del titolo: trascinandola verso il centro la finestra si sgancia.
+        // Titolo, Sgancia e Chiudi stanno sempre sulla stessa riga (se manca posto il titolo si
+        // accorcia con «…»); «Espandi» e «Comprimi», se non ci stanno, scendono nella riga sotto
+        let title_text = egui::RichText::new(&w.title).strong();
+        let spacing = ui.spacing().item_spacing.x;
+        let title_width = text_width(ui, title_text.clone(), egui::TextStyle::Body) + spacing;
+        let window_buttons = icon_button_width(ui, icon::X) + icon_button_width(ui, icon::ARROW_SQUARE_OUT) + 2.0 * spacing;
+        let fold_width = if w.fold { fold_buttons_width(ui) + 6.0 + spacing } else { 0.0 };
+        let available = ui.available_width();
+        let fold_inline = title_width + window_buttons + fold_width <= available;
         let header = ui.horizontal(|ui| {
             // Solo il titolo è trascinabile: i pulsanti accanto devono ricevere i clic
+            let title_room = (available - window_buttons - if fold_inline { fold_width } else { 0.0 }).max(16.0);
             let title = ui
-                .add(egui::Label::new(egui::RichText::new(&w.title).strong()).selectable(false).sense(egui::Sense::drag()))
+                .scope(|ui| {
+                    ui.set_max_width(title_room);
+                    ui.add(egui::Label::new(title_text).selectable(false).truncate().sense(egui::Sense::drag()))
+                })
+                .inner
                 .on_hover_cursor(egui::CursorIcon::Grab);
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 if ui.button(icon_text(ui, icon::X, "")).on_hover_text(tr("Chiudi")).clicked() {
@@ -278,13 +322,16 @@ fn docked<R>(ctx: &egui::Context, side: Side, w: Dockable, add: impl FnOnce(&mut
                 {
                     state.side = Side::Floating;
                 }
-                if w.fold {
+                if w.fold && fold_inline {
                     ui.add_space(6.0);
                     fold_buttons(ui, w.id);
                 }
             });
             title
         });
+        if w.fold && !fold_inline {
+            button_row(ui, |ui| fold_buttons(ui, w.id));
+        }
         let drag = header.inner;
         if drag.dragged() {
             ui.ctx().set_cursor_icon(egui::CursorIcon::Grabbing);
@@ -361,7 +408,15 @@ fn floating<R>(ctx: &egui::Context, w: Dockable, add: impl FnOnce(&mut egui::Ui)
         window = window.current_pos(pos);
     }
     let min = w.min_width;
-    let response = window.show(ctx, |ui| narrow(ui, min, add))?;
+    // Larghezza del fotogramma prima: decide se «Espandi» e «Comprimi» stanno nel titolo
+    let last_width = ctx.memory(|m| m.area_rect(id)).map(|r| r.width());
+    let (fold, title, window_name) = (w.fold, w.title.as_str(), w.id);
+    let response = window.show(ctx, |ui| {
+        if fold && last_width.is_some_and(|width| !title_has_room(ui, width, title)) {
+            button_row(ui, |ui| fold_buttons(ui, window_name));
+        }
+        narrow(ui, min, add)
+    })?;
     if w.fold {
         floating_fold_buttons(ctx, id, response.response.rect, &w.title, w.id);
     }
@@ -501,6 +556,40 @@ mod tests {
         let collapse = find(&frame(&ctx, &mut app, vec![]), icon::ARROWS_IN_LINE_VERTICAL).expect("pulsante Comprimi");
         click(&ctx, &mut app, collapse.center());
         assert!(find(&frame(&ctx, &mut app, vec![]), "Lunghezza").is_none(), "Comprimi le richiude");
+    }
+
+    /// Con la finestra stretta i pulsanti non si sovrappongono al titolo: «Espandi» e «Comprimi»
+    /// scendono sotto, Sgancia e Chiudi restano sulla riga del titolo (che si accorcia).
+    #[test]
+    fn narrow_windows_move_buttons_below_the_title() {
+        let buttons = [icon::ARROWS_IN_LINE_VERTICAL, icon::ARROWS_OUT_LINE_VERTICAL, icon::X, icon::ARROW_SQUARE_OUT];
+        // (lato, larghezza, «Espandi» sotto il titolo?)
+        for (side, width, below) in [(Side::Right, 420.0, false), (Side::Right, 130.0, true), (Side::Floating, 130.0, true), (Side::Floating, 420.0, false)] {
+            let mut app = crate::app::GestoreApp::new_headless();
+            app.ui_state.cabin_open = true;
+            app.settings.dock_cabin = DockState { side, width, height: 0.0 };
+            let ctx = egui::Context::default();
+            for _ in 0..3 {
+                frame(&ctx, &mut app, vec![]);
+            }
+            let texts = frame(&ctx, &mut app, vec![]);
+            // Il titolo può essere accorciato con «…»: si riconosce dall'icona (sotto la barra
+            // degli strumenti, dove il pulsante Cabina ha la stessa icona)
+            let title = texts.iter().find(|(t, r)| t.starts_with(icon::CUBE_TRANSPARENT) && r.top() > 45.0).expect("titolo").1;
+            if side != Side::Floating {
+                for b in [icon::X, icon::ARROW_SQUARE_OUT] {
+                    let r = texts.iter().find(|(t, r)| t == b && r.top() > 45.0).expect("pulsante della finestra").1;
+                    assert!((r.center().y - title.center().y).abs() < 4.0, "{width}: {b} sulla riga del titolo ({r:?} {title:?})");
+                }
+            }
+            for b in buttons {
+                for (_, r) in texts.iter().filter(|(t, _)| t == b) {
+                    assert!(!r.intersects(title), "{side:?} {width}: {b} sopra il titolo ({r:?} {title:?})");
+                }
+            }
+            let expand = texts.iter().find(|(t, _)| t == icon::ARROWS_OUT_LINE_VERTICAL).expect("Espandi").1;
+            assert_eq!(expand.top() > title.bottom(), below, "{side:?} {width}: Espandi {expand:?}, titolo {title:?}");
+        }
     }
 
     #[test]

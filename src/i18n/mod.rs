@@ -12,6 +12,7 @@
 //!   tabelle); lo si traduce poi con `tr(..)` quando lo si mostra.
 
 use std::collections::HashMap;
+#[cfg_attr(test, allow(unused_imports))]
 use std::sync::atomic::{AtomicU8, Ordering};
 use std::sync::OnceLock;
 
@@ -36,6 +37,14 @@ impl Lang {
 
     pub fn from_code(code: &str) -> Option<Lang> {
         Lang::ALL.into_iter().find(|l| l.code() == code)
+    }
+
+    /// Sigla accanto alla bandierina nella barra.
+    pub fn short(self) -> &'static str {
+        match self {
+            Lang::It => "IT",
+            Lang::En => "EN",
+        }
     }
 
     /// Nome della lingua scritto nella lingua stessa (per il menu).
@@ -70,11 +79,26 @@ impl Lang {
     }
 }
 
+#[cfg(not(test))]
 static CURRENT: AtomicU8 = AtomicU8::new(0);
+
+// Nei test la lingua è di ogni thread: i test girano in parallelo e quello che passa
+// all'inglese non deve cambiare i testi cercati dagli altri
+#[cfg(test)]
+thread_local! {
+    static CURRENT: std::cell::Cell<u8> = const { std::cell::Cell::new(0) };
+}
+
+fn load_current() -> u8 {
+    #[cfg(not(test))]
+    return CURRENT.load(Ordering::Relaxed);
+    #[cfg(test)]
+    return CURRENT.with(|c| c.get());
+}
 
 /// Lingua in uso.
 pub fn current() -> Lang {
-    match CURRENT.load(Ordering::Relaxed) {
+    match load_current() {
         1 => Lang::En,
         _ => Lang::It,
     }
@@ -82,7 +106,10 @@ pub fn current() -> Lang {
 
 /// Cambia la lingua in uso: vale dal fotogramma successivo.
 pub fn set(lang: Lang) {
+    #[cfg(not(test))]
     CURRENT.store(lang as u8, Ordering::Relaxed);
+    #[cfg(test)]
+    CURRENT.with(|c| c.set(lang as u8));
 }
 
 /// Traduzioni inglesi, lette da `en.txt` alla prima richiesta.

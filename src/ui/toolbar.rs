@@ -327,7 +327,7 @@ pub fn draw_toolbar(ui: &mut egui::Ui, app: &mut crate::app::GestoreApp) {
     let title = icon_text(ui, icon::SLIDERS_HORIZONTAL, if compact { "" } else { tr("Vista") });
     ui.menu_button(title, |ui| view_menu(ui, &mut settings, has_scene, &mut action))
         .response
-        .on_hover_text(tr("Sfondo, rotazione, lingua, viste standard e colori generali"));
+        .on_hover_text(tr("Sfondo, rotazione, viste standard e colori generali"));
 
     // ── A destra: stato del documento e tema ──────────────────────────────────
     let left_end = ui.cursor().min.x;
@@ -344,6 +344,7 @@ pub fn draw_toolbar(ui: &mut egui::Ui, app: &mut crate::app::GestoreApp) {
             theme::apply(ui.ctx(), next);
             ui.ctx().request_repaint();
         }
+        language_menu(ui, &mut settings.language);
         if app.is_dirty() {
             // Con la finestra stretta la scritta finirebbe sopra i pulsanti: resta l'icona
             let color = theme::warning_color(ui);
@@ -363,7 +364,7 @@ pub fn draw_toolbar(ui: &mut egui::Ui, app: &mut crate::app::GestoreApp) {
     });
     if !compact {
         // Pulsanti di destra (senza l'avviso, che va e viene) + margine
-        let needed = left_end - ui.max_rect().left() + right.inner.min(120.0) + 24.0;
+        let needed = left_end - ui.max_rect().left() + right.inner.min(180.0) + 24.0;
         ui.ctx().data_mut(|d| d.insert_temp(full_width_id(), needed));
     }
 
@@ -375,6 +376,27 @@ pub fn draw_toolbar(ui: &mut egui::Ui, app: &mut crate::app::GestoreApp) {
     for a in crate::ui::color_menu::spread_colors(color_actions, &selected) {
         app.apply(a);
     }
+}
+
+/// Suggerimento del pulsante della lingua: in due lingue, così lo trova anche chi non legge quella in uso.
+const LANGUAGE_HINT: &str = "Lingua · Language";
+
+/// Pulsante della lingua nella barra, accanto al tema: bandierina e sigla, sempre (anche nella
+/// barra compatta); il menu elenca le lingue con il loro nome.
+fn language_menu(ui: &mut egui::Ui, language: &mut crate::i18n::Lang) {
+    let flag = super::flags::flag(ui.ctx(), *language);
+    let button = egui::Button::image_and_text(flag, language.short());
+    egui::menu::menu_custom_button(ui, button, |ui| {
+        for lang in crate::i18n::Lang::ALL {
+            let item = egui::Button::image_and_text(super::flags::flag(ui.ctx(), lang), lang.name()).selected(lang == *language);
+            if ui.add(item).clicked() {
+                *language = lang;
+                ui.close_menu();
+            }
+        }
+    })
+    .response
+    .on_hover_text(LANGUAGE_HINT);
 }
 
 /// Contenuto del menu Vista.
@@ -438,14 +460,6 @@ fn view_menu(
     .on_hover_text(tr("Velocità della rotazione con il mouse (1 = normale)"));
     ui.checkbox(&mut settings.invert_zoom, tr("Zoom invertito"))
         .on_hover_text(tr("Rotella in avanti per allontanarsi invece di avvicinarsi (anche dal tasto Zoom nella vista)"));
-
-    ui.separator();
-    ui.label(egui::RichText::new(tr("Lingua · Language")).strong());
-    ui.horizontal(|ui| {
-        for lang in crate::i18n::Lang::ALL {
-            ui.selectable_value(&mut settings.language, lang, lang.name());
-        }
-    });
 
     ui.separator();
     ui.label(egui::RichText::new(tr("Aggiornamenti")).strong());
@@ -547,5 +561,82 @@ fn view_menu(
         settings.background = d.background;
         settings.background_gradient = d.background_gradient;
         settings.default_color = d.default_color;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::i18n::Lang;
+
+    /// Un fotogramma del programma; restituisce i testi disegnati con il loro rettangolo.
+    fn frame(ctx: &egui::Context, app: &mut crate::app::GestoreApp, events: Vec<egui::Event>) -> Vec<(String, egui::Rect)> {
+        frame_width(ctx, app, events, 2000.0)
+    }
+
+    /// `width` sotto i 1500 punti: all'avvio la barra è compatta (solo icone).
+    fn frame_width(ctx: &egui::Context, app: &mut crate::app::GestoreApp, events: Vec<egui::Event>, width: f32) -> Vec<(String, egui::Rect)> {
+        let screen = egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(width, 900.0));
+        let out = ctx.run(egui::RawInput { screen_rect: Some(screen), events, ..Default::default() }, |ctx| {
+            crate::ui::draw_main_layout(ctx, app);
+        });
+        fn walk(s: &egui::Shape, out: &mut Vec<(String, egui::Rect)>) {
+            match s {
+                egui::Shape::Text(t) => out.push((t.galley.text().to_string(), t.galley.rect.translate(t.pos.to_vec2()))),
+                egui::Shape::Vec(v) => v.iter().for_each(|s| walk(s, out)),
+                _ => {}
+            }
+        }
+        let mut texts = Vec::new();
+        out.shapes.iter().for_each(|c| walk(&c.shape, &mut texts));
+        texts
+    }
+
+    fn click(ctx: &egui::Context, app: &mut crate::app::GestoreApp, at: egui::Pos2) {
+        let button = |pressed| egui::Event::PointerButton { pos: at, button: egui::PointerButton::Primary, pressed, modifiers: Default::default() };
+        for events in [vec![egui::Event::PointerMoved(at)], vec![button(true)], vec![button(false)], vec![], vec![]] {
+            frame(ctx, app, events);
+        }
+    }
+
+    /// La lingua si sceglie dalla barra principale: bandierina con «IT», menu con i nomi delle
+    /// lingue; scelto «English» la barra passa in inglese.
+    #[test]
+    fn language_button_in_the_toolbar() {
+        crate::i18n::set(Lang::It);
+        let mut app = crate::app::GestoreApp::new_headless();
+        let ctx = egui::Context::default();
+        frame(&ctx, &mut app, vec![]);
+        let texts = frame(&ctx, &mut app, vec![]);
+        let find = |texts: &[(String, egui::Rect)], t: &str| texts.iter().find(|(s, _)| s == t).map(|x| x.1);
+        let it = find(&texts, "IT").expect("pulsante della lingua");
+        assert!(it.top() < 45.0, "nella barra in alto: {it:?}");
+        assert!(texts.iter().any(|(s, _)| s.ends_with("Apri")), "barra in italiano");
+
+        click(&ctx, &mut app, it.center());
+        let texts = frame(&ctx, &mut app, vec![]);
+        assert!(find(&texts, "Italiano").is_some(), "il menu elenca le lingue");
+        let english = find(&texts, "English").expect("voce English");
+        click(&ctx, &mut app, english.center());
+
+        assert_eq!(app.settings.language, Lang::En);
+        let texts = frame(&ctx, &mut app, vec![]);
+        assert!(find(&texts, "EN").is_some(), "la sigla diventa EN");
+        assert!(texts.iter().any(|(s, _)| s.ends_with("Open")), "barra in inglese");
+        crate::i18n::set(Lang::It);
+    }
+
+    /// Anche nella barra compatta (solo icone) la sigla resta accanto alla bandierina, a sinistra
+    /// del pulsante del tema.
+    #[test]
+    fn language_code_stays_in_the_compact_toolbar() {
+        crate::i18n::set(Lang::It);
+        let mut app = crate::app::GestoreApp::new_headless();
+        let ctx = egui::Context::default();
+        frame_width(&ctx, &mut app, vec![], 1280.0);
+        let texts = frame_width(&ctx, &mut app, vec![], 1280.0);
+        assert!(!texts.iter().any(|(s, _)| s.ends_with("Apri")), "barra compatta");
+        let it = texts.iter().find(|(s, _)| s == "IT").expect("sigla IT").1;
+        let theme = texts.iter().find(|(s, _)| s == super::icon::SUN).expect("pulsante del tema").1;
+        assert!(it.right() < theme.left() && theme.left() - it.right() < 40.0, "accanto al tema: {it:?} {theme:?}");
     }
 }

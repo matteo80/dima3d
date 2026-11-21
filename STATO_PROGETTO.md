@@ -966,6 +966,11 @@ Fatto:
       pulsanti sono come quelli dell'albero Scena (sola icona) e stanno nella barra del titolo (`Dockable::fold`,
       `dock::fold_request`); da mobili sono disegnati sopra la barra di egui, a sinistra della X, e spariscono se
       coprirebbero il titolo. Tolto `ui::expand_collapse`. Test `fold_buttons_sit_in_the_title_bar`.
+      Poi (stessa versione): titoli e pulsanti misurati; con la finestra stretta «Espandi» e «Comprimi» scendono
+      in una riga sotto il titolo (agganciata: Sgancia e Chiudi restano accanto al titolo, che si accorcia con «…»;
+      mobile: riga in cima al contenuto). Lingua nella barra principale accanto al tema: bandierina disegnata via
+      codice (`ui/flags.rs`, anche Francia e Spagna pronte) e sigla IT/EN, anche nella barra compatta; tolta dal
+      menu Vista. Nei test la lingua è per thread (`i18n::set`).
 - [x] (2026-11-21, 0.2.41 beta) **Interfaccia in inglese** (ramo `beta`, pubblicata come pre-release su GitHub:
       «Verifica aggiornamenti» legge solo `releases/latest` e non la propone). Sistema stile gettext in `src/i18n`
       (`tr`, `trf!`, `tn!`, traduzioni in `en.txt`), lingua da Vista → «Lingua · Language». `pubblica.ps1 -Beta`

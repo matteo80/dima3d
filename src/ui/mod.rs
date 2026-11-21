@@ -2,6 +2,7 @@ use crate::i18n::tr;
 pub mod about;
 pub mod cabin_panel;
 pub mod dock;
+pub mod flags;
 pub mod hinge_label;
 pub mod color_menu;
 pub mod measure;
