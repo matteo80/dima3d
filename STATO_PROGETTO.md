@@ -962,6 +962,9 @@ Fatto:
       %LOCALAPPDATA%\Programs\Dima3D senza permessi da amministratore, menu Start, desktop facoltativo,
       associazione dei .dima3d facoltativa, disinstallazione. `pacchetto.ps1` lo crea, `pubblica.ps1` lo carica nella
       Release accanto allo zip; dopo un aggiornamento dal programma si aggiorna la versione in «App installate».
+- [x] (2026-11-21, 0.2.42) **Release stabile**: il ramo `beta` è stato unito in `main` e cancellato; la 0.2.42
+      (inglese, lingua nella barra, Espandi/Comprimi nel titolo) è la release normale. Regola in `pubblica.ps1`:
+      dopo una pubblicazione riuscita in `dist` resta solo l'ultima versione (cartella, zip, setup).
 - [x] (2026-11-21, 0.2.42 beta) **Espandi/Comprimi nella barra del titolo**: in Posizione, Cabina e Robot i
       pulsanti sono come quelli dell'albero Scena (sola icona) e stanno nella barra del titolo (`Dockable::fold`,
       `dock::fold_request`); da mobili sono disegnati sopra la barra di egui, a sinistra della X, e spariscono se

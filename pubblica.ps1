@@ -71,3 +71,12 @@ foreach ($asset in $assets) {
 & $gh release edit $tag --draft=false
 if ($LASTEXITCODE -ne 0) { throw 'Pubblicazione non riuscita: la Release resta in bozza' }
 Write-Host "Pubblicata: $tag"
+
+# Regola: sul PC resta solo l'ultima versione pubblicata. Le precedenti sono su GitHub, quindi
+# in dist si tolgono le loro cartelle, gli zip e i setup (si cancella solo dopo la pubblicazione riuscita)
+$keep = @("Dima3D-$version", "Dima3D-$version.zip", "Dima3D-$version-setup.exe")
+$old = Get-ChildItem 'dist' | Where-Object { $_.Name -like 'Dima3D-*' -and $_.Name -notin $keep }
+foreach ($item in $old) {
+    Remove-Item -Recurse -Force $item.FullName
+    Write-Host "Tolta da dist: $($item.Name)"
+}
